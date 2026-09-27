@@ -92,6 +92,43 @@ Each canonical function exposes:
 - `stateful`
 - `effect`
 
+### `input` values
+
+`input` describes the series a call must supply, and the value is the contract:
+a caller that passes exactly this shape gets correct numbers on every execution
+path. The values are `series` (one numeric series), `hl` (high, low), `hlc`
+(high, low, close), `hlcv` (high, low, close, volume), `ohlcv` (open, high,
+low, close, volume) and `dynamic` (the formula expression decides). Parameters
+listed in `params` always follow the series arguments, as literals.
+
+`hl` was added because two-series indicators previously had no honest spelling
+and were declared `hlc`. That told callers to pass a `close` no implementation
+reads, so `ICHIMOKU_TENKAN(HIGH, LOW, CLOSE, 9)` computed a tenkan-sen over a
+period of `CLOSE[0]` instead of `9`. A gate in
+`core/tests/formula_registry_signature.rs` rebuilds the documented call from
+this metadata and runs it through both execution paths, so the schema cannot
+drift from the engine again.
+
+### Parameters describe the operation surface
+
+One registry describes two call surfaces, and `params` describes the wider one.
+The operation and FFI entry points accept the full published list —
+`finkit.bbands(real, timeperiod, nbdevup, nbdevdn, matype)` and
+`finkit.stddev(close, timeperiod, nbdev)` — while a *formula* evaluates to a
+single series and so takes a shorter list: `BBANDS(CLOSE, 20, 2.0)` and
+`STDDEV(CLOSE, 14)`. The five functions where this applies are recorded with a
+reason in the gate's `FORMULA_PARAM_SUBSET` list.
+
+### Multi-output functions in a formula
+
+`outputs` greater than one describes the operation surface, which returns every
+leg (`BBANDS` returns `UPPERBAND`, `MIDDLEBAND`, `LOWERBAND`; `MACD` returns
+`MACD`, `MACD_SIGNAL`, `MACD_HIST`). A *formula* expression evaluates to a
+single series, so the same name inside a formula returns its primary leg — for
+`BBANDS` that is the upper band, matching the long-standing `BOLL` convention of
+`MA(CLOSE, N) + nbdev * STD(CLOSE, N)`. Use the dedicated `BOLLMID` / `BOLLDN`
+names, or the multi-output operation, when you need the other legs.
+
 The Rust source of truth remains `FunctionRegistry`. `FunctionApiSchema`
 creates an owned deterministic snapshot, and `finkit-schema` serializes that
 snapshot. Bindings should consume this contract instead of parsing Rust source

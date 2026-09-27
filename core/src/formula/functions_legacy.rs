@@ -492,7 +492,10 @@ fn fn_if(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
     Ok(SimdOps::simd_select_arrays(cond, then_val, else_val))
 }
 
-fn fn_count(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+pub(crate) fn fn_count(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("COUNT", args, 2)?;
     let cond = &args[0];
     let n = extract_n(args, 1, "COUNT")?;
@@ -872,7 +875,10 @@ fn fn_filter(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
     Ok(result)
 }
 
-fn fn_barslast(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
+pub(crate) fn fn_barslast(
+    ctx: &FormulaContext,
+    args: &[Array1<f64>],
+) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("BARSLAST", args, 1)?;
     let cond = &args[0];
 

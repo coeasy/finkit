@@ -422,6 +422,70 @@ fn talib_formula_bridge_matches_ast_for_representative_gap_families() {
     }
 }
 
+/// The domestic screening family must be executable from a compiled plan.
+///
+/// These eleven names are the *canonical* half of the plan-path backlog: the
+/// planner resolves every registry alias to its canonical name
+/// (`compute_ir::function_metadata` uses `canonical_name(spec.name)`), so
+/// `CROSSUP`, `VOLSURGE`, `TENKAN` and friends never appear as their own
+/// `CALL:` node — they lower to `CALL:GOLDEN_CROSS`, `CALL:VOLUME_SURGE`,
+/// `CALL:ICHIMOKU_TENKAN`. A missing kernel on the canonical name therefore
+/// breaks every alias that points at it, which is why this gate names the
+/// canonicals rather than the aliases.
+///
+/// The corpus files exercise none of these, so without this gate the plan path
+/// could regress to `unsupported kernel` on all of them while the differential
+/// gate stayed green.
+#[test]
+fn domestic_screening_formulas_match_the_ast_through_the_plan_path() {
+    let formulas = [
+        "GOLDEN_CROSS(MA(CLOSE,5), MA(CLOSE,20))",
+        "DEAD_CROSS(MA(CLOSE,5), MA(CLOSE,20))",
+        "BREAKOUT(CLOSE, HIGH, 20)",
+        "BREAKDOWN(CLOSE, LOW, 20)",
+        "VOLUME_SURGE(VOLUME, 20)",
+        "MA_ALIGN(CLOSE, 5, 10, 20)",
+        "RELATIVE_STRENGTH(CLOSE, MA(CLOSE,20), 20)",
+        "GAP_SIGNAL(OPEN, CLOSE)",
+        "TREND_BREAKOUT(CLOSE, HIGH, LOW, VOLUME, 5, 10, 20, 20)",
+        "BARSLAST(CLOSE > REF(CLOSE,1))",
+        "COUNT(CLOSE > REF(CLOSE,1), 10)",
+    ];
+
+    let mut failures = Vec::new();
+    for source in formulas {
+        let result = std::panic::catch_unwind(|| {
+            let ast = parse_formula_with_dialect(source, FormulaDialect::TongDaXin)
+                .unwrap_or_else(|error| panic!("{source}: parse: {error}"));
+            let mut reference_ctx = synthetic_ohlcv(128);
+            let reference = FormulaEngine::new()
+                .eval_ast(&ast, &mut reference_ctx)
+                .unwrap_or_else(|error| panic!("{source}: eval: {error}"));
+            let plan_ctx = synthetic_ohlcv(128);
+            let candidate = plan_values(&ast, &plan_ctx)
+                .unwrap_or_else(|error| panic!("{source}: plan: {error}"));
+            compare(&reference, &candidate, 1e-9)
+                .unwrap_or_else(|error| panic!("{source}: {error}"));
+        });
+        if let Err(payload) = result {
+            let message = payload
+                .downcast_ref::<String>()
+                .cloned()
+                .unwrap_or_else(|| "non-string panic".to_string());
+            failures.push(message);
+        }
+    }
+
+    assert!(
+        failures.is_empty(),
+        "{} of {} domestic screening formulas are not executable through the \
+         compiled plan path:\n{}",
+        failures.len(),
+        formulas.len(),
+        failures.join("\n")
+    );
+}
+
 #[test]
 fn pine_corpus_plan_matches_ast_reference() {
     let corpus_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../tests/pine_corpus");

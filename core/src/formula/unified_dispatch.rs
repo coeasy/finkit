@@ -458,6 +458,13 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
             return dispatch_modern_call(call, buffers);
         }
 
+        if SCREENING_KERNELS
+            .iter()
+            .any(|name| call.kernel == KernelId::from_static(name))
+        {
+            return dispatch_modern_call(call, buffers);
+        }
+
         if call.kernel == KernelId::from_static("UNARY:Neg") {
             return unary(call, buffers, |value| -value);
         }
@@ -2884,6 +2891,35 @@ fn dispatch_draw_call(
     Ok(())
 }
 
+/// The domestic screening / conditional-counting family.
+///
+/// These are the *canonical* names behind a much larger alias surface: the
+/// planner resolves every registry alias to its canonical name
+/// (`compute_ir::function_metadata` uses `canonical_name(spec.name)`), so
+/// `CROSSUP`, `BULLISH_CROSS`, `VOLSURGE`, `VOLUME_EXPANSION`, `TENKAN`,
+/// `BREAKOUT_SCREEN` and the rest never appear as their own `CALL:` node — they
+/// all lower to one of the eleven names below. A missing kernel here therefore
+/// broke every alias pointing at it at once.
+///
+/// Unlike [`TALIB_FORMULA_GAP_KERNELS`] these are **not** routed through the
+/// compatibility bridge: each has an explicit canonical delegate in
+/// [`SCREENING_DELEGATES`], which is the same function the tree/bytecode/JIT
+/// frontends call, so the plan path's output is identical by construction
+/// rather than by agreement.
+const SCREENING_KERNELS: &[&str] = &[
+    "CALL:BARSLAST",
+    "CALL:BREAKDOWN",
+    "CALL:BREAKOUT",
+    "CALL:COUNT",
+    "CALL:DEAD_CROSS",
+    "CALL:GAP_SIGNAL",
+    "CALL:GOLDEN_CROSS",
+    "CALL:MA_ALIGN",
+    "CALL:RELATIVE_STRENGTH",
+    "CALL:TREND_BREAKOUT",
+    "CALL:VOLUME_SURGE",
+];
+
 /// TA-Lib functions that already have a formula implementation but do not yet
 /// have a hand-written in-place plan kernel. They are routed through the cached
 /// formula function table below. This is an intentional compatibility bridge:
@@ -3249,6 +3285,117 @@ fn dispatch_modern_call(
         ),
     ];
     for &(name, kernel) in TALIB_081_KERNELS {
+        if is(name) {
+            let output_slot = call.output.0;
+            let len = match buffers.get(output_slot) {
+                Some(buf) if !buf.is_empty() => buf.len(),
+                _ => {
+                    return Err(KernelDispatchError::new(
+                        FormulaKernelDispatcher::ERR_PARAMETER,
+                    ))
+                }
+            };
+            for input in call.inputs {
+                if input.0 == output_slot
+                    || buffers
+                        .get(input.0)
+                        .is_none_or(|values| values.len() != len)
+                {
+                    return Err(KernelDispatchError::new(
+                        FormulaKernelDispatcher::ERR_PARAMETER,
+                    ));
+                }
+            }
+            let args: Vec<Array1<f64>> = call
+                .inputs
+                .iter()
+                .map(|slot| Array1::from(buffers[slot.0].clone()))
+                .collect();
+            let ctx = crate::formula::types::FormulaContext::new(
+                Array1::zeros(len),
+                Array1::zeros(len),
+                Array1::zeros(len),
+                Array1::zeros(len),
+                Array1::zeros(len),
+                None,
+            );
+            match kernel(&ctx, &args) {
+                Ok(series) => {
+                    let out = &mut buffers[output_slot];
+                    if series.len() == out.len() {
+                        out.copy_from_slice(series.as_slice().unwrap());
+                    } else {
+                        out.fill(f64::NAN);
+                    }
+                }
+                Err(_) => {
+                    buffers[output_slot].fill(f64::NAN);
+                }
+            }
+            return Ok(());
+        }
+    }
+
+    // Domestic screening family. Each `CALL:NAME` delegates to the exact
+    // canonical implementation the tree/bytecode/JIT frontends call, so the
+    // compiled plan path cannot diverge numerically from them.
+    //
+    // `SCREENING_KERNELS` and this table must stay in lockstep: the name list
+    // decides *whether* `dispatch_modern_call` is reached, and this table
+    // decides *what* runs once it is. A name present in only one of the two
+    // falls through to the generic arity check below, so the behavioral probe
+    // in `tests/formula_function_ssot.rs` is what pins the pair together: it
+    // asks the dispatcher itself which `CALL:` names it handles.
+    const SCREENING_DELEGATES: &[(
+        &str,
+        fn(
+            &crate::formula::types::FormulaContext,
+            &[Array1<f64>],
+        ) -> std::result::Result<Array1<f64>, crate::error::FormulaError>,
+    )] = &[
+        (
+            "CALL:BARSLAST",
+            crate::formula::functions_legacy::fn_barslast,
+        ),
+        (
+            "CALL:BREAKDOWN",
+            crate::formula::functions::canonical_breakdown,
+        ),
+        (
+            "CALL:BREAKOUT",
+            crate::formula::functions::canonical_breakout,
+        ),
+        ("CALL:COUNT", crate::formula::functions_legacy::fn_count),
+        (
+            "CALL:DEAD_CROSS",
+            crate::formula::functions::canonical_dead_cross,
+        ),
+        (
+            "CALL:GAP_SIGNAL",
+            crate::formula::functions::canonical_gap_signal,
+        ),
+        (
+            "CALL:GOLDEN_CROSS",
+            crate::formula::functions::canonical_golden_cross,
+        ),
+        (
+            "CALL:MA_ALIGN",
+            crate::formula::functions::canonical_ma_align,
+        ),
+        (
+            "CALL:RELATIVE_STRENGTH",
+            crate::formula::functions::canonical_relative_strength,
+        ),
+        (
+            "CALL:TREND_BREAKOUT",
+            crate::formula::functions::canonical_trend_breakout,
+        ),
+        (
+            "CALL:VOLUME_SURGE",
+            crate::formula::functions::canonical_volume_surge,
+        ),
+    ];
+    for &(name, kernel) in SCREENING_DELEGATES {
         if is(name) {
             let output_slot = call.output.0;
             let len = match buffers.get(output_slot) {

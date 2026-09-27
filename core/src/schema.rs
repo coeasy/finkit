@@ -140,6 +140,7 @@ const fn category_name(category: FunctionCategory) -> &'static str {
 const fn input_name(input: InputKind) -> &'static str {
     match input {
         InputKind::Series => "series",
+        InputKind::Hl => "hl",
         InputKind::Hlc => "hlc",
         InputKind::Hlcv => "hlcv",
         InputKind::Ohlcv => "ohlcv",

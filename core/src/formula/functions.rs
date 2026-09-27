@@ -531,7 +531,7 @@ fn canonical_mfi(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
 }
 
 #[inline]
-fn canonical_golden_cross(
+pub(crate) fn canonical_golden_cross(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
 ) -> Result<Array1<f64>, FormulaError> {
@@ -543,7 +543,7 @@ fn canonical_golden_cross(
 }
 
 #[inline]
-fn canonical_dead_cross(
+pub(crate) fn canonical_dead_cross(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
 ) -> Result<Array1<f64>, FormulaError> {
@@ -555,7 +555,7 @@ fn canonical_dead_cross(
 }
 
 #[inline]
-fn canonical_breakout(
+pub(crate) fn canonical_breakout(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
 ) -> Result<Array1<f64>, FormulaError> {
@@ -572,7 +572,7 @@ fn canonical_breakout(
 }
 
 #[inline]
-fn canonical_breakdown(
+pub(crate) fn canonical_breakdown(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
 ) -> Result<Array1<f64>, FormulaError> {
@@ -589,7 +589,7 @@ fn canonical_breakdown(
 }
 
 #[inline]
-fn canonical_volume_surge(
+pub(crate) fn canonical_volume_surge(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
 ) -> Result<Array1<f64>, FormulaError> {
@@ -603,7 +603,7 @@ fn canonical_volume_surge(
 }
 
 #[inline]
-fn canonical_ma_align(
+pub(crate) fn canonical_ma_align(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
 ) -> Result<Array1<f64>, FormulaError> {
@@ -618,7 +618,7 @@ fn canonical_ma_align(
 }
 
 #[inline]
-fn canonical_relative_strength(
+pub(crate) fn canonical_relative_strength(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
 ) -> Result<Array1<f64>, FormulaError> {
@@ -635,7 +635,7 @@ fn canonical_relative_strength(
 }
 
 #[inline]
-fn canonical_gap_signal(
+pub(crate) fn canonical_gap_signal(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
 ) -> Result<Array1<f64>, FormulaError> {
@@ -652,7 +652,7 @@ fn canonical_gap_signal(
 }
 
 #[inline]
-fn canonical_trend_breakout(
+pub(crate) fn canonical_trend_breakout(
     ctx: &FormulaContext,
     args: &[Array1<f64>],
 ) -> Result<Array1<f64>, FormulaError> {

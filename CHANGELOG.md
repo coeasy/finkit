@@ -109,6 +109,51 @@ reused.
 
 ### Fixed
 
+- **Eleven functions were unusable from the compiled-plan path, and 28 names
+  were affected.** `BARSLAST`, `BREAKDOWN`, `BREAKOUT`, `COUNT`, `DEAD_CROSS`,
+  `GAP_SIGNAL`, `GOLDEN_CROSS`, `MA_ALIGN`, `RELATIVE_STRENGTH`,
+  `TREND_BREAKOUT` and `VOLUME_SURGE` were declared pure, so the planner
+  lowered them to `CALL:<NAME>` kernels — but no such kernel existed, and every
+  formula using one failed with `unsupported kernel` (code 1). Because the
+  planner resolves registry aliases to their canonical name, another seventeen
+  spellings broke with them: `CROSSUP` / `BULLISH_CROSS`, `CROSSDOWN` /
+  `BEARISH_CROSS`, `BREAKOUT_UP` / `PRICE_BREAKOUT`, `BREAKOUT_DOWN` /
+  `PRICE_BREAKDOWN`, `BREAKOUT_SCREEN` / `TREND_SCREEN`, `VOLSURGE` /
+  `VOLUME_EXPANSION`, `MA_ALIGNMENT` / `TREND_ALIGN`, `RELSTRENGTH` /
+  `RS_EXCESS_RETURN` and `GAP`. No corpus case exercised any of them, so the
+  differential gate stayed green throughout. Each now has a kernel delegating
+  to the exact `canonical_*` (or `fn_count` / `fn_barslast`) implementation the
+  tree, bytecode and JIT paths already used, so the plan path agrees by
+  construction. Covered by
+  `domestic_screening_formulas_match_the_ast_through_the_plan_path`, and by a
+  new invariant `every_alias_reaches_a_kernel_through_its_canonical_name`,
+  which is what actually protects an alias — checking `CALL:<alias>` directly
+  would have measured something no caller can reach and stayed green through
+  the whole outage.
+
+- **The registry told callers the wrong input shape for seventeen functions.**
+  `ICHIMOKU_TENKAN`, `ICHIMOKU_KIJUN`, `FISHER`, `FISHER_SIGNAL`, the five
+  `DONCHIAN*` projections and `AROON_UP` / `AROON_DN` were declared
+  `InputKind::Hlc` — high, low, *close*, plus a period — while their
+  implementations take high, low, period. A caller who followed the metadata
+  wrote `ICHIMOKU_TENKAN(HIGH, LOW, CLOSE, 9)` and got a tenkan-sen computed
+  over a period of `CLOSE[0]` (about 100, not 9) on the tree path, and a hard
+  arity error on the plan path. The enum had no way to say "two series", which
+  is why `Hlc` was used as an approximation; it now has `InputKind::Hl`.
+  A new gate, `declared_signatures_run_on_both_execution_paths`, rebuilds the
+  call the metadata describes from the registry itself and runs it through both
+  paths, so this class of drift cannot recur silently.
+
+  The same investigation found that the *parameter* half of the declaration is
+  a superset for five functions — `BBANDS` / `BOLLUP` / `BOLLDN` publish
+  `nbdevup`, `nbdevdn` and `matype`, and `STDDEV` / `VAR` publish `nb_dev`.
+  Those were **not** removed, because the operation and FFI surfaces really do
+  accept them (`finkit.bbands(real, timeperiod, nbdevup, nbdevdn, matype)`,
+  `finkit.stddev(close, timeperiod, nbdev)`); it is the formula surface that
+  takes a shorter list, since a formula evaluates to a single series. The five
+  are now recorded in the gate's `FORMULA_PARAM_SUBSET` list with the reason,
+  and an entry that stops being needed fails the test.
+
 - **`tests/formula_corpus/README.md` still said the plan path had no kernels.**
   A current (not dated-snapshot) document asserted that the 31 TA-Lib 0.7/0.8
   functions were available "only on the tree / bytecode / JIT paths", that

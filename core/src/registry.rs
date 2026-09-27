@@ -30,6 +30,16 @@ pub enum FunctionCategory {
 pub enum InputKind {
     /// A single numeric series.
     Series,
+    /// High, low series.
+    ///
+    /// Added 2026-09-27 because the two-series indicators had no honest way to
+    /// describe themselves: they were all declared [`InputKind::Hlc`], which
+    /// told callers to pass a `close` the implementations never read. A caller
+    /// who followed that metadata called `ICHIMOKU_TENKAN(HIGH, LOW, CLOSE, 9)`
+    /// and got a tenkan-sen computed over a period of `CLOSE[0]` (~100) instead
+    /// of 9 — silently wrong on the tree path, a hard arity error on the plan
+    /// path. `Hl` is what those functions actually take.
+    Hl,
     /// High, low, close series.
     Hlc,
     /// High, low, close, volume series.
@@ -195,6 +205,10 @@ impl FunctionRegistry {
 
 const PERIOD_14: &[ParamSpec] = &[ParamSpec::new("period", "usize", Some("14"), Some("> 0"))];
 const PERIOD_REQUIRED: &[ParamSpec] = &[ParamSpec::new("period", "usize", None, Some("> 0"))];
+// `STDDEV`/`VAR` publish `nb_dev`, which the operation and FFI surfaces honour
+// (`finkit.stddev(close, timeperiod, nbdev)`). The formula surface's
+// `canonical_std`/`canonical_var` hard-code a deviation of `1.0` and their
+// compiled-plan kernels are two-operand, so a formula accepts the period only.
 const PERIOD_NBDEV: &[ParamSpec] = &[
     ParamSpec::new("period", "usize", Some("14"), Some("> 0")),
     ParamSpec::new("nb_dev", "f64", Some("1"), Some("finite")),
@@ -317,6 +331,12 @@ const SAR_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("af_increment", "f64", Some("0.02"), Some("> 0")),
     ParamSpec::new("af_max", "f64", Some("0.2"), Some(">= af_start")),
 ];
+// `BBANDS`, `BOLLUP` and `BOLLDN` publish the full TA-Lib parameter set.
+// `nbdevup`/`nbdevdn`/`matype` are honoured by the operation and FFI surfaces
+// (`finkit.bbands(real, timeperiod, nbdevup, nbdevdn, matype)`); the *formula*
+// surface takes only the leading `period` and one deviation multiplier, because
+// a formula computes one band. See the `FORMULA_PARAM_SUBSET` note in
+// `core/tests/formula_registry_signature.rs`.
 const BBANDS_PARAMS: &[ParamSpec] = &[
     ParamSpec::new("period", "usize", Some("20"), Some("> 1")),
     ParamSpec::new("nbdevup", "f64", Some("2.0"), Some("finite")),
@@ -505,7 +525,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "AROON_UP",
             aliases: &[],
             category: FunctionCategory::Momentum,
-            input: InputKind::Hlc,
+            input: InputKind::Hl,
             params: PERIOD_14,
             outputs: 1,
             lookback: LookbackSpec::Period,
@@ -516,7 +536,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "AROON_DN",
             aliases: &[],
             category: FunctionCategory::Momentum,
-            input: InputKind::Hlc,
+            input: InputKind::Hl,
             params: PERIOD_14,
             outputs: 1,
             lookback: LookbackSpec::Period,
@@ -802,7 +822,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "FISHER",
             aliases: &["FISHER_TRANSFORM"],
             category: FunctionCategory::Momentum,
-            input: InputKind::Hlc,
+            input: InputKind::Hl,
             params: FISHER_PARAMS,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
@@ -813,7 +833,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "FISHER_SIGNAL",
             aliases: &[],
             category: FunctionCategory::Momentum,
-            input: InputKind::Hlc,
+            input: InputKind::Hl,
             params: FISHER_PARAMS,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
@@ -879,7 +899,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "ICHIMOKU_TENKAN",
             aliases: &["TENKAN"],
             category: FunctionCategory::Overlap,
-            input: InputKind::Hlc,
+            input: InputKind::Hl,
             params: TENKAN_PARAMS,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
@@ -890,7 +910,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "ICHIMOKU_KIJUN",
             aliases: &["KIJUN", "KIJUN_SEN"],
             category: FunctionCategory::Overlap,
-            input: InputKind::Hlc,
+            input: InputKind::Hl,
             params: KIJUN_PARAMS,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
@@ -923,7 +943,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "DONCHIAN",
             aliases: &[],
             category: FunctionCategory::Volatility,
-            input: InputKind::Hlc,
+            input: InputKind::Hl,
             params: DONCHIAN_PARAMS,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
@@ -934,7 +954,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "DONCHIAN_UPPER",
             aliases: &[],
             category: FunctionCategory::Volatility,
-            input: InputKind::Hlc,
+            input: InputKind::Hl,
             params: DONCHIAN_PARAMS,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
@@ -945,7 +965,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "DONCHIAN_LOWER",
             aliases: &[],
             category: FunctionCategory::Volatility,
-            input: InputKind::Hlc,
+            input: InputKind::Hl,
             params: DONCHIAN_PARAMS,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
@@ -956,7 +976,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "DONCHIAN_MIDDLE",
             aliases: &["DONCHIAN_MID"],
             category: FunctionCategory::Volatility,
-            input: InputKind::Hlc,
+            input: InputKind::Hl,
             params: DONCHIAN_PARAMS,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,
@@ -967,7 +987,7 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             name: "DONCHIAN_WIDTH",
             aliases: &[],
             category: FunctionCategory::Volatility,
-            input: InputKind::Hlc,
+            input: InputKind::Hl,
             params: DONCHIAN_PARAMS,
             outputs: 1,
             lookback: LookbackSpec::PeriodMinusOne,

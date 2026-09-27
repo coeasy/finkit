@@ -70,8 +70,14 @@ const PLAN_KERNELS: &[&str] = &[
     "BARSSINCE",
     "BARSCOUNT",
     "BARPOS",
+    "BARSLAST",
     "BBANDS",
     "BIGORDER",
+    // Domestic screening family. These are the canonical names behind a wide
+    // alias surface, so a missing kernel here broke every alias at once; see
+    // `unified_dispatch::SCREENING_KERNELS`.
+    "BREAKDOWN",
+    "BREAKOUT",
     "BOLLDN",
     "BOLLMID",
     "BOLLUP",
@@ -82,12 +88,14 @@ const PLAN_KERNELS: &[&str] = &[
     "COSH",
     "CROSS",
     "CROSSBELOW",
+    "COUNT",
     "CUMSUM",
     // Host-context kernels: they read data the numeric input slots cannot carry
     // (see `HostContext`), so they are only executable when the caller supplies it.
     "CAPITAL",
     "COST",
     "DEA",
+    "DEAD_CROSS",
     "DIV",
     "DONCHIAN",
     "DRAWNULL",
@@ -100,6 +108,8 @@ const PLAN_KERNELS: &[&str] = &[
     "FIXNAN",
     "FISHER_SIGNAL",
     "FRACPART",
+    "GAP_SIGNAL",
+    "GOLDEN_CROSS",
     "HHV",
     "HHVBARS",
     "HMA",
@@ -123,6 +133,7 @@ const PLAN_KERNELS: &[&str] = &[
     "LN",
     "MA",
     "MACD",
+    "MA_ALIGN",
     "MAININFLOW",
     "MAININFLOWPCT",
     "MATH_AVG",
@@ -151,6 +162,7 @@ const PLAN_KERNELS: &[&str] = &[
     "REF",
     "REFDATE",
     "RESI",
+    "RELATIVE_STRENGTH",
     "REVERSE",
     "RMA",
     "ROC",
@@ -183,10 +195,12 @@ const PLAN_KERNELS: &[&str] = &[
     "TANH",
     "TR",
     "TRANGE",
+    "TREND_BREAKOUT",
     "TRIMA",
     "TRIX",
     "TSI",
     "VAR",
+    "VOLUME_SURGE",
     "VWAP",
     "VWMA",
     "WILLR",
@@ -359,56 +373,60 @@ const PLAN_KERNELS: &[&str] = &[
 ];
 
 /// Functions registered in the SSOT **and** callable from a formula, but with
-/// no numeric kernel, so the compiled-plan path cannot execute them.
+/// no numeric kernel *under their own name*.
 ///
-/// This is the plan-path coverage backlog: each name is already declared pure
-/// and already implemented, so it needs a dispatcher kernel and nothing else.
-/// The list is the measurable target for expanding plan coverage.
+/// This list is **not** a backlog of broken functions. Every entry here is a
+/// registry *alias*, and the compiled-plan path never emits an alias:
+/// `compute_ir::function_metadata` resolves the name to `spec.name` and lowers
+/// `CALL:<canonical>`, so `BOLL(CLOSE, 20)` compiles to `CALL:BBANDS` and
+/// `VOLSURGE(VOLUME, 20)` compiles to `CALL:VOLUME_SURGE`. Dispatching
+/// `CALL:BOLL` directly is unreachable from any lowering path, and adding
+/// kernels for these 34 names would be orphan logic.
+///
+/// What actually protects an alias is [`every_alias_reaches_a_kernel_through_
+/// its_canonical_name`]: its canonical target must have a kernel. That test —
+/// not this list — is the gate that would fail if an alias became unreachable.
+///
+/// The genuine backlog (11 canonical names: `BARSLAST`, `BREAKDOWN`,
+/// `BREAKOUT`, `COUNT`, `DEAD_CROSS`, `GAP_SIGNAL`, `GOLDEN_CROSS`, `MA_ALIGN`,
+/// `RELATIVE_STRENGTH`, `TREND_BREAKOUT`, `VOLUME_SURGE`) was closed on
+/// 2026-09-27. Until then each of them made the plan path answer
+/// `unsupported kernel` (code 1), which silently broke 28 of the 45 names below
+/// through their canonicals — and no corpus case exercised a single one.
 const DECLARED_BUT_NO_KERNEL: &[&str] = &[
     "AVG",
-    "BARSLAST",
     "BEARISH_CROSS",
     "BOLL",
     "BOLLINGER",
-    "BREAKDOWN",
-    "BREAKOUT",
     "BREAKOUT_DOWN",
     "BREAKOUT_SCREEN",
     "BREAKOUT_UP",
     "BULLISH_CROSS",
     "CHOPPINESS",
-    "COUNT",
     "CROSSDOWN",
     "CROSSOVER",
     "CROSSUP",
-    "DEAD_CROSS",
     "DONCHIAN_MID",
     "FISHER_TRANSFORM",
     "GAP",
-    "GAP_SIGNAL",
-    "GOLDEN_CROSS",
     "IFF",
     "KD",
     "KDJ_K",
     "KIJUN",
     "KIJUN_SEN",
-    "MA_ALIGN",
     "MA_ALIGNMENT",
     "MOMENTUM",
     "PRICE_BREAKDOWN",
     "PRICE_BREAKOUT",
-    "RELATIVE_STRENGTH",
     "RELSTRENGTH",
     "RS_EXCESS_RETURN",
     "SHIFT",
     "SUPERTREND_LINE",
     "TENKAN",
     "TREND_ALIGN",
-    "TREND_BREAKOUT",
     "TREND_SCREEN",
     "VOLSURGE",
     "VOLUME_EXPANSION",
-    "VOLUME_SURGE",
     "Z_SCORE",
 ];
 
@@ -558,6 +576,40 @@ fn declared_functions_without_a_kernel_are_recorded() {
     assert_recorded(DECLARED_BUT_NO_KERNEL, &backlog, "plan-path backlog");
 }
 
+/// Every alias must reach a kernel through its canonical name.
+///
+/// This is the gate that actually protects the 34 names in
+/// [`DECLARED_BUT_NO_KERNEL`]. The planner never emits `CALL:<alias>` — it
+/// resolves the name to the registry spec and lowers `CALL:<spec.name>` — so
+/// `BOLL` is executable exactly when `BBANDS` is, and `CROSSUP` exactly when
+/// `GOLDEN_CROSS` is. A canonical kernel going missing therefore breaks every
+/// alias pointing at it, which is precisely what happened to 17 alias families
+/// before the domestic screening kernels landed.
+///
+/// Checking the aliases' own `CALL:` names instead would measure something no
+/// caller can reach and would have stayed green through that whole outage.
+#[test]
+fn every_alias_reaches_a_kernel_through_its_canonical_name() {
+    let kernels = probed_plan_kernels(&all_candidate_names());
+    let registry = builtin_function_registry();
+
+    let mut unreachable: Vec<String> = Vec::new();
+    for spec in registry.iter() {
+        if kernels.contains(spec.name) {
+            continue;
+        }
+        for &alias in spec.aliases {
+            unreachable.push(format!("{} -> {}", alias, spec.name));
+        }
+    }
+
+    assert!(
+        unreachable.is_empty(),
+        "these aliases lower to a canonical name the plan path cannot execute, \
+         so a formula using them fails with `unsupported kernel`: {unreachable:?}"
+    );
+}
+
 #[test]
 fn the_three_surfaces_have_the_expected_sizes() {
     // Sizes are recorded so an accidental mass registration or mass removal is
@@ -622,10 +674,15 @@ fn the_three_surfaces_have_the_expected_sizes() {
     // kernels are optimized. The formerly unregistered TA-Lib names and the
     // four implicit variables are now also registered, so every executable plan
     // kernel remains inside the registry SSOT.
+    // 321 -> 321, 452 -> 452, 276 -> 287: the eleven domestic screening
+    // canonicals gained compiled-plan kernels. Nothing new was invented — each
+    // delegates to the `canonical_*` / `fn_*` implementation the tree path
+    // already used — so this is reachability, not new numerics. The formula and
+    // registry surfaces are unchanged because the names were already there.
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (321, 452, 276),
+        (321, 452, 287),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

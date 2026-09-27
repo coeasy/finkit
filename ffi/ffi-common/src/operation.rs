@@ -1052,6 +1052,7 @@ fn function_category_name(category: FunctionCategory) -> &'static str {
 fn input_kind_name(input: InputKind) -> &'static str {
     match input {
         InputKind::Series => "series",
+        InputKind::Hl => "hl",
         InputKind::Hlc => "hlc",
         InputKind::Hlcv => "hlcv",
         InputKind::Ohlcv => "ohlcv",
