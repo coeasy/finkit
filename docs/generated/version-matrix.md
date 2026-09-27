@@ -29,9 +29,16 @@ Canonical workspace version: **`0.2.0`**
 
 ## Benchmark data
 
-Criterion JSON benchmarks indexed: **0** (from `target/criterion/` when present).
+Benchmark statistics are deliberately **not** indexed here. The
+number of Criterion JSON files on one machine is not a fact about
+the repository, so recording it would make this file disagree
+between a developer checkout and CI. Generate the report locally
+instead:
 
-Full benchmark report: `python scripts/gen_benchmark_report.py` → `docs/BENCHMARK_REPORT.md`.
+```bash
+cargo bench -p finkit --locked
+python scripts/gen_benchmark_report.py   # → docs/BENCHMARK_REPORT.md
+```
 
 ## Regenerate
 

@@ -76,15 +76,19 @@ python scripts/check_docs_links.py
 bash scripts/check_rustdoc.sh
 python scripts/check_orphan_scripts.py
 python scripts/check_workflow_liveness.py
+python scripts/check_orphan_docs.py
 python scripts/check_script_references.py
 python scripts/check_dead_code_allows.py
+python scripts/check_ios_header_contract.py
+python scripts/check_talib_ffi_contract.py
 ```
 
 Do not remove `--locked` from CI-equivalent commands. `Cargo.lock` is part of the reproducibility contract.
 
-The last five are the repository-hygiene gates, also available as
-`make check-rustdoc`, `make check-orphans`, `make check-script-refs` and
-`make check-dead-code`:
+The last eight are the repository-hygiene gates, also available as
+`make check-rustdoc`, `make check-orphans` (scripts, workflows, documents),
+`make check-script-refs`, `make check-dead-code`, `make check-ios-header` and
+`make check-talib-ffi`:
 
 - `scripts/check_rustdoc.sh` is the enforcement point for ADR 0011 (see the
   policy note at the top of `core/src/lib.rs`). `cargo doc` on its own is *not*
@@ -102,12 +106,32 @@ The last five are the repository-hygiene gates, also available as
   `workflow_dispatch`/`schedule`/`release`/`workflow_call`). It also reports
   dormant branch filters on workflows that are still reachable, so a stale
   `on:` block is visible without failing the build.
+- `scripts/check_orphan_docs.py` fails when a tracked Markdown document is
+  reachable from no other document, by link or by backticked
+  repository-relative path. A document nothing links to is unreachable from the
+  index and indistinguishable from a deleted one; it found two current
+  documents in that state.
 - `scripts/check_script_references.py` fails when a caller names a `scripts/`
   path that is not in the tree — the inverse of the orphan check. A workflow
   step, Makefile recipe or document that invokes a script which does not exist
   has a name and a place in the release checklist, and no implementation.
   Paths that are legitimately absent (planned, or written at run time by the
   caller itself) must be recorded in `RECORDED_MISSING` with a reason.
+- `scripts/check_ios_header_contract.py` compares
+  `ffi/ios-binding/include/finkit.h` with the iOS binding's shipped
+  `#[no_mangle] extern "C"` exports, in both directions, ignoring
+  `#[cfg(test)]`-gated symbols. It is the iOS counterpart to
+  `gen_c_header.py --check`; before it existed the header had drifted by three
+  undeclared entry points.
+- `scripts/check_talib_ffi_contract.py` diffs the hand-written TA-Lib
+  transcription in `core/src/talib_ffi.rs` against the pinned TA-Lib catalog in
+  `tests/contracts/talib_coverage_matrix_v1.json`. The transcription is compiled
+  only under the `talib-c` feature, and an unused `extern` declaration never
+  reaches the linker — so it advertised `TA_SKEWNESS`/`TA_KURTOSIS`, which TA-Lib
+  does not export at any version, while the benchmark stayed green. The same
+  check verifies the header's stated indicator total and each section's
+  `[declared=N]` count, because three hand-written numbers in that file
+  disagreed with each other and with the declarations.
 - `scripts/check_dead_code_allows.py` fails on any `#[allow(dead_code)]` (or
   `#![allow(dead_code)]`, or the `expect` form) that does not carry a `// why`
   comment on the line, inside the attribute block above it, or on the line
@@ -123,7 +147,7 @@ The last five are the repository-hygiene gates, also available as
   `ffi_catch_void`. The synchronizer recognizes that shape explicitly; otherwise
   an arrow-only parser silently leaves those exports able to unwind into Java.
 
-All three hygiene checks enumerate tracked files with `git ls-files -z`. The
+Every hygiene check that enumerates tracked files uses `git ls-files -z`. The
 `-z` is required: without it git octal-escapes paths containing non-ASCII
 bytes, so `docs/competitive-analysis/finkit-<cjk>.md` silently drops out of the
 scan — nine tracked files were invisible that way.

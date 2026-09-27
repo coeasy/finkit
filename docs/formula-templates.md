@@ -33,9 +33,30 @@ is only a summary.
 
 ## Look up a template
 
-Every entry point returns the same fields: `name`, `category`, `description`,
-`formula` (the AlphaTA source) and `parameters` (per-parameter `default` / `min` /
-`max`). A missing key is an error, never an empty result.
+The template *content* is the same everywhere, but the field names and the
+miss-behaviour are not. Only Python flattens everything into one dictionary;
+the native surfaces serialise the Rust `FormulaTemplate` struct directly, whose
+source field is called `source`, not `formula`.
+
+| Entry point | Missing key | Fields |
+| --- | --- | --- |
+| Rust `FormulaTemplates::get` | `None` | `name`, `description`, `category` (`TemplateCategory`), `source`, `parameters` |
+| Python `formula_get_template` | raises `ValueError` | `name`, `category`, `description`, `formula`, `parameters` |
+| Node `Indicators.formulaGetTemplate` | returns `null` | `name`, `description`, `category`, `source` |
+| WASM `formula_get_template` | throws | `name`, `description`, `category`, `source` |
+| Go / .NET / Java `ta_formula_get_template` | plain-text message, **not** JSON | JSON of the Rust struct: `name`, `description`, `category`, `source` |
+
+Two consequences worth knowing before you write code against this:
+
+1. **`parameters` is a Rust/Python-only field.** The Rust struct carries
+   `Vec<(name, default, min, max)>`, Python exposes it as
+   `{param: {default, min, max}}`, and the Go/.NET/Java JSON drops it entirely
+   (`#[serde(skip)]` on the field). Node and WASM never carry it. For those
+   languages read the ranges from
+   [`docs/generated/formula-templates.md`](generated/formula-templates.md).
+2. **`formula_list_categories` is not uniform either.** Python returns
+   `[{"category", "count"}]`; Node and WASM return `[String]`; Go/.NET/Java
+   return a JSON array of category names. Only Python gives you the counts.
 
 ### Rust
 
@@ -90,10 +111,14 @@ for entry in ta.formula_list_categories():
 ```javascript
 const { Indicators } = require('finkit');
 
+// Returns the template object, or `null` when the key is unknown.
 const template = Indicators.formulaGetTemplate("ma_cross");
-console.log(template.name, template.formula);
+if (template) {
+  console.log(template.name, template.source); // note: `source`, not `formula`
+}
 
-console.log(Indicators.formulaSearchTemplates("金叉"));
+// Both of these return arrays of plain strings.
+console.log(Indicators.formulaSearchTemplates("金叉").map((t) => t.name));
 console.log(Indicators.formulaListCategories());
 ```
 
@@ -103,8 +128,8 @@ console.log(Indicators.formulaListCategories());
 import init, { formula_get_template, formula_search_templates } from './finkit_wasm.js';
 
 await init();
-const template = formula_get_template("ma_cross");
-console.log(template.name, template.formula);
+const template = formula_get_template("ma_cross"); // throws when unknown
+console.log(template.name, template.source);       // `source`, not `formula`
 console.log(formula_search_templates("金叉").map((t) => t.name));
 ```
 
@@ -125,7 +150,12 @@ Notes on the native (non-managed) rows:
 
 - The Go, .NET and Java rows return a NUL-terminated JSON document. Go and .NET
   release it with `ta_free_string`; Java copies it into a `String` before
-  returning. A missing key is reported as an error document, never as `NULL`.
+  returning.
+- **A missing key is not an error document there.** `ta_formula_get_template`
+  writes the plain text `template '<name>' not found` into the returned string.
+  Go's `FormulaGetTemplate` wrapper detects this (`json.Valid` fails) and
+  converts it into a Go `error`; a .NET caller P/Invoking the symbol directly
+  has to make the same check itself.
 - The .NET column names the raw `ta_*` symbol — the C# wrapper in
   `ffi/dotnet-binding/src/Finkit/Indicators.cs` does not yet surface a
   `FormulaGetTemplate` method, so a .NET caller must P/Invoke the symbol

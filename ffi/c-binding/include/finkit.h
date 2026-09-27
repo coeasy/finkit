@@ -33,6 +33,29 @@ typedef enum FfiStatus {
     FfiStatus_Unknown = -99
 } FfiStatus;
 
+/*
+ * Finer-grained tiers reported by ta_last_error_code(), which may carry a
+ * positive code while the function return value carries a legacy negative one.
+ *
+ *   1 .. 2    FFI boundary (null pointer, buffer too small)
+ *  10 .. 13   Indicator tier  (FFI_INDICATOR_BASE + offset)
+ *  50 .. 61   Formula tier    (FFI_FORMULA_BASE + offset)
+ *
+ * The formula tier is 50 + formula_error_code(variant), and that mapping has 11
+ * arms (offsets 0..10), so it ends at 61. Two entries matter to a C caller:
+ *
+ *   60  UnsupportedFunction  the formula names a function this build cannot run
+ *   61  BackendUnsupported   the caller selected FormulaExecutionMode::Plan on
+ *                            an entry point that only the tree backend serves
+ *                            (for example eval_ast, eval_lazy, eval_template,
+ *                            eval_with_params)
+ *
+ * 61 is a *programming* error, not a data error: the input was fine, the
+ * requested backend simply cannot serve that entry point. Retry with the tree
+ * backend, or call the plan-capable ta_formula_eval_contract_json. See
+ * docs/ffi/error-codes.md and docs/formula-runtime-contract.md.
+ */
+
 /* ── Version & error reporting ─────────────────────────────────────────── */
 
 TA_API char *ta_version(void);

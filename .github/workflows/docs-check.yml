@@ -63,6 +63,11 @@ jobs:
         run: python scripts/gen_dialect_coverage.py --check
       - name: Check local documentation links
         run: python scripts/check_docs_links.py
+      # `check_docs_links.py` validates that a link resolves; it cannot see a
+      # document that nothing links to at all. Two current documents were in
+      # that state before this step existed.
+      - name: Check every document is reachable
+        run: python scripts/check_orphan_docs.py
       - name: Check streaming metadata against the registry
         run: python scripts/check_streaming_registry_contract.py
       - name: Check changelog structure

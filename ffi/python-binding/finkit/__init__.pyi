@@ -1187,6 +1187,206 @@ class IndicatorNotFoundError(FinkitError):
     ...
 
 # ============================================================================
+# Candlestick patterns
+# ============================================================================
+
+def cdl_doji(
+    open: ArrayLike,
+    high: ArrayLike,
+    low: ArrayLike,
+    close: ArrayLike,
+    doji_pct: float = 0.1,
+) -> List[int]:
+    """Doji detector: 100 bullish, -100 bearish, 0 none."""
+    ...
+
+def cdl_engulfing(
+    open: ArrayLike,
+    high: ArrayLike,
+    low: ArrayLike,
+    close: ArrayLike,
+) -> List[int]:
+    """Engulfing pattern detector."""
+    ...
+
+def cdl_hammer(
+    open: ArrayLike,
+    high: ArrayLike,
+    low: ArrayLike,
+    close: ArrayLike,
+) -> List[int]:
+    """Hammer pattern detector."""
+    ...
+
+# ============================================================================
+# Chart patterns
+# ============================================================================
+
+def detect_double_top(
+    high: ArrayLike, lookback: int = 20, tolerance: float = 0.03
+) -> List[int]:
+    """Indices where a double top is detected."""
+    ...
+
+def detect_double_bottom(
+    low: ArrayLike, lookback: int = 20, tolerance: float = 0.03
+) -> List[int]:
+    """Indices where a double bottom is detected."""
+    ...
+
+def detect_head_shoulders(
+    high: ArrayLike, min_bars: int = 5, head_ratio: float = 1.1
+) -> List[int]:
+    """Indices where a head-and-shoulders top is detected."""
+    ...
+
+# ============================================================================
+# Chanlun analysis
+# ============================================================================
+
+def chan_analyze(
+    open: ArrayLike,
+    high: ArrayLike,
+    low: ArrayLike,
+    close: ArrayLike,
+    volume: ArrayLike,
+    min_stroke_bars: int = 6,
+    variant: str = "standard",
+    fractal_policy: str = "strict",
+    stroke_policy: str = "configurable",
+    center_policy: str = "dynamic",
+    min_stroke_change_ratio: float = 0.0,
+    min_fractal_range_ratio: float = 0.0,
+    signal_min_strength: float = 0.0,
+    center_break_ratio: float = 0.0,
+) -> List[Dict[str, Any]]:
+    """Chanlun structures as plain dictionaries."""
+    ...
+
+def chan_analyze_multi(
+    open: ArrayLike,
+    high: ArrayLike,
+    low: ArrayLike,
+    close: ArrayLike,
+    volume: ArrayLike,
+    factors: Optional[Sequence[int]] = ...,
+    auto_levels: int = 3,
+    min_frame_bars: int = 20,
+    min_stroke_bars: int = 6,
+    variant: str = "standard",
+) -> Dict[str, Any]:
+    """Analyze automatically selected or explicitly supplied Chanlun timeframes."""
+    ...
+
+def chan_analyze_multi_timestamps(
+    timestamps: ArrayLike,
+    open: ArrayLike,
+    high: ArrayLike,
+    low: ArrayLike,
+    close: ArrayLike,
+    volume: ArrayLike,
+    durations_seconds: Optional[Sequence[int]] = ...,
+    min_stroke_bars: int = 6,
+    variant: str = "standard",
+    origin_seconds: int = 0,
+) -> Dict[str, Any]:
+    """Multi-timeframe Chanlun structures from Unix-second timestamps."""
+    ...
+
+def chan_analyze_multi_timestamps_calendar(
+    timestamps: ArrayLike,
+    open: ArrayLike,
+    high: ArrayLike,
+    low: ArrayLike,
+    close: ArrayLike,
+    volume: ArrayLike,
+    market: str = "a_share",
+    durations_seconds: Optional[Sequence[int]] = ...,
+    timezone: Optional[str] = ...,
+    holidays: Optional[List[str]] = ...,
+    sessions: Optional[List[Tuple[int, int]]] = ...,
+    special_sessions: Optional[List[Tuple[str, List[Tuple[int, int]]]]] = ...,
+    min_stroke_bars: int = 6,
+    variant: str = "standard",
+) -> Dict[str, Any]:
+    """Timestamped Chanlun structures with an exchange calendar and timezone."""
+    ...
+
+# ============================================================================
+# Batch compatibility
+# ============================================================================
+
+def bbands(
+    real: ArrayLike,
+    timeperiod: int = 5,
+    nbdevup: float = 2.0,
+    nbdevdn: float = 2.0,
+    matype: int = 0,
+) -> Tuple[Array1D, Array1D, Array1D]:
+    """Bollinger Bands, returned as ``(upper, middle, lower)``."""
+    ...
+
+def compute_indicators(
+    close: ArrayLike,
+    requests: Sequence[Tuple[str, Sequence[float]]],
+    open: Optional[ArrayLike] = ...,
+    high: Optional[ArrayLike] = ...,
+    low: Optional[ArrayLike] = ...,
+    volume: Optional[ArrayLike] = ...,
+    secondary: Optional[ArrayLike] = ...,
+    talib_compat: bool = False,
+) -> Dict[str, Any]:
+    """Batch indicator evaluation keyed by request name.
+
+    Set ``talib_compat=True`` for TA-Lib lookback/NaN conventions.
+    """
+    ...
+
+# ============================================================================
+# Formula templates
+# ============================================================================
+
+def formula_get_template(name: str) -> Dict[str, Any]:
+    """One template as ``{name, category, description, formula, parameters}``.
+
+    Raises ``ValueError`` when the key is unknown.
+    """
+    ...
+
+def formula_search_templates(keyword: str) -> List[Dict[str, Any]]:
+    """Templates matching ``keyword`` in name, description or category."""
+    ...
+
+def formula_list_categories() -> List[Dict[str, Any]]:
+    """``[{category, count}]`` for every template category."""
+    ...
+
+# ============================================================================
+# Formula component registry
+# ============================================================================
+
+class FormulaRegistry:
+    """Mutable registry of expression-only formula components."""
+
+    def __init__(self) -> None: ...
+
+    def register(self, name: str, parameters: List[str], source: str) -> None:
+        """Register ``source`` (for example ``MA(X, N) + EMA(X, N)``) under ``name``."""
+        ...
+
+    def unregister(self, name: str) -> bool:
+        """Remove one component; returns whether it existed."""
+        ...
+
+    def names(self) -> List[str]:
+        """Every registered component name."""
+        ...
+
+    def compile(self, source: str) -> CompiledFormula:
+        """Compile ``source`` against this registry's components."""
+        ...
+
+# ============================================================================
 # Accessor Registration
 # ============================================================================
 

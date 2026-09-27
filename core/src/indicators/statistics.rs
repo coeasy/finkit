@@ -283,13 +283,16 @@ pub fn percent_rank(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     Ok(output)
 }
 
-/// Percent Rank (PR) — TA-Lib 0.6.4 compatible short alias.
+/// Percent Rank (PR) — TA-Lib `TA_PERCENTRANK` compatible short alias.
 ///
 /// Returns `(count(input[i-period+1..=i] < input[i]) / period) * 100`,
 /// which matches TA-Lib's `TA_PERCENTRANK` semantics (1.0 normalisation, *100
 /// to express as a percentage in `[0, 100]`).
 ///
-/// Added 2026-06-06 to provide parity with TA-Lib 0.6.4's `PERCENTRANK`.
+/// Added 2026-06-06. The parity target is the release pinned in
+/// `tests/contracts/talib_coverage_matrix_v1.json` (v0.8.1): `TA_PERCENTRANK`
+/// is **not** present in TA-Lib 0.6.4, so citing that version here — as this
+/// docstring originally did — named a release that cannot be compared against.
 #[inline]
 pub fn pr(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     percent_rank(input, timeperiod)
@@ -747,10 +750,17 @@ pub fn linearreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
 }
 
 // ============================================================
-// TA-Lib SKEWNESS / KURTOSIS (新增 2026-07-07)
+// Skewness / kurtosis (added 2026-07-07)
 // ============================================================
+//
+// These are **finkit's own** rolling statistics, not TA-Lib parity targets.
+// Earlier revisions labelled them "TA-Lib `TA_SKEWNESS` / `TA_KURTOSIS`
+// compatible", but TA-Lib exports neither symbol: `grep -ci skewness` and
+// `grep -ci kurtosis` both return 0 against `ta_func.h` for v0.6.4 and for the
+// pinned v0.8.1. The claim sent readers looking for an upstream function to
+// cross-check against, so it is removed rather than reworded.
 
-/// Rolling Skewness (Fisher-Pearson 偏度) — TA-Lib `TA_SKEWNESS` 兼容
+/// Rolling Skewness (Fisher-Pearson 偏度) — finkit-specific, no TA-Lib equivalent.
 ///
 /// 度量滚动窗口内数据分布的不对称性。正偏度表示右尾较长（大多数值在均值左侧），
 /// 负偏度表示左尾较长。零偏度表示对称分布（接近正态）。
@@ -818,7 +828,7 @@ pub fn skewness(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     Ok(output)
 }
 
-/// Rolling Kurtosis (超出度) — TA-Lib `TA_KURTOSIS` 兼容
+/// Rolling Kurtosis (超出度) — finkit-specific, no TA-Lib equivalent.
 ///
 /// 度量滚动窗口内数据分布的尾部厚度。正超出度表示重尾（极端值多于正态分布），
 /// 负超出度表示轻尾。零值与正态分布一致。

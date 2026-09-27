@@ -23,6 +23,16 @@ claim registry installation commands before a clean consumer test exists.
       shipped `#[no_mangle] extern "C"` symbol must be declared in the header
       that documents it. The iOS header is separate from the C binding's and had
       drifted by three undeclared entry points before this gate existed.
+- [ ] Run the TA-Lib transcription gate (`make check-talib-ffi`):
+      `python scripts/check_talib_ffi_contract.py`.
+      `core/src/talib_ffi.rs` transcribes TA-Lib's `ta_func.h` for the
+      head-to-head benchmark and is compiled only under `talib-c`. An unused
+      `extern` declaration never reaches the linker, so the benchmark stayed
+      green while the file declared `TA_SKEWNESS`/`TA_KURTOSIS` (absent from
+      every TA-Lib release), cited an older TA-Lib release beside
+      `TA_PERCENTRANK` (which that release does not export), and carried counts
+      that agreed with neither the file nor each other. This gate diffs the
+      declarations against the committed catalog, offline.
 - [ ] Run the repository hygiene gates, which fail on orphan automation
       (`make check-orphans`):
       `python scripts/check_orphan_scripts.py`,

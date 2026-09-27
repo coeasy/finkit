@@ -56,6 +56,20 @@ LEAKED_PREFIX_RE = re.compile(r"^Py[A-Z]")
 # checks below would pass on an empty set and report success.
 MIN_EXPECTED_CLASSES = 60
 
+# A `#[pyfunction]`, optionally with `name = "..."`, followed by any number of
+# further attributes (`#[pyo3(signature = ...)]` sits between the two), then the
+# Rust `fn`. Missing the intervening attribute is how a name-extraction pass
+# silently under-reports and makes the coverage check below vacuous.
+PYFUNCTION_RE = re.compile(
+    r"#\[pyfunction(?P<args>\([^)]*\))?\]"
+    r"(?P<between>(?:\s*#\[[^\]]*\])*)\s*(?:pub\s+)?fn\s+(?P<rust>\w+)"
+)
+PYFUNCTION_NAME_RE = re.compile(r'name\s*=\s*"(\w+)"')
+
+# A Python call site inside a fenced ```python block.
+PY_CALL_RE = re.compile(r"\b(?:ta|finkit)\.(\w+)\s*\(")
+PY_FENCE_RE = re.compile(r"```python\n(.*?)```", re.DOTALL)
+
 
 def strip_rust_comments(text: str) -> str:
     """Remove ``//`` and ``/* */`` comments so attributes inside them are ignored."""
@@ -67,6 +81,68 @@ def pyclass_python_name(struct_name: str, attrs: str) -> str:
     """Resolve the Python-visible name of a ``#[pyclass]`` struct."""
     match = re.search(r'name\s*=\s*"([^"]+)"', attrs)
     return match.group(1) if match else struct_name
+
+
+def registered_function_names(src_dir: Path) -> dict[str, str]:
+    """Map every Python-visible function name to the file that declares it."""
+    found: dict[str, str] = {}
+    for path in sorted(src_dir.glob("*.rs")):
+        text = strip_rust_comments(path.read_text(encoding="utf-8"))
+        for match in PYFUNCTION_RE.finditer(text):
+            explicit = None
+            if match.group("args"):
+                name = PYFUNCTION_NAME_RE.search(match.group("args"))
+                if name:
+                    explicit = name.group(1)
+            found[explicit or match.group("rust")] = path.name
+    return found
+
+
+def documented_python_calls() -> set[str]:
+    """Every `ta.x(...)` / `finkit.x(...)` call inside a fenced ```python block."""
+    import subprocess  # noqa: PLC0415 - only needed for the tracked-file list
+
+    listed = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if listed.returncode != 0:
+        raise RuntimeError("`git ls-files` failed; run this inside the repository")
+
+    calls: set[str] = set()
+    for relative in listed.stdout.split("\0"):
+        if not relative.endswith(".md"):
+            continue
+        text = (ROOT / relative).read_text(encoding="utf-8", errors="replace")
+        for block in PY_FENCE_RE.finditer(text):
+            calls.update(PY_CALL_RE.findall(block.group(1)))
+    return calls
+
+
+def documented_surface_gaps(stub: Path, src_dir: Path) -> list[str]:
+    """Documented Python calls that the stub does not declare.
+
+    The stub's docstring promises it "covers the documented surface". Only the
+    other direction was checked -- a name declared in the stub but absent from
+    the extension -- so 16 documented functions (``formula_get_template``,
+    ``cdl_doji``, ``compute_indicators``, the ``chan_analyze*`` family, ...) were
+    callable at runtime, documented in ``docs/``, and invisible to a type
+    checker. Names that the binding does not declare at all are ignored: those
+    are Go/Node examples or plan documents describing an API that does not
+    exist yet, and this gate is not the place to adjudicate them.
+    """
+    declared = set(registered_class_names(src_dir)) | set(registered_function_names(src_dir))
+    stub_names, _, _ = stub_declarations(stub)
+    gaps = sorted(n for n in documented_python_calls() if n in declared and n not in stub_names)
+    return [
+        f"{stub}: documented Python call `{name}` is missing from the stub "
+        "(the stub must cover the documented surface)"
+        for name in gaps
+    ]
 
 
 def registered_class_names(src_dir: Path) -> dict[str, str]:
@@ -153,6 +229,8 @@ def check_static(stub: Path, src_dir: Path) -> tuple[list[str], dict[str, str]]:
                 f"{where}: class `{name}` leaks the internal Rust wrapper prefix; "
                 'add `#[pyclass(name = "...")]` or rename it to the user-facing form'
             )
+
+    errors.extend(documented_surface_gaps(stub, src_dir))
 
     return errors, classes
 

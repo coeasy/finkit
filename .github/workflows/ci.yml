@@ -105,6 +105,17 @@ jobs:
       # invisible. `#[cfg(test)]`-gated exports are ignored.
       - name: Check the iOS FFI header against the Rust exports
         run: python scripts/check_ios_header_contract.py
+      # `core/src/talib_ffi.rs` transcribes TA-Lib's `ta_func.h` for the
+      # head-to-head benchmark. Three defects accumulated there because nothing
+      # compared the transcription against the library: phantom declarations for
+      # `TA_SKEWNESS`/`TA_KURTOSIS` (absent from every TA-Lib release, so they
+      # never reached the linker and the benchmark stayed green), a "TA-Lib
+      # 0.6.4" citation next to `TA_PERCENTRANK` (which 0.6.4 does not export),
+      # and hand-written counts that agreed with neither the file nor each
+      # other. The check is offline: it diffs against the committed
+      # `talib_coverage_matrix_v1.json` catalog.
+      - name: Check the TA-Lib transcription against the pinned TA-Lib catalog
+        run: python scripts/check_talib_ffi_contract.py
       # Orphan automation is worse than missing automation: a `scripts/` file
       # with no consumer, or a workflow whose `on:` block can never match, reads
       # as a live gate while doing nothing. Both checks are dependency-free and
@@ -231,6 +242,12 @@ jobs:
         run: cargo test -p finkit-cli --locked
       - name: Test language-neutral FFI contracts
         run: cargo test -p finkit-ffi-common --locked
+      # The C binding carries 31 `#[test]` functions of its own. Nothing ran
+      # them: `multilang-release.yml` built `finkit-ffi` and drove the C/C++
+      # `ctest` suite, but never `cargo test -p finkit-ffi`, so the crate's Rust
+      # unit tests were dead in CI. `ffi-common` above is a different crate.
+      - name: Test the C binding's Rust unit tests
+        run: cargo test -p finkit-ffi --locked
       - name: Test visualization integration flow
         run: cargo test -p finkit-visualization --locked
       - uses: actions/setup-node@v7

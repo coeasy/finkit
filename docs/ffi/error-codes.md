@@ -18,6 +18,12 @@ Defined in `ffi/c-binding/src/lib.rs` as `#[repr(i32)]` for stable ABI:
 
 Retrieve the most recent code on the current thread with `ta_last_error_code()`. Human-readable detail is available from `ta_last_error()` (allocate with `ta_last_error`, release with `finkit_free_string`).
 
+The coarse tier and the two ranges a caller must branch on are also stated in
+the shipped header itself (`ffi/c-binding/include/finkit.h`), immediately after
+the `FfiStatus` enum, so a C consumer who never opens this document still sees
+that `60` and `61` exist. That block is part of the `gen_c_header.py` template,
+not a hand edit: regenerating the header cannot drop it.
+
 ## Legacy and detailed codes (`ta_last_error_code`)
 
 For backward compatibility, many functions still return legacy negative codes directly from the function return value, while `ta_last_error_code()` may hold a finer-grained positive tier:

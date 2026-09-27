@@ -2,17 +2,32 @@
 //!
 //! Only compiled when the `talib-c` feature is enabled.
 //!
-//! Covers all 158 functions in TA-Lib 0.6.4 across 10 categories:
-//! - Overlap Studies (18)
-//! - Momentum Indicators (30)
+//! Mirrors the TA-Lib C indicator surface of the release pinned in
+//! `tests/contracts/talib_coverage_matrix_v1.json` (`talib_core_version`), and
+//! declares **158** indicator entry points of the 201 that release exports,
+//! plus the two library lifecycle calls (`TA_Initialize`, `TA_Shutdown`).
+//! The subset is what the head-to-head benchmark in
+//! `core/benches/talib_c_comparison.rs` exercises; the remaining 43 are
+//! covered by the numeric golden corpus instead.
+//!
+//! This header used to claim "all 158 functions in TA-Lib 0.6.4" while its own
+//! category list summed to 161 and the file declared 160. It also bound
+//! `TA_PERCENTRANK`, which does not exist in 0.6.4 at all (`grep -c` returns 0
+//! against that tag's `ta_func.h`) — so the cited release could not have been
+//! the one the declarations came from. Both numbers are now checked by
+//! `scripts/check_talib_ffi_contract.py` against the file and the pinned
+//! catalog, and every section below carries its own `[declared=N]` count under
+//! the same check.
+//!
+//! Ten TA-Lib groups, as declared here:
+//! - Overlap Studies (13)
+//! - Momentum Indicators (31)
 //! - Volume Indicators (3)
 //! - Volatility Indicators (3)
-//! - Price Transform (4)
-//! - Cycle Indicators (6)
-//! - Statistics Functions (9)
+//! - Price Transform + Cycle Indicators (10)
+//! - Statistics Functions (11)
 //! - Math Transform (15)
-//! - Math Operators (12)
-//! - Pattern Recognition (61)
+//! - Math Operators + Pattern Recognition (72)
 
 // This module is a transcription of the TA-Lib C API surface: the type aliases,
 // `TA_*` constants and `extern` declarations mirror `ta_libc.h` one-for-one,
@@ -41,7 +56,9 @@ extern "C" {
     pub fn TA_Shutdown() -> TA_RetCode;
 
     // ========================================================================
-    // Overlap Studies (18)
+    // [declared=13] Overlap Studies — TA-Lib groups 17 under this heading; this
+    // file does not bind MIDPOINT/MIDPRICE and declares MAMA and HT_TRENDLINE
+    // under other sections.
     // ========================================================================
     pub fn TA_SMA(
         startIdx: i32,
@@ -194,7 +211,8 @@ extern "C" {
     ) -> TA_RetCode;
 
     // ========================================================================
-    // Momentum Indicators (30)
+    // [declared=31] Momentum Indicators — TA-Lib groups 30 here; the 31st is
+    // MAMA, which TA-Lib files under Overlap Studies.
     // ========================================================================
     pub fn TA_RSI(
         startIdx: i32,
@@ -570,7 +588,7 @@ extern "C" {
     ) -> TA_RetCode;
 
     // ========================================================================
-    // Volume Indicators (3)
+    // [declared=3] Volume Indicators
     // ========================================================================
     pub fn TA_AD(
         startIdx: i32,
@@ -609,7 +627,7 @@ extern "C" {
     ) -> TA_RetCode;
 
     // ========================================================================
-    // Volatility Indicators (3)
+    // [declared=3] Volatility Indicators
     // ========================================================================
     pub fn TA_ATR(
         startIdx: i32,
@@ -647,7 +665,8 @@ extern "C" {
     ) -> TA_RetCode;
 
     // ========================================================================
-    // Price Transform (4)
+    // [declared=10] Price Transform (4) + Cycle Indicators (5) + HT_TRENDLINE
+    // (1, which TA-Lib files under Overlap Studies).
     // ========================================================================
     pub fn TA_AVGPRICE(
         startIdx: i32,
@@ -753,7 +772,10 @@ extern "C" {
     ) -> TA_RetCode;
 
     // ========================================================================
-    // Statistics Functions (9)
+    // [declared=11] Statistics Functions — TA-Lib's 9 here plus AVGDEV and
+    // PERCENTRANK. KURTOSIS and SKEWNESS are deliberately absent: neither name
+    // exists in TA-Lib's C header, so binding them would claim a parity that
+    // has no upstream to compare against.
     // ========================================================================
     pub fn TA_STDDEV(
         startIdx: i32,
@@ -869,28 +891,17 @@ extern "C" {
         outReal: *mut f64,
     ) -> TA_RetCode;
 
-    pub fn TA_SKEWNESS(
-        startIdx: i32,
-        endIdx: i32,
-        inReal: *const f64,
-        optInTimePeriod: i32,
-        outBegIdx: *mut i32,
-        outNBElement: *mut i32,
-        outReal: *mut f64,
-    ) -> TA_RetCode;
-
-    pub fn TA_KURTOSIS(
-        startIdx: i32,
-        endIdx: i32,
-        inReal: *const f64,
-        optInTimePeriod: i32,
-        outBegIdx: *mut i32,
-        outNBElement: *mut i32,
-        outReal: *mut f64,
-    ) -> TA_RetCode;
+    // NOTE: there is deliberately no `TA_SKEWNESS` / `TA_KURTOSIS` declaration
+    // here. Both names were transcribed as if they were part of the TA-Lib C
+    // API, but neither appears in `ta_func.h` for v0.6.4 or the pinned v0.8.1 —
+    // `grep -ci kurtosis|skewness` returns 0 for both headers. Declaring them
+    // is not harmless: it reads as "finkit's skewness is the one TA-Lib ships",
+    // which sends a reader looking for an upstream reference that does not
+    // exist. `scripts/check_talib_ffi_contract.py` now rejects any extern whose
+    // name is absent from the pinned function catalog.
 
     // ========================================================================
-    // Math Transform (15)
+    // [declared=15] Math Transform
     // ========================================================================
     pub fn TA_ACOS(
         startIdx: i32,
@@ -1028,7 +1039,7 @@ extern "C" {
     ) -> TA_RetCode;
 
     // ========================================================================
-    // Math Operators (12)
+    // [declared=72] Math Operators (11) + Pattern Recognition (61)
     // ========================================================================
     pub fn TA_ADD(
         startIdx: i32,

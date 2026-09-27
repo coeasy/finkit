@@ -458,7 +458,7 @@ python scripts/build_native_archive.py --verify   # fail if a rebuild would diff
 ```
 
 It packs the release build's linker output plus the committed headers and
-licence:
+licence — **8 members** in total:
 
 | Member | Source |
 | --- | --- |
@@ -471,6 +471,9 @@ licence:
 | `include/finkit_research.hpp` | `ffi/c-binding/include/finkit_research.hpp` |
 | `share/finkit/LICENSE` | `LICENSE` |
 
+`scripts/build_native_archive.py` is the single definition of this list; if the
+two disagree, the script wins.
+
 Every member is stored with a fixed 1980-01-01 timestamp, so two runs over
 identical inputs produce a byte-identical archive. The *linker* output is not
 reproducible, though, so a rebuilt archive legitimately has a different digest
@@ -479,10 +482,12 @@ even when no source changed — refresh the `size_bytes`/`sha256` records in
 repack. Neither manifest is checked in (`/dist/` is gitignored), so they are a
 local release record only.
 
-The target directory is chosen deterministically: `--target-dir` if given,
-otherwise cargo's default `target/release`, otherwise `.cargo-target/release`.
-Both trees can coexist and their `finkit_ffi.dll` will differ (linker output is
-not reproducible), so when the tree that was *not* chosen also holds a differing
+The target directory is chosen deterministically, in this order:
+`--target-dir`, then `$CARGO_TARGET_DIR`, then `target/release`, then
+`.cargo-target/release`. It reads the same environment variable cargo does, so
+the archive is always packed from the tree the build actually wrote to. Both
+trees can coexist and their `finkit_ffi.dll` will differ (linker output is not
+reproducible), so when the tree that was *not* chosen also holds a differing
 library the script says so on stderr instead of letting you assume you got the
 build you meant.
 

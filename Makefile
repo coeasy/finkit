@@ -47,7 +47,8 @@ LANGS := $(sort $(LANGS))
 .PHONY: preflight lint
 .PHONY: gen-c-header verify-ffi gen-c-binding verify-bindings verify-bindings-tier verify-all-bindings
 .PHONY: build-native-archive verify-native-archive
-.PHONY: check-rustdoc check-orphans check-script-refs check-dead-code
+.PHONY: check-rustdoc check-orphans check-script-refs check-dead-code check-ios-header
+.PHONY: check-ios-header check-talib-ffi refresh-release-manifests check-release-manifests
 
 # ---- default ----------------------------------------------------------------
 all: preflight
@@ -180,6 +181,18 @@ check-dead-code:
 check-ios-header:
 	python3 $(ROOT)/scripts/check_ios_header_contract.py
 
+# ---- repository hygiene: the TA-Lib transcription matches TA-Lib ------------
+# `core/src/talib_ffi.rs` is a hand-written transcription of TA-Lib's
+# `ta_func.h`, compiled only under `talib-c` and used by the head-to-head
+# benchmark. Nothing compared it against the library it mirrors, so it drifted
+# three ways at once: it declared `TA_SKEWNESS`/`TA_KURTOSIS` (neither exists in
+# TA-Lib at any version), it cited "TA-Lib 0.6.4" while binding
+# `TA_PERCENTRANK` (which 0.6.4 does not have), and its hand-written counts
+# disagreed with each other and with the file. An unused `extern` never reaches
+# the linker, which is why the benchmark stayed green throughout.
+check-talib-ffi:
+	python3 $(ROOT)/scripts/check_talib_ffi_contract.py
+
 # ---- release records: keep the shipped digests in step with the artefacts ---
 # `dist/**/manifest.json` records a `size_bytes`/`sha256` pair per shipped
 # artefact. The linker output is not reproducible, so every rebuild changes
@@ -229,9 +242,10 @@ help:
 	@echo "  make verify-bindings-tier  Drift-check the active tier (Python, Node)"
 	@echo "  make verify-all-bindings  Same, plus report the deferred languages"
 	@echo "  make check-rustdoc    Fail if rustdoc emits any diagnostic (ADR 0011)"
-	@echo "  make check-orphans    Fail on orphan scripts or unreachable workflows"
+	@echo "  make check-orphans    Fail on orphan scripts, unreachable workflows or unreachable docs"
 	@echo "  make check-script-refs  Fail if a caller references a script that is missing"
 	@echo "  make check-dead-code    Fail on an unexplained `#[allow(dead_code)]`"
+	@echo "  make check-ios-header   Fail if ffi/ios-binding/include/finkit.h drifts from the iOS exports"
 	@echo "  make refresh-release-manifests  Recompute dist/**/manifest.json digests"
 	@echo "  make check-release-manifests    Fail if those digests are stale"
 	@echo ""

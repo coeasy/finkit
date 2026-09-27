@@ -109,6 +109,25 @@ reused.
 
 ### Fixed
 
+- **`docs/generated/version-matrix.md` recorded a number that could not be
+  correct in CI.** The "Criterion JSON benchmarks indexed: N" line counted files
+  under a hard-coded `target/criterion/`, but this repository builds to
+  `.cargo-target` (or `$CARGO_TARGET_DIR`), so the directory never existed and
+  the line always read `0`. Pointing the generator at `$CARGO_TARGET_DIR`
+  instead would have been worse: the count is a property of one developer's
+  disk, so the committed document would disagree with CI and the
+  `gen_ssot_docs.py --check` gate would flap. The count and the ~80 lines of
+  helper code that computed it are removed; the section now points at
+  `scripts/gen_benchmark_report.py`, which is the real local report path. The
+  gate is now independent of the environment, verified both with and without
+  `CARGO_TARGET_DIR` set against a populated `.cargo-target/criterion`.
+- `docs/installation.md` §14a listed six members for the native C/C++ archive
+  when `scripts/build_native_archive.py` packs eight — both
+  `finkit_research.h` and `finkit_research.hpp` were missing from the table, so
+  a reader following it would have shipped a bundle without the research
+  headers. The section also omitted `$CARGO_TARGET_DIR` from the documented
+  target-directory resolution order, which is the one step that matters in a
+  checkout that redirects cargo.
 - **`docs/archive/` was in `.gitignore` while 11 archived plans were already
   tracked.** Any newly archived document therefore became untracked *and*
   invisible to `git status`, so moving a file into the audit trail silently

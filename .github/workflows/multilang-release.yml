@@ -152,6 +152,11 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build -p finkit-ffi --release --locked
+      # The crate's own Rust unit tests. `ci.yml` runs them on every push and
+      # PR; this job is the one that also runs on `v*` tags, and a tag is the
+      # last point at which a broken C binding can still be stopped.
+      - name: Run the C binding's Rust unit tests
+        run: cargo test -p finkit-ffi --locked
       - run: cmake -S ffi/c-binding -B build/cpp -DFINKIT_AUTO_BUILD_RS=OFF -DFINKIT_BUILD_TESTS=ON -DFINKIT_BUILD_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Release
       - run: cmake --build build/cpp --config Release --parallel 2
       - name: Run C++ indicator and catalog tests

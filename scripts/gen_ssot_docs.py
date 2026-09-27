@@ -8,7 +8,11 @@ Sources:
   - core/src/indicators/mod.rs  — pub module exports and indicator catalog
   - ffi/c-binding/src/lib.rs    — FfiStatus error codes
   - Cargo.toml workspace members — version matrix
-  - target/criterion/            — benchmark stats (optional, via shared logic)
+  - core/src/formula/templates.rs — built-in formula template catalogue
+
+Benchmark statistics are intentionally not part of the generated output: the
+number of Criterion JSON files on one machine is not a fact about the
+repository. Use `scripts/gen_benchmark_report.py` for a local report.
 
 Usage:
     python scripts/gen_ssot_docs.py --generate
@@ -18,9 +22,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import glob
 import json
-import math
 import re
 import sys
 from dataclasses import dataclass
@@ -45,7 +47,8 @@ WORKSPACE_CARGO = ROOT / "Cargo.toml"
 DOTNET_PROJECT = ROOT / "ffi" / "dotnet-binding" / "src" / "Finkit" / "Finkit.csproj"
 JAVA_POM = ROOT / "ffi" / "java-binding" / "pom.xml"
 GENERATED_DIR = ROOT / "docs" / "generated"
-DEFAULT_CRITERION_DIR = ROOT / "target" / "criterion"
+
+
 INDICATOR_REGISTRY = ROOT / "docs" / "indicator_registry.json"
 # Registry specs declare the compatibility aliases that `get_builtin_functions()`
 # injects at runtime; the generated formula catalogue has to include them too.
@@ -73,16 +76,6 @@ WORKSPACE_MEMBERS_RE = re.compile(
 )
 CARGO_VERSION_RE = re.compile(r"^version\s*=\s*\"([^\"]+)\"")
 CARGO_VERSION_WORKSPACE_RE = re.compile(r"^version\.workspace\s*=\s*true")
-
-
-@dataclass
-class BenchStats:
-    group: str
-    name: str
-    input_size: str | None
-    mean_ns: float | None
-    median_ns: float | None
-    stddev_ns: float | None
 
 
 @dataclass
@@ -424,89 +417,6 @@ def parse_ffi_status_codes() -> list[tuple[str, int]]:
     return variants
 
 
-def load_estimate_point(estimates: dict, key: str) -> float | None:
-    section = estimates.get(key, {})
-    if isinstance(section, dict):
-        if "point_estimate" in section:
-            return float(section["point_estimate"])
-        if "estimate" in section:
-            return float(section["estimate"])
-    return None
-
-
-def stddev_from_sample(sample_path: Path) -> float | None:
-    try:
-        with open(sample_path, encoding="utf-8") as fh:
-            data = json.load(fh)
-    except (OSError, json.JSONDecodeError):
-        return None
-
-    times = data.get("times", [])
-    flat: list[float] = []
-    for entry in times:
-        if isinstance(entry, list):
-            flat.extend(float(x) for x in entry)
-        else:
-            flat.append(float(entry))
-    if len(flat) < 2:
-        return None
-    mean = sum(flat) / len(flat)
-    variance = sum((x - mean) ** 2 for x in flat) / (len(flat) - 1)
-    return math.sqrt(variance)
-
-
-def parse_bench_path(criterion_dir: Path, estimates_path: Path) -> BenchStats | None:
-    try:
-        rel = estimates_path.relative_to(criterion_dir)
-    except ValueError:
-        return None
-
-    parts = rel.parts
-    if len(parts) < 4 or parts[-2] != "new" or parts[-1] != "estimates.json":
-        return None
-
-    try:
-        with open(estimates_path, encoding="utf-8") as fh:
-            estimates = json.load(fh)
-    except (OSError, json.JSONDecodeError):
-        return None
-
-    sample_path = estimates_path.parent / "sample.json"
-    stddev = stddev_from_sample(sample_path)
-
-    if len(parts) == 4:
-        group, name = parts[0], parts[1]
-        input_size = None
-    elif len(parts) == 5:
-        group, name, input_size = parts[0], parts[1], parts[2]
-    else:
-        return None
-
-    return BenchStats(
-        group=group,
-        name=name,
-        input_size=input_size,
-        mean_ns=load_estimate_point(estimates, "mean"),
-        median_ns=load_estimate_point(estimates, "median"),
-        stddev_ns=stddev,
-    )
-
-
-def collect_all_bench_stats(criterion_dir: Path) -> dict[tuple[str, str, str | None], BenchStats]:
-    results: dict[tuple[str, str, str | None], BenchStats] = {}
-    if not criterion_dir.is_dir():
-        return results
-
-    pattern = str(criterion_dir / "**" / "new" / "estimates.json")
-    for path_str in glob.glob(pattern, recursive=True):
-        stats = parse_bench_path(criterion_dir, Path(path_str))
-        if stats is None:
-            continue
-        key = (stats.group, stats.name, stats.input_size)
-        results[key] = stats
-    return results
-
-
 def format_indicators_md(catalog: dict[str, list[str]]) -> str:
     total_fns = sum(len(fns) for fns in catalog.values())
     lines = [
@@ -789,7 +699,6 @@ def format_error_codes_md(codes: list[tuple[str, int]]) -> str:
 def format_version_matrix_md(
     canonical: str,
     rows: list[tuple[str, str, str, str, str]],
-    bench_count: int,
 ) -> str:
     lines = [
         "# Version Matrix",
@@ -811,10 +720,16 @@ def format_version_matrix_md(
             "",
             "## Benchmark data",
             "",
-            f"Criterion JSON benchmarks indexed: **{bench_count}** "
-            f"(from `target/criterion/` when present).",
+            "Benchmark statistics are deliberately **not** indexed here. The",
+            "number of Criterion JSON files on one machine is not a fact about",
+            "the repository, so recording it would make this file disagree",
+            "between a developer checkout and CI. Generate the report locally",
+            "instead:",
             "",
-            "Full benchmark report: `python scripts/gen_benchmark_report.py` → `docs/BENCHMARK_REPORT.md`.",
+            "```bash",
+            "cargo bench -p finkit --locked",
+            "python scripts/gen_benchmark_report.py   # → docs/BENCHMARK_REPORT.md",
+            "```",
             "",
             "## Regenerate",
             "",
@@ -912,11 +827,10 @@ def build_version_rows(canonical: str) -> list[tuple[str, str, str, str, str]]:
     return rows
 
 
-def generate_all(criterion_dir: Path) -> dict[Path, str]:
+def generate_all() -> dict[Path, str]:
     catalog = build_indicator_catalog()
     codes = parse_ffi_status_codes()
     canonical = read_workspace_version()
-    bench_stats = collect_all_bench_stats(criterion_dir)
     version_rows = build_version_rows(canonical)
 
     # Parse additional modules for streaming, formula, features, pine
@@ -929,9 +843,7 @@ def generate_all(criterion_dir: Path) -> dict[Path, str]:
     outputs = {
         OUT_INDICATORS: format_indicators_md(catalog),
         OUT_ERROR_CODES: format_error_codes_md(codes),
-        OUT_VERSION_MATRIX: format_version_matrix_md(
-            canonical, version_rows, len(bench_stats)
-        ),
+        OUT_VERSION_MATRIX: format_version_matrix_md(canonical, version_rows),
     }
 
     # Add streaming indicators doc if data available
@@ -991,19 +903,10 @@ def main() -> int:
         action="store_true",
         help="Verify generated docs match sources (exit 1 on mismatch)",
     )
-    parser.add_argument(
-        "--criterion-dir",
-        default=str(DEFAULT_CRITERION_DIR),
-        help="Criterion output directory for benchmark index count",
-    )
     args = parser.parse_args()
 
-    criterion_dir = Path(args.criterion_dir)
-    if not criterion_dir.is_absolute():
-        criterion_dir = ROOT / criterion_dir
-
     try:
-        outputs = generate_all(criterion_dir)
+        outputs = generate_all()
     except (OSError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
