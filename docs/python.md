@@ -441,6 +441,55 @@ print(out["__result__"][-1])
 
 See [formula-runtime.md](formula-runtime.md) and [formula-runtime-contract.md](formula-runtime-contract.md) for the detailed contract.
 
+## Formula templates and factor library
+
+The built-in template catalog is exposed as plain dictionaries, so the same
+three entry points work from every binding:
+
+```python
+ta.formula_list_categories()         # [{"category": "MovingAverage", "count": 13}, ...]
+hits = ta.formula_search_templates("ma")
+tpl  = ta.formula_get_template("ma_cross")
+print(tpl["name"], tpl["category"], tpl["formula"])
+print(tpl["parameters"])   # {"SHORT": {"default": 2.0, "min": 60.0, "max": 5.0}, ...}
+```
+
+Each template has `name`, `category`, `description`, `formula` and
+`parameters`; `parameters` maps a parameter name to its `default` / `min` /
+`max`. `formula_search_templates(query)` matches on name, category, description
+and source text, so a short query can return a large result set — filter
+client-side before rendering.
+
+The bundled factor libraries are reached through one entry point that takes a
+**required** library name:
+
+```python
+alpha158 = ta.factor_library("alpha158")        # 158 factors
+wq101    = ta.factor_library("worldquant101")   # 17 factors
+```
+
+The available names are `alpha158` and `worldquant101`; any other value raises
+`unknown factor library \`<name>\`; available: ["alpha158", "worldquant101"]`.
+
+`factor_library` returns a `FactorLibrary` object, not a list. It supports
+`len()` and `in`, but it is **not iterable and not subscriptable** — use
+`names()` to enumerate the factors it contains:
+
+```python
+lib = ta.factor_library("worldquant101")
+len(lib)                      # 17
+lib.names()                   # ['Alpha101', 'Alpha12', 'Alpha21', ...]
+lib.describe("Alpha101")      # metadata for one factor
+lib.expression("Alpha101")    # the expression it was compiled from
+lib.direction("Alpha101")     # preferred ranking direction
+lib.dependencies("Alpha101")  # the external series it reads
+values = lib.evaluate("Alpha101", ...)   # one factor
+all_values = lib.evaluate_all(...)       # {name: ndarray}
+```
+
+`FactorLibrary` is the built-in catalog. To register your own formulas, use
+`FormulaRegistry` (`register` / `unregister` / `compile` / `names`).
+
 ## Pandas
 
 Pandas is optional. Explicit NumPy conversion is the simplest integration:

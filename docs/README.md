@@ -257,4 +257,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last product/documentation review: 2026-09-23. Workspace target: v0.2.0. Published distribution baseline: v0.1.15._
+_Last product/documentation review: 2026-09-27. Workspace target: v0.2.0. Published distribution baseline: v0.1.15._

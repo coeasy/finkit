@@ -668,6 +668,207 @@ for h, l, c in zip(high, low, close):
 `ta.StreamingMACDEXT(fast_period=12, slow_period=26, signal_period=9, fast_ma="ema", slow_ma="ema", signal_ma="ema")`
 when you need configurable moving-average types.
 
+### Chanlun structures
+
+The Chanlun (缠论) entry points return **plain Python dictionaries**, not objects,
+so results join back to a pandas index without imposing a timestamp type on the
+core. Bar positions are zero-based indices.
+
+> **Inputs must be NumPy arrays.** These functions take
+> `PyReadonlyArray1<f64>`; passing a `list` raises
+> `TypeError: 'list' object is not an instance of 'ndarray'`. This differs from
+> the plain indicators above, which accept lists.
+
+```python
+import numpy as np
+import finkit as ta
+
+o = np.asarray(open_, dtype=np.float64)   # likewise high / low / close / volume
+res = ta.chan_analyze(
+    o, high, low, close, volume,
+    min_stroke_bars=6,
+    variant="standard",              # conservative / standard / aggressive
+    fractal_policy="strict",         # strict / loose / right_confirmed
+    stroke_policy="configurable",    # configurable / fixed5 / fixed6 / fixed7 / threshold
+    center_policy="dynamic",         # three_stroke / dynamic / hierarchical
+    min_stroke_change_ratio=0.0,
+    min_fractal_range_ratio=0.0,
+    signal_min_strength=0.0,
+    center_break_ratio=0.0,
+)
+```
+
+`chan_analyze` returns **one dict** (not a list of dicts) with these keys:
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `bar_count`, `fractal_count`, `stroke_count`, `segment_count`, `center_count` | `int` | stage sizes |
+| `trend` | `str` | `unknown` / `bullish` / `bearish` / `range` |
+| `developing_fractal` | `dict` or `None` | the unconfirmed fractal, if any |
+| `fractals` | `list[dict]` | `index`, `kind` (`top`/`bottom`), `high`, `low`, `value` |
+| `strokes` | `list[dict]` | `start_index`, `end_index`, `direction` (`up`/`down`), `high`, `low`, `bars`, `change`, `slope`, `strength` |
+| `segments` | `list[dict]` | `start_index`, `end_index`, `start_stroke`, `end_stroke`, `change` |
+| `centers` | `list[dict]` | `start_index`, `end_index`, `upper`, `lower`, `middle`, `level`, `start_stroke`, `end_stroke` |
+| `signals` | `list[dict]` | `kind` (`buy1`..`sell3`), `index`, `price`, `confirmed`, `strength`, `reason`, `evidence` |
+| `divergences` | `list[dict]` | `kind` (`bullish`/`bearish`), `start_stroke`, `end_stroke`, `index`, `price`, `confirmed`, `strength`, `reason` |
+
+Multi-timeframe variants all return `{"frames": [...], "resonance_direction",
+"resonance_score", "aligned_frames", "conflicting_frames"}`, where each frame
+carries `factor`, `label`, `seconds`, `source_ranges` and a **summary** `analysis`
+dict (counts, `trend` and `signals` only — not the full structure lists):
+
+```python
+mtf = ta.chan_analyze_multi(o, high, low, close, volume,
+                            factors=[1, 5, 20], auto_levels=3, min_frame_bars=20)
+for frame in mtf["frames"]:
+    print(frame["label"], frame["analysis"]["trend"])
+print(mtf["resonance_direction"], mtf["resonance_score"])
+```
+
+For real timelines use `chan_analyze_multi_timestamps(timestamps, o, high, low,
+close, volume, durations_seconds=None, min_stroke_bars=6, variant="standard",
+origin_seconds=0)`, or `chan_analyze_multi_timestamps_calendar(...)` which adds
+`market`, `timezone`, `holidays`, `sessions` and `special_sessions` overrides.
+
+### Composite indicators
+
+`compute_composite` evaluates a named dependency graph. Each definition is a
+`(name, function, inputs, params)` tuple; an input may be a raw series
+(`close`/`high`/`low`/`volume`), another definition's name, or `const:<number>`.
+Shared intermediates are computed once per call.
+
+```python
+graph = ta.compute_composite(
+    close=close,
+    definitions=[
+        ("fast", "ema", ["close"], [5]),
+        ("slow", "ema", ["close"], [20]),
+        ("spread", "sub", ["fast", "slow"], []),
+        ("signal", "sma", ["spread"], [3]),
+        ("cross", "cross_up", ["spread", "const:0"], []),
+    ],
+    outputs=["spread", "signal", "cross"],
+)
+```
+
+Built-in functions include `sma`, `ema`, `wma`, `rsi`, `atr`, `macd`,
+`boll_mid`, `boll_upper`, `boll_lower`, `vwma`, `return`, `zscore`, `cross_up`
+and `cross_down`, plus the threshold operators `threshold` / `between` / `clip`.
+
+### Factor library
+
+```python
+alpha158 = ta.factor_library("alpha158")        # 158 factors
+wq101    = ta.factor_library("worldquant101")   # 17 factors
+```
+
+`factor_library(name)` takes **one required argument**. The available names are
+`alpha158` (158 factors) and `worldquant101` (17 factors); any other value
+raises `unknown factor library ...; available: ["alpha158", "worldquant101"]`.
+
+It returns a `FactorLibrary`, which supports `len()` and `in` but is **not
+iterable and not subscriptable** — enumerate it with `names()`:
+
+```python
+lib = ta.factor_library("worldquant101")
+len(lib)                      # 17
+lib.names()                   # ['Alpha101', 'Alpha12', 'Alpha21', ...]
+lib.describe("Alpha101")      # metadata, without evaluating
+lib.expression("Alpha101")    # the verbatim compiled expression
+lib.direction("Alpha101")     # preferred ranking direction
+lib.dependencies("Alpha101")  # external series, in the spelling evaluate() accepts
+lib.evaluate("Alpha101", ...) # one factor
+lib.evaluate_all(...)         # {name: ndarray}
+```
+
+### Formula templates and registry
+
+The built-in template catalog is searchable and versioned as plain dicts:
+
+```python
+ta.formula_list_categories()          # list[dict] -> {"category": str, "count": int}
+ta.formula_search_templates("ma")     # list[dict] of matching templates
+ta.formula_get_template("ma_cross")   # one template dict
+```
+
+Each template is a dict with `name`, `category`, `description`, `formula` and
+`parameters` (a mapping of parameter name to `{default, min, max}`).
+
+`FormulaRegistry` is the extension point for user-registered formulas, exposing
+`compile`, `names`, `register` and `unregister`.
+
+### Compiled formulas
+
+`CompiledFormula(source)` is the reusable plan for repeated evaluation. Construct
+it once and call `eval` many times. The stream context retained after `eval` is
+also the backing store for `append_bar` / `eval_last`, so repeated streaming
+updates do **not** concatenate the whole history.
+
+```python
+plan = ta.CompiledFormula("MA5:=MA(CLOSE,5); MA10:=MA(CLOSE,10); CROSS(MA5,MA10)")
+out = plan.eval(open_, high, low, close, volume)     # -> dict of NumPy arrays
+last = plan.eval_last()
+plan.append_bar(...)                                # amortized O(1)
+plan.reset()
+```
+
+Available methods: `eval`, `eval_zero_copy`, `eval_owned`, `eval_range`,
+`eval_range_zero_copy`, `eval_last`, `append_bar`, `reserve_bars`, `reset`,
+`metadata`, `analyze`, `compatibility_report`, `talib_catalog`, and the `source`
+property.
+
+> `finkit.compile(...)` / `finkit.stream(...)` do **not** exist as module-level
+> functions. Use `CompiledFormula` and the `Streaming*` classes.
+
+### Market calendar
+
+```python
+session = ta.resolve_market_session(
+    "us_equity", timestamp,
+    timezone="America/New_York",
+    holidays=["2026-07-03"],
+    sessions=[(9 * 3600 + 30 * 60, 16 * 3600)],
+)
+```
+
+Supported `market` presets: `a_share`, `china_futures`, `hong_kong`,
+`us_equity`, `crypto`. Returns `None` when the timestamp is not in a session,
+otherwise a dict with `session_day`, `session_index`, `open_timestamp`,
+`close_timestamp`, `market`, `timezone`, `source` and `revision`.
+
+Market presets only carry stable regular sessions and time zones: exchange
+holiday calendars, ad-hoc closures and per-product sessions should be passed in
+through `holidays`, `sessions` and `special_sessions` rather than baked into the
+numeric core. Use `resolve_market_session_config(config_json, timestamp)` to
+resolve from a versioned JSON exchange-calendar definition and preserve the
+file's own `source` / `revision`.
+
+### Charting
+
+`KlineChart(data, language="zh", title="", width=1200, height=600)` renders K-line
+charts with indicator overlays:
+
+```python
+chart = ta.KlineChart(data, language="zh", title="缠论结构")
+chart.add_chan(min_stroke_bars=6, show_labels=True)
+chart.set_viewport(end=2000, pixel_width=1600, overscan_bars=40, follow_latest=True)
+chart.set_lod_policy("auto")
+chart.set_layer_visible("volume", True)
+svg = chart.to_svg_string()
+```
+
+Overlays: `add_ma`, `add_ema`, `add_boll`, `add_macd`, `add_rsi`, `add_kdj`,
+`add_sar`, `add_chan`, `add_chan_multi`, `add_custom_indicator`,
+`add_event_marker`. Output: `to_svg_string`, `to_canvas_html`,
+`to_webgl_html`, `to_webgpu_html`, `save_as_svg`, `save_as_html`,
+`save_as_canvas_html`, `save_as_webgl_html`, `save_as_webgpu_html`. Live data:
+`upsert_kline`, `upsert_kline_timestamped`, `upsert_klines`, `append_kline`,
+`update_last_kline`, `replay_next`, `set_replay_window`, `set_interaction`.
+
+SVG is static output; use the HTML emitters for the interactive mouse-tracking
+data window (OHLC, change, amplitude, volume, source range and hit Chanlun
+objects, following zoom/pan).
+
 ## Node.js API
 
 ### Installation

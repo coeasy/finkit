@@ -1362,6 +1362,66 @@ def formula_list_categories() -> List[Dict[str, Any]]:
     ...
 
 # ============================================================================
+# Factor library
+# ============================================================================
+
+class FactorLibrary:
+    """One built-in factor library.
+
+    Supports ``len()`` and ``in``. It is deliberately **not** iterable and
+    **not** subscriptable: enumerate it with :meth:`names`.
+    """
+
+    @property
+    def name(self) -> str:
+        """The library's own name (``alpha158`` or ``worldquant101``)."""
+        ...
+
+    def __len__(self) -> int:
+        """Number of factors in the library."""
+        ...
+
+    def __contains__(self, name: str) -> bool:
+        """Whether ``name`` is a factor in this library."""
+        ...
+
+    def names(self) -> List[str]:
+        """Factor names, ascending."""
+        ...
+
+    def describe(self, name: str) -> Dict[str, Any]:
+        """Metadata for one factor, without evaluating it."""
+        ...
+
+    def expression(self, name: str) -> str:
+        """The expression a factor was compiled from, verbatim."""
+        ...
+
+    def direction(self, name: str) -> str:
+        """Preferred ranking direction as a string."""
+        ...
+
+    def dependencies(self, name: str) -> List[str]:
+        """External series a factor reads, in the spelling ``evaluate`` accepts."""
+        ...
+
+    def evaluate(self, name: str, *args: Any, **kwargs: Any) -> Any:
+        """Evaluate one factor over the supplied series."""
+        ...
+
+    def evaluate_all(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        """Evaluate every factor in the library, returning ``{name: ndarray}``."""
+        ...
+
+def factor_library(name: str) -> FactorLibrary:
+    """Load a built-in factor library by name.
+
+    ``name`` is required and must be ``alpha158`` (158 factors) or
+    ``worldquant101`` (17 factors); anything else raises ``ValueError``.
+    """
+    ...
+
+# ============================================================================
 # Formula component registry
 # ============================================================================
 

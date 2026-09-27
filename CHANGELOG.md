@@ -109,6 +109,27 @@ reused.
 
 ### Fixed
 
+- **`docs/api-reference.md` omitted seven shipped Python API groups.** The
+  reference documented the classic TA surface and `Streaming*`, but said
+  nothing about the Chanlun entry points (`chan_analyze` and its three
+  multi-timeframe variants), `compute_composite`, `factor_library`, the formula
+  template catalog (`formula_get_template` / `formula_search_templates` /
+  `formula_list_categories` / `FormulaRegistry`), `CompiledFormula`, the market
+  calendar (`resolve_market_session`) or `KlineChart` — all 18 of which are
+  exported by the wheel. They are now documented, with the return shapes
+  verified against a built wheel rather than inferred.
+- **`factor_library` was documented nowhere and missing from the type stub.**
+  It ships as a 0.2.0 entry point but appeared in neither `docs/python.md` nor
+  `docs/api-reference.md`, and `.pyi` did not declare it, so a `mypy`/
+  `pyright` user got a missing-name error on a public API. Both the docs and
+  the stub now cover it. Its `FactorLibrary` return is documented as
+  supporting `len()` and `in` but **not** iteration and **not** subscripting —
+  it exposes neither `__iter__` nor `__getitem__`, so enumerate it with
+  `names()`.
+- **`docs/python.md` told users to iterate a `FactorLibrary`.** A first draft
+  of the new section said to inspect it "with `len()` / iteration"; it is not
+  iterable, so the example was corrected to `names()` before it shipped.
+
 - **Six binding crates had `#[test]` functions that CI never ran.** `ci.yml`
   tested `finkit`, `finkit-factor-analysis`, `finkit-cli`,
   `finkit-visualization` and `finkit-ffi-common`; `multilang-release.yml` built
