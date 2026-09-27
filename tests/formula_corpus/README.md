@@ -100,9 +100,16 @@ tests/formula_corpus/
 ### TA-Lib 0.7/0.8 新增函数 — 17 条
 
 M0-1 把 31 个 TA-Lib 0.7/0.8 函数接入**公式层**（`core/src/formula/functions_talib_081.rs`），
-下列 17 条语料是它们的执行覆盖。这些函数目前只在 tree / bytecode / JIT 路径可用，
-**plan 路径尚无对应 kernel**（`CALL:<NAME>` 报 `code 1`），因此每条都已登记在
-`core/tests/formula_plan_differential.rs` 的 `DOMESTIC_UNSUPPORTED` 中，并注明缺失的 kernel。
+下列 17 条语料是它们的执行覆盖。
+
+这 31 个函数在 tree / bytecode / JIT **与 plan 四条路径上都可用**。2026-09-24 之前 plan
+路径确实缺 kernel（`CALL:<NAME>` 报 `code 1`，这 17 条因此登记在
+`core/tests/formula_plan_differential.rs` 的 `DOMESTIC_UNSUPPORTED`）；此后
+`core/src/formula/unified_dispatch.rs` 把 44 个 `CALL:<NAME>` 计划核统一经
+`dispatch_modern_call` 委派给 tree/bytecode/JIT 所用的同一个 `canonical_*` 实现，
+plan 路径输出**逐位相同**，该 allowlist 随之清空。它仍保留在原地作为记账机制：任何未来的
+host-context 或 lowering 缺口都应带着书面理由登记回
+`DOMESTIC_UNSUPPORTED`，且一旦某条重新通过，该门禁会立刻报红。
 
 本表与语料**双向**受 `core/tests/formula_corpus.rs::talib_081_corpus_coverage_is_complete_and_documented`
 门禁约束：表中列出的文件必须真的在 `source_formula` 里调用这 31 个函数，且这 31 个函数

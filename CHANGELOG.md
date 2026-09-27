@@ -109,6 +109,19 @@ reused.
 
 ### Fixed
 
+- **`tests/formula_corpus/README.md` still said the plan path had no kernels.**
+  A current (not dated-snapshot) document asserted that the 31 TA-Lib 0.7/0.8
+  functions were available "only on the tree / bytecode / JIT paths", that
+  `CALL:<NAME>` answered `code 1`, and that all 17 corpus cases were therefore
+  registered in `DOMESTIC_UNSUPPORTED`. None of that has been true since
+  2026-09-24: `unified_dispatch.rs` routes all 44 `CALL:<NAME>` plan kernels
+  through `dispatch_modern_call`, which delegates each to the same
+  `canonical_*` implementation the other paths use, so the plan path emits
+  byte-identical output and the allowlist is empty. The prose now states the
+  closed state and keeps the allowlist documented as the backlog mechanism it
+  is. The corpus table itself was already bidirectionally gated; only the
+  surrounding prose could drift.
+
 - **`docs/api-reference.md` omitted seven shipped Python API groups.** The
   reference documented the classic TA surface and `Streaming*`, but said
   nothing about the Chanlun entry points (`chan_analyze` and its three
