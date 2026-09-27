@@ -143,13 +143,16 @@ verify-native-archive:
 check-rustdoc:
 	bash $(ROOT)/scripts/check_rustdoc.sh
 
-# ---- repository hygiene: no orphan scripts, no unreachable workflows -------
+# ---- repository hygiene: no orphan scripts, workflows or documents ---------
 # A `scripts/` file with no consumer reads as documentation of a workflow that
 # does not exist; a workflow whose `on:` block can never match reads as a live
-# gate that never runs. Both are checked, and both must stay clean.
+# gate that never runs; a Markdown document no other document links to is
+# unreachable from the index and indistinguishable from a deleted one. All three
+# are checked, and all three must stay clean.
 check-orphans:
 	python3 $(ROOT)/scripts/check_orphan_scripts.py
 	python3 $(ROOT)/scripts/check_workflow_liveness.py
+	python3 $(ROOT)/scripts/check_orphan_docs.py
 
 # ---- repository hygiene: the inverse direction of `check-orphans` ----------
 # `check_orphan_scripts.py` catches a script with no consumer. This catches the
@@ -167,6 +170,15 @@ check-script-refs:
 # Five of them turned out to be exactly that. Require a `// why` next to each.
 check-dead-code:
 	python3 $(ROOT)/scripts/check_dead_code_allows.py
+
+# ---- repository hygiene: the iOS header matches the iOS exports -------------
+# `gen_c_header.py --check` guards the C binding's header. The iOS binding has
+# a header of its own and no gate, so it drifted: three shipped entry points
+# (`finkit_ios_factor_study_json`, its free function, and
+# `finkit_ios_quant_evaluation_json`) were undeclared, invisible to any plain C
+# consumer because the Swift wrappers bypass the header via `@_silgen_name`.
+check-ios-header:
+	python3 $(ROOT)/scripts/check_ios_header_contract.py
 
 # ---- release records: keep the shipped digests in step with the artefacts ---
 # `dist/**/manifest.json` records a `size_bytes`/`sha256` pair per shipped

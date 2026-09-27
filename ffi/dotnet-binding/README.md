@@ -4,7 +4,7 @@ This directory contains the .NET binding for Finkit, backed by the Rust `finkit-
 
 ## Distribution status
 
-The binding source exists in the v0.1.5 repository, and the release workflow builds a NuGet package candidate; public NuGet publication remains a separate step.
+The binding source exists in the v0.1.15 repository, and the release workflow builds a NuGet package candidate; public NuGet publication remains a separate step.
 
 For the next release, the multi-language workflow adds a Linux validation gate that:
 
@@ -132,7 +132,7 @@ cp target/release/libfinkit_dotnet.so \
 
 cd ffi/dotnet-binding
 dotnet pack src/Finkit/Finkit.csproj -c Release
-unzip -l src/Finkit/bin/Release/Finkit.0.1.5.nupkg
+unzip -l src/Finkit/bin/Release/Finkit.0.1.15.nupkg
 ```
 
 CI copies that verified package to a GitHub artifact name like:

@@ -61,6 +61,19 @@ The checked-in `Finkit.swift` wrapper then exposes a focused native subset inclu
 - midpoint, z-score, TSF, linear regression, percent rank;
 - candlestick detection count.
 
+Two further Swift enums drive the JSON contracts rather than the numeric
+subset. They live in their own files and are reached with `@_silgen_name`, so
+they work even though they are separate from the `FinkitC` module:
+
+- `FactorResearch.runJSON(_:)` → `finkit_ios_factor_study_json`;
+- `QuantEvaluation.runJSON(_:)` → `finkit_ios_quant_evaluation_json`.
+
+Both return a newly allocated C string that the wrapper frees with
+`finkit_ios_factor_study_free_string` (one free function serves both, because
+both allocate identically). All four of these symbols are declared in
+`include/finkit.h`, and `scripts/check_ios_header_contract.py` fails CI if the
+header and the Rust exports ever disagree again.
+
 Example source usage once the XCFramework and wrapper source are integrated into the consuming target:
 
 ```swift

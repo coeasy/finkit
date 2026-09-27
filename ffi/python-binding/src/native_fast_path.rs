@@ -2,7 +2,8 @@
 //!
 //! Public functions remain registry-defined, while hot NumPy calls borrow input
 //! slices and return NumPy-owned Rust vectors directly. Compatibility-sensitive
-//! statistics and SAR use kernels that mirror TA-Lib core 0.7.1 semantics.
+//! statistics and SAR use kernels that mirror TA-Lib core 0.8.1 semantics (the
+//! pinned `talib_core_version` in `tests/contracts/talib_coverage_matrix_v1.json`).
 
 use ::finkit::indicators;
 use ::finkit::math::{

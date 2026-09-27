@@ -1,6 +1,6 @@
 # Cross-market signal formulas
 
-Finkit `0.1.5` adds a small, allocation-conscious signal layer for common
+The engine ships a small, allocation-conscious signal layer for common
 per-bar event detection. The primitives use aligned price/volume/benchmark
 series and do not embed exchange-specific rules, so the same formulas can be
 used with A-shares, Hong Kong stocks, US equities, ETFs, futures, and 24/7

@@ -95,6 +95,16 @@ jobs:
       # `#[cfg(test)]`-gated exports are correctly ignored.
       - name: Check the C FFI header against the Rust exports
         run: python scripts/gen_c_header.py --check ffi/c-binding/include/finkit.h
+      # The iOS binding has its own header and, until this check existed, no
+      # equivalent gate. It had drifted: `finkit_ios_factor_study_json`,
+      # `finkit_ios_factor_study_free_string` and
+      # `finkit_ios_quant_evaluation_json` shipped without being declared, so a
+      # plain C consumer of the iOS static library could not see that the
+      # research and quant-evaluation entry points existed. The Swift wrappers
+      # reach them via `@_silgen_name`, which is exactly why the drift was
+      # invisible. `#[cfg(test)]`-gated exports are ignored.
+      - name: Check the iOS FFI header against the Rust exports
+        run: python scripts/check_ios_header_contract.py
       # Orphan automation is worse than missing automation: a `scripts/` file
       # with no consumer, or a workflow whose `on:` block can never match, reads
       # as a live gate while doing nothing. Both checks are dependency-free and
@@ -103,6 +113,12 @@ jobs:
         run: python scripts/check_orphan_scripts.py
       - name: Check every workflow can actually be triggered
         run: python scripts/check_workflow_liveness.py
+      # Documents have the same failure mode. `docs/formula-talib-contract.md`
+      # and `docs/quant-evaluation.md` were both current documents with zero
+      # inbound references anywhere in the repository, so the documentation
+      # index could not reach them. Also part of `make check-orphans`.
+      - name: Check every document is reachable from another document
+        run: python scripts/check_orphan_docs.py
       # `#[allow(dead_code)]` disables the one compiler check that can see
       # orphan logic, so an item behind it is invisible to every build and test.
       # A suppression with no stated reason is indistinguishable from a
@@ -163,8 +179,16 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # A bare `git diff --exit-code` on a fresh checkout can never fail: nothing
+      # in this job writes the file, so the step only looked like a gate. Run the
+      # `#[ignore]`d generator first, then require its output to be byte-identical
+      # to what is committed. That is the property we actually care about — the
+      # committed snapshot is a fixed point of the generator — and it now fails
+      # when the registry changes without regenerating `docs/`.
       - name: Verify generated registry snapshot
-        run: git diff --exit-code -- docs/indicator_registry.json
+        run: |
+          cargo test -p finkit --locked --lib -- --ignored generate_indicator_registry_json
+          git diff --exit-code -- docs/indicator_registry.json
       - name: Run core tests with compiler warnings denied
         # The historical HT_SINE absolute throughput budget is enforced below
         # in release mode with one test thread. Keeping the debug wall-clock

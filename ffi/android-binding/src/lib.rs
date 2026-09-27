@@ -184,15 +184,22 @@ pub extern "system" fn Java_com_finkit_indicators_Finkit_factorStudyJson(
     _class: jni::objects::JClass<'_>,
     request: jni::objects::JString<'_>,
 ) -> jni::sys::jstring {
-    let response = match env.get_string(&request) {
-        Ok(value) => {
-            let request: String = value.into();
-            finkit_ffi_common::factor_study_json(&request)
-        }
-        Err(error) => {
-            finkit_ffi_common::factor_study_error_json("invalid_utf8", &error.to_string())
-        }
-    };
+    // The research engine is reachable from user input, so a panic must be
+    // converted into the contract's error envelope rather than unwinding across
+    // the JNI boundary. C and Java already guard this call; Android did not.
+    let response = finkit_ffi_common::panic::ffi_catch_json(
+        || match env.get_string(&request) {
+            Ok(value) => {
+                let request: String = value.into();
+                finkit_ffi_common::factor_study_json(&request)
+            }
+            Err(error) => {
+                finkit_ffi_common::factor_study_error_json("invalid_utf8", &error.to_string())
+            }
+        },
+        finkit_ffi_common::factor_study_error_json,
+        "factor research engine panicked at the FFI boundary",
+    );
     env.new_string(response)
         .map(|value| value.into_raw())
         .unwrap_or(std::ptr::null_mut())
@@ -204,15 +211,19 @@ pub extern "system" fn Java_com_finkit_indicators_Finkit_quantEvaluationJson(
     _class: jni::objects::JClass<'_>,
     request: jni::objects::JString<'_>,
 ) -> jni::sys::jstring {
-    let response = match env.get_string(&request) {
-        Ok(value) => {
-            let request: String = value.into();
-            finkit_ffi_common::quant_evaluation_json(&request)
-        }
-        Err(error) => {
-            finkit_ffi_common::quant_evaluation_error_json("invalid_utf8", &error.to_string())
-        }
-    };
+    let response = finkit_ffi_common::panic::ffi_catch_json(
+        || match env.get_string(&request) {
+            Ok(value) => {
+                let request: String = value.into();
+                finkit_ffi_common::quant_evaluation_json(&request)
+            }
+            Err(error) => {
+                finkit_ffi_common::quant_evaluation_error_json("invalid_utf8", &error.to_string())
+            }
+        },
+        finkit_ffi_common::quant_evaluation_error_json,
+        "quant evaluation engine panicked at the FFI boundary",
+    );
     env.new_string(response)
         .map(|value| value.into_raw())
         .unwrap_or(std::ptr::null_mut())

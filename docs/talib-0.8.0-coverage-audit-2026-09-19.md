@@ -8,6 +8,8 @@
 - TA-Lib Python 最新 release 为 `0.8.0`（2026-09-13）。该 Python wheel 声明最低支持 TA-Lib C `0.8.1`，而 C `0.8.1` 在当前日期仍显示为未 release；因此不能把 C `0.7.1` profile 与 Python `0.8.0` 的新增目录称为同一套完整 upstream 语义。
 - 本仓库当前固定 numeric corpus 标记为 Python `0.8.0`，并按该 wheel 内置的 TA-Lib core `0.8.1` 完成 201 个公开函数的 dispatcher、catalog 与 numeric golden 对照。
 
+> **更新（2026-09-26）**：TA-Lib C upstream 现在已有独立公开 release `v0.8.1`，即本仓库 numeric contract 所钉的 `talib_core_version`。上面「C `0.8.1` 在当前日期仍显示为未 release」是 2026-09-19 当时的状态，已不再成立；`tests/contracts/talib_coverage_matrix_v1.json` 的 `talib_core_version: 0.8.1` 因此与 upstream 一致，`competitive-benchmark` 的 head-to-head 也改为在运行时读取该字段安装同一个版本（此前硬编码为已过时的 `0.7.1`）。
+
 ## 已验证差集
 
 真实 Python 0.8.0 wheel 的 `talib.get_functions()` 返回 201 个公开函数；当前已验证 201 个，剩余差集为 0：

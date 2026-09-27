@@ -77,6 +77,14 @@ reused.
   invisible to every build and every test, and a bare suppression is
   indistinguishable from a function that was never wired up. Wired into the CI
   `binding-ssot` job and `make check-dead-code`.
+- `scripts/check_orphan_docs.py`, which fails when a tracked Markdown document is
+  reachable from no other document, by link or by backticked repository-relative
+  path. Part of `make check-orphans`.
+- `scripts/check_ios_header_contract.py`, which compares
+  `ffi/ios-binding/include/finkit.h` against the iOS binding's shipped
+  `#[no_mangle] extern "C"` exports in both directions, ignoring
+  `#[cfg(test)]`-gated symbols. It is the iOS counterpart to
+  `gen_c_header.py --check` for the C binding.
 
 ### Changed
 
@@ -101,6 +109,75 @@ reused.
 
 ### Fixed
 
+- **`docs/archive/` was in `.gitignore` while 11 archived plans were already
+  tracked.** Any newly archived document therefore became untracked *and*
+  invisible to `git status`, so moving a file into the audit trail silently
+  deleted it from the repository. The consequence was live, not theoretical:
+  `docs/archive/README.md` — the archive index that `docs/README.md` links to
+  three times — had never been committed, so `scripts/check_docs_links.py`
+  reported success locally (the file was on the author's disk) and failed on a
+  clean checkout. The rule is removed, the index is committed, and
+  `check_docs_links.py` now fails when a link target exists on disk but is not
+  tracked by git.
+- **`docs/ffi/memory-contract.md` documented an API that does not exist.** It
+  described `alphata_free_string` and an eleven-function `alphata_kline_chart_*`
+  / `alphata_kline_data_*` chart surface, none of which is exported by any
+  binding (the chart surface exists for the Java binding and the CLI only), and
+  it omitted the entire JSON-contract surface plus the research pair — 18 real
+  exports with no documented ownership. The document is the ownership contract a
+  C consumer follows to avoid undefined behaviour, so a fictional free function
+  in it is a memory-safety trap. All 99 shipped exports are now documented and
+  the invented names are gone; `docs/ffi/error-codes.md` had the same
+  `alphata_free_string` reference and additionally truncated the formula error
+  tier at `55`–`59`, leaving `60` and `61` undocumented.
+- `FormulaError::BackendUnsupported` — the variant that makes tree-only entry
+  points *refuse* to run under `FormulaExecutionMode::Plan` instead of silently
+  walking the tree — was mapped to C error code `61` but documented nowhere.
+  `docs/formula-runtime-contract.md` now states the backend contract, lists the
+  13 tree-only entry points and the plan-capable ones, and
+  `docs/ffi/error-codes.md` spells out the full `50`–`61` formula tier.
+- **`scripts/check_orphan_docs.py`** (new gate): `docs/formula-talib-contract.md`
+  and `docs/quant-evaluation.md` were both current, substantive documents with
+  zero inbound references anywhere in the repository, so the documentation index
+  could not reach them. Both are indexed now, the dated competitive analyses and
+  roadmaps are indexed under an explicitly non-authoritative section, and the
+  gate fails if a document ever becomes unreachable again.
+- **`scripts/check_ios_header_contract.py`** (new gate):
+  `ffi/ios-binding/include/finkit.h` was missing declarations for three shipped
+  exports (`finkit_ios_factor_study_json`, `finkit_ios_factor_study_free_string`,
+  `finkit_ios_quant_evaluation_json`). The Swift wrappers reach them through
+  `@_silgen_name`, which is exactly why nothing noticed — but a plain C consumer
+  of the iOS static library could not see that the research and quant-evaluation
+  entry points existed. The header is complete and the gate keeps it that way.
+- **The scheduled TA-Lib head-to-head guardrail installed TA-Lib C 0.7.1 while
+  the numeric contract pins 0.8.1.** The guardrail therefore measured Finkit
+  against a superseded upstream and could pass more easily than its threshold
+  implies. `competitive-benchmark.yml` now reads `talib_core_version` from
+  `tests/contracts/talib_coverage_matrix_v1.json` at run time and refuses to
+  record evidence when the installed library disagrees, so the two can no longer
+  drift.
+- `scripts/check_versions.py` covered 15 release-facing documents and missed 10
+  more that state Finkit release versions — including `docs/usage.md`,
+  `docs/troubleshooting.md`, `CONTRIBUTING.md` and `core/README.md`, which had
+  rotted to `v0.1.5` and `v0.1.3` while the published release was `v0.1.15`.
+  The list is extended and the stale values corrected.
+- `docs/formula-templates.md` claimed 317 templates but printed a per-language
+  export table with rows for C and iOS template lookup functions that are not
+  exported by those bindings; `docs/formula-performance.md`'s multi-language
+  parity table marked C as supporting `formula_eval`, `_multi`, `_draw`,
+  `_debug` and `_validate`, none of which the C ABI has. Both tables are
+  rebuilt from the actual exports.
+- `docs/indicators.md` listed two indicators that do not exist
+  (`KAMA_VOLATILITY`, `MEDIPRICE`) and documented the indicator error type as
+  `Result<Array<TaError>>` with three variants (`InvalidPeriod`,
+  `InvalidParameters`, `InvalidInput`) that no error enum defines.
+  `docs/features.md` documented `MultiPeriodFeature::fast_periods/medium_periods/
+  slow_periods` (the methods are `fast`/`medium`/`slow`), wrong default period
+  sets, an unsupported indicator list, and `to_csv`/`to_json_lines`/
+  `to_arrow_ipc` as returning strings when they write to a path.
+  `docs/api-reference.md` gave `StreamingIndicator::next` a non-`Option` return
+  and a `&dyn Ohlcv` input for `StreamingAtr`, which takes a `(high, low, close)`
+  tuple.
 - Java JNI multi-output exports (`MAMA`, `BBANDS`, `SAR`, `MACD`, `STOCH`, and
   `AROON`) could unwind a Rust panic across the JNI boundary because the binding
   synchronizer only wrapped functions with an explicit `->` return type. They

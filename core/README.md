@@ -2,7 +2,7 @@
 
 `core/` is the Rust implementation behind Finkit. It contains the batch and streaming indicator kernels, formula compiler/runtime, factor and market-runtime contracts, transforms, patterns, feature infrastructure, registries, and the public Rust API used by the language bindings.
 
-Current repository release line: **0.1.3**.
+Current repository release line: **0.1.15**.
 
 ## Use the Rust core
 
@@ -12,7 +12,7 @@ Until a crates.io publication is independently verified, use the Git tag or a lo
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.3" }
+finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.15" }
 ```
 
 ### Local path
@@ -22,7 +22,7 @@ finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.3" }
 finkit = { path = "../finkit/core" }
 ```
 
-The GitHub `v0.1.3` Release also contains `finkit-0.1.3.crate` as a package artifact.
+The GitHub `v0.1.15` Release also contains `finkit-0.1.15.crate` as a package artifact.
 
 ## Basic example
 
@@ -88,7 +88,7 @@ Example:
 [dependencies]
 finkit = {
   git = "https://github.com/coeasy/finkit",
-  tag = "v0.1.3",
+  tag = "v0.1.15",
   default-features = false,
   features = ["std", "indicators-overlap"]
 }
@@ -194,7 +194,7 @@ Do not turn a historical benchmark snapshot into a universal performance guarant
 
 The Rust core is consumed by the repository's native bindings under `ffi/`.
 
-Current v0.1.3 distribution status is intentionally narrower than source support:
+Current v0.1.15 distribution status is intentionally narrower than source support:
 
 - Python wheels are published as GitHub Release assets;
 - Rust `.crate` and Linux x86_64 CLI artifacts are published in the GitHub Release;

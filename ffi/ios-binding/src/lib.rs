@@ -79,9 +79,22 @@ pub extern "C" fn alpha_ta_detect_candlestick(
         let l = from_raw(low, len);
         let c = from_raw(close, len);
         // Return count of detected patterns (sum of non-zero signals).
-        let doji = patterns::candlestick::doji(o, h, l, c, 0.05).unwrap_or_default();
-        let hammer = patterns::candlestick::hammer(o, h, l, c).unwrap_or_default();
-        let engulfing = patterns::candlestick::engulfing(o, h, l, c).unwrap_or_default();
+        //
+        // A core failure must not be reported as "0 patterns": zero is a
+        // legitimate answer, so swallowing the error here would make a failed
+        // calculation indistinguishable from a clean scan.
+        let doji = match patterns::candlestick::doji(o, h, l, c, 0.05) {
+            Ok(values) => values,
+            Err(_) => return -1,
+        };
+        let hammer = match patterns::candlestick::hammer(o, h, l, c) {
+            Ok(values) => values,
+            Err(_) => return -1,
+        };
+        let engulfing = match patterns::candlestick::engulfing(o, h, l, c) {
+            Ok(values) => values,
+            Err(_) => return -1,
+        };
 
         (doji.iter().filter(|&&x| x != 0).count()
             + hammer.iter().filter(|&&x| x != 0).count()
@@ -192,11 +205,34 @@ unsafe fn research_request_json(ptr: *const std::os::raw::c_char) -> String {
     }
 }
 
+unsafe fn quant_request_json(ptr: *const std::os::raw::c_char) -> String {
+    if ptr.is_null() {
+        return finkit_ffi_common::quant_evaluation_error_json(
+            "null_pointer",
+            "request_json is null",
+        );
+    }
+    let request = unsafe { std::ffi::CStr::from_ptr(ptr) };
+    match request.to_str() {
+        Ok(request) => finkit_ffi_common::quant_evaluation_json(request),
+        Err(error) => {
+            finkit_ffi_common::quant_evaluation_error_json("invalid_utf8", &error.to_string())
+        }
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn finkit_ios_factor_study_json(
     request_json: *const std::os::raw::c_char,
 ) -> *mut std::os::raw::c_char {
-    research_string_ptr(unsafe { research_request_json(request_json) })
+    // The research engine is reachable from user input, so a panic must be
+    // converted into the contract's error envelope rather than unwinding across
+    // `extern "C"`. C and Java already guard this call; iOS did not.
+    research_string_ptr(ffi_catch_json(
+        || unsafe { research_request_json(request_json) },
+        finkit_ffi_common::factor_study_error_json,
+        "factor research engine panicked at the FFI boundary",
+    ))
 }
 #[no_mangle]
 pub unsafe extern "C" fn finkit_ios_factor_study_free_string(value: *mut std::os::raw::c_char) {
@@ -209,18 +245,9 @@ pub unsafe extern "C" fn finkit_ios_factor_study_free_string(value: *mut std::os
 pub unsafe extern "C" fn finkit_ios_quant_evaluation_json(
     request_json: *const std::os::raw::c_char,
 ) -> *mut std::os::raw::c_char {
-    if request_json.is_null() {
-        return research_string_ptr(finkit_ffi_common::quant_evaluation_error_json(
-            "null_pointer",
-            "request_json is null",
-        ));
-    }
-    let request = unsafe { std::ffi::CStr::from_ptr(request_json) };
-    let response = match request.to_str() {
-        Ok(value) => finkit_ffi_common::quant_evaluation_json(value),
-        Err(error) => {
-            finkit_ffi_common::quant_evaluation_error_json("invalid_utf8", &error.to_string())
-        }
-    };
-    research_string_ptr(response)
+    research_string_ptr(ffi_catch_json(
+        || unsafe { quant_request_json(request_json) },
+        finkit_ffi_common::quant_evaluation_error_json,
+        "quant evaluation engine panicked at the FFI boundary",
+    ))
 }

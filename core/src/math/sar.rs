@@ -1,4 +1,4 @@
-//! TA-Lib 0.7.1-compatible Parabolic SAR state and batch kernel.
+//! TA-Lib 0.8.1-compatible Parabolic SAR state and batch kernel.
 //!
 //! Architecture v3.1 keeps one transition state for batch and streaming SAR.
 //! TA-Lib determines the initial direction from one-period directional movement
@@ -125,7 +125,7 @@ impl SarState {
         self.count = 0;
     }
 
-    /// Consume one high/low bar using TA_SAR 0.7.1 transition ordering.
+    /// Consume one high/low bar using TA_SAR 0.8.1 transition ordering.
     #[inline(always)]
     pub fn next(&mut self, high: f64, low: f64) -> SarPoint {
         if self.count == 0 {
@@ -267,7 +267,7 @@ pub fn sar_with_af(
     Ok((sar, af))
 }
 
-/// Calculate Parabolic SAR with the exact TA_SAR 0.7.1 bootstrap/update order.
+/// Calculate Parabolic SAR with the exact TA_SAR 0.8.1 bootstrap/update order.
 ///
 /// The single-output path deliberately does not call [`sar_with_af`]. Consumers
 /// such as the installed Python wheel only request SAR, so allocating and

@@ -6,6 +6,7 @@
 //! and the parity that must hold for everything else.
 
 use finkit::formula::{FormulaContext, FormulaDialect, FormulaEngine, FormulaExecutionMode};
+use finkit::FormulaError;
 use ndarray::Array1;
 
 fn context(n: usize) -> FormulaContext {
@@ -261,4 +262,233 @@ fn clear_cache_drops_the_plan_cache_from_tree_mode_too() {
         0,
         "clear_cache left a compiled plan behind while in Tree mode"
     );
+}
+
+// ============================================================================
+// Backend contract: which entry points the switch governs.
+//
+// The table in `FormulaEngine`'s documentation claims an exhaustive split.
+// These tests are what make that claim checkable: moving an entry between
+// families without updating both the table and this file turns them red.
+// ============================================================================
+
+/// Every source-level entry point the plan backend cannot serve must *say so*,
+/// and must stay reachable on the tree backend.
+#[test]
+fn tree_only_entries_refuse_to_run_under_plan() {
+    const SOURCE: &str = "MA(CLOSE, 5)";
+    let ast = finkit::formula::parse_formula(SOURCE).expect("parse MA(CLOSE, 5)");
+
+    // `$call` is invoked twice — once on a Plan engine, once on a Tree engine —
+    // and its result is normalised to `Result<(), FormulaError>` so entries
+    // with different return types share one assertion. The tree half only
+    // asserts that the guard did *not* fire: whether the formula itself is
+    // valid is the business of the entry point's own tests.
+    macro_rules! assert_tree_only {
+        ($entry:literal, $call:expr) => {{
+            let mut plan_engine =
+                FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
+            let mut plan_ctx = context(32);
+            match $call(&mut plan_engine, &mut plan_ctx) {
+                Err(FormulaError::BackendUnsupported { backend, entry }) => {
+                    assert_eq!(backend, "plan", "{}: wrong backend named", $entry);
+                    assert_eq!(entry, $entry, "{}: wrong entry named", $entry);
+                }
+                other => panic!(
+                    "{}: plan mode must report BackendUnsupported, got {other:?}",
+                    $entry
+                ),
+            }
+
+            let mut tree_engine = FormulaEngine::new();
+            let mut tree_ctx = context(32);
+            if let Err(FormulaError::BackendUnsupported { .. }) =
+                $call(&mut tree_engine, &mut tree_ctx)
+            {
+                panic!("{}: the tree backend must serve this entry", $entry);
+            }
+        }};
+    }
+
+    assert_tree_only!(
+        "eval_ast",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_ast(&ast, ctx)
+            .map(|_| ())
+    );
+    assert_tree_only!(
+        "eval_lazy",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_lazy(SOURCE, ctx)
+            .map(|_| ())
+    );
+    assert_tree_only!(
+        "eval_parallel",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_parallel(SOURCE, ctx)
+            .map(|_| ())
+    );
+    assert_tree_only!(
+        "eval_optimized",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_optimized(SOURCE, ctx)
+            .map(|_| ())
+    );
+    assert_tree_only!(
+        "eval_with_debug",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_with_debug(SOURCE, ctx)
+            .map(|_| ())
+    );
+    assert_tree_only!(
+        "eval_template",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_template("均线金叉死叉", ctx)
+            .map(|_| ())
+    );
+    assert_tree_only!(
+        "eval_with_validation",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_with_validation(SOURCE, ctx, &finkit::formula::ParamValues::new())
+            .map(|_| ())
+    );
+    assert_tree_only!(
+        "eval_with_defaults",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_with_defaults(SOURCE, ctx)
+            .map(|_| ())
+    );
+    assert_tree_only!(
+        "eval_zero_copy",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_zero_copy(SOURCE, ctx)
+            .map(|_| ())
+    );
+    assert_tree_only!(
+        "eval_zero_copy_cached",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_zero_copy_cached(SOURCE, ctx)
+            .map(|_| ())
+    );
+    assert_tree_only!(
+        "eval_zero_alloc",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_zero_alloc(SOURCE, ctx)
+            .map(|_| ())
+    );
+}
+
+/// The plan-capable source-level entries stay governed: they must not report
+/// `BackendUnsupported`, and they must actually populate the plan cache.
+#[test]
+fn plan_capable_entries_stay_governed() {
+    macro_rules! assert_governed {
+        ($entry:literal, $call:expr) => {{
+            let mut engine = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
+            let mut ctx = context(32);
+            $call(&mut engine, &mut ctx)
+                .unwrap_or_else(|error| panic!("{}: plan must serve this entry: {error}", $entry));
+            assert!(
+                engine.plan_cache_size() > 0,
+                "{}: a zero plan cache means the engine ran the tree-walker instead",
+                $entry
+            );
+        }};
+    }
+
+    assert_governed!(
+        "eval",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval("MA(CLOSE, 5)", ctx)
+            .map(|_| ())
+    );
+    assert_governed!(
+        "eval_with_dialect",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_with_dialect("MA(CLOSE, 5)", FormulaDialect::TongDaXin, ctx)
+            .map(|_| ())
+    );
+    assert_governed!(
+        "eval_incremental",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_incremental("MA(CLOSE, 5)", ctx)
+            .map(|_| ())
+    );
+    assert_governed!(
+        "eval_multi",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_multi("MA(CLOSE, 5)", ctx)
+            .map(|_| ())
+    );
+    assert_governed!(
+        "eval_batch",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_batch(&["MA(CLOSE, 5)"], ctx)
+            .map(|_| ())
+    );
+    assert_governed!(
+        "eval_batch_shared",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_batch_shared(&["MA(CLOSE, 5)"], ctx)
+            .map(|_| ())
+    );
+}
+
+/// `eval_simd` is a frozen alias of `eval`, so it inherits the switch.
+#[test]
+#[cfg(feature = "formula-simd")]
+fn eval_simd_alias_is_governed_like_eval() {
+    let mut engine = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
+    let mut ctx = context(32);
+    engine
+        .eval_simd("MA(CLOSE, 5)", &mut ctx)
+        .expect("eval_simd must follow the selected backend, not pin itself to the tree");
+    assert!(
+        engine.plan_cache_size() > 0,
+        "eval_simd must route through the plan backend when Plan is selected"
+    );
+}
+
+/// A batch containing an observable effect is evaluated strictly in order.
+///
+/// The duplicate-result cache used to store every result, including effectful
+/// ones, so a repeated formula had its assignment/drawing side effects silently
+/// skipped the second time round.
+#[test]
+fn eval_batch_does_not_reuse_results_across_observable_effects() {
+    // The first entry assigns `X`; the second reads it. If the batch reused a
+    // cached read from before the assignment, the two modes would disagree.
+    let batch: &[&str] = &["X:10; X", "X + CLOSE"];
+
+    let mut tree_ctx = context(8);
+    let tree = FormulaEngine::new()
+        .eval_batch(batch, &mut tree_ctx)
+        .expect("tree batch");
+
+    let mut plan_ctx = context(8);
+    let plan = FormulaEngine::new()
+        .with_execution_mode(FormulaExecutionMode::Plan)
+        .eval_batch(batch, &mut plan_ctx)
+        .expect("plan batch");
+
+    assert_eq!(tree.len(), 2);
+    assert_eq!(plan.len(), 2);
+    // `X + CLOSE` must have seen the assignment from the first formula.
+    for index in 0..8 {
+        let expected = 10.0 + tree_ctx_close(&tree_ctx, index);
+        assert!(
+            (tree[1][index] - expected).abs() < 1e-9,
+            "tree: second batch entry index {index} = {} but X+CLOSE = {expected}",
+            tree[1][index]
+        );
+        assert!(
+            (plan[1][index] - expected).abs() < 1e-9,
+            "plan: second batch entry index {index} = {} but X+CLOSE = {expected}",
+            plan[1][index]
+        );
+    }
+}
+
+fn tree_ctx_close(ctx: &FormulaContext, index: usize) -> f64 {
+    ctx.close_view()[index]
 }

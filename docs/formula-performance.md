@@ -378,14 +378,39 @@ After optimization: Shared data, eliminated redundant calculations
 
 ## Multi-Language Formula API Parity
 
+本表逐格按源码核对（各 binding 的 `src/lib.rs` 导出 + 对应语言包装层），不是
+按设计意图填的。✅ = 该语言有可调用的入口；❌ = 没有；⚠️ = 原生符号已导出但
+上层包装未暴露。
+
 | 功能 | Python | Node.js | Go | Java | C | .NET | WASM |
 |------|--------|---------|-----|------|---|------|------|
-| formula_eval | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| formula_eval_multi | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| formula_eval_draw | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| formula_eval_debug | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | - |
-| formula_validate | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| formula_get_template | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| formula_search_templates | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| formula_list_categories | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| JIT/SIMD/ZeroCopy modes | ✅ | ✅ | - | ✅ | ✅ | - | - |
+| formula_eval | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| formula_eval_multi | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ✅ |
+| formula_eval_draw | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| formula_eval_debug | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ | ❌ |
+| formula_validate | ✅ | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ |
+| formula_get_template | ✅ | ✅ | ✅ | ✅ | ❌ | ⚠️ | ✅ |
+| formula_search_templates | ✅ | ✅ | ✅ | ✅ | ❌ | ⚠️ | ✅ |
+| formula_list_categories | ✅ | ✅ | ✅ | ✅ | ❌ | ⚠️ | ✅ |
+| JIT / SIMD / ZeroCopy | ✅ | ✅ | 仅 ZeroCopy | ✅ | ❌ | ✅ | ❌ |
+| `ta_formula_*_contract_json` 家族 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+
+要点：
+
+- **C 只有 contract JSON 家族。** `ta_formula_eval` / `_multi` / `_draw` /
+  `_debug` / `_validate` 以及模板查询在 C 里**都不存在**——C 暴露的是
+  `ta_formula_eval_contract_json`、`ta_formula_eval_temporal_contract_json`、
+  `ta_formula_eval_panel_contract_json`、
+  `ta_formula_eval_cross_sectional_contract_json`、
+  `ta_formula_stream_execute_json`、`ta_formula_compatibility_report_json`。
+  早期版本的本表把 C 整列标成 ✅ 是错的。
+- **Go 没有 JIT/SIMD**，只有 `ta_formula_eval_zc_exec`（零拷贝）；**.NET 三者都有**
+  （`FormulaEvalJit` / `FormulaEvalSimd` / `FormulaEvalZeroCopy`）。
+- **.NET 的模板查询是 ⚠️**：`ta_formula_get_template` /
+  `_search_templates` / `_list_categories` 三个原生符号已导出，但
+  `Finkit/Indicators.cs` 没有对应的 C# 包装方法，调用方需自行 P/Invoke。
+- **WASM 没有 contract JSON 家族**，走的是直接返回 JS 对象的
+  `formula_eval` / `formula_eval_multi` / `formula_validate` /
+  `formula_get_template` / `formula_search_templates` / `formula_list_categories`。
+- 模板查询在各语言的准确名字见
+  [`docs/formula-templates.md`](formula-templates.md#coverage-by-language)。

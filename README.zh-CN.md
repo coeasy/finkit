@@ -134,7 +134,7 @@ Finkit 的性能优化覆盖完整执行路径：SIMD kernels、borrowed/zero-co
 
 Finkit 不把“最快”写成永久标签。任何竞品性能结论必须绑定具体 commit、CPU/平台、编译器、数据集、feature 和竞品版本。
 
-仓库已经提供可复现的 TA-Lib C 对比脚本、机器可读报告和定期 TA-Lib 0.7.1 head-to-head 门禁。对于 canonical hot path，长期目标是保持 TA-Lib parity 的同时达到或超过 TA-Lib；更重要的系统级差异化来自 **Formula/Factor 计划复用、DirtyRange 局部重算、低分配 `_into`、Factor Research 复用以及多语言同一语义核心**。
+仓库已经提供可复现的 TA-Lib C 对比脚本、机器可读报告和定期 TA-Lib 0.8.1 head-to-head 门禁。该门禁安装的 TA-Lib C 版本与 `tests/contracts/talib_coverage_matrix_v1.json` 钉住的版本一致，两者不会再各自漂移。对于 canonical hot path，长期目标是保持 TA-Lib parity 的同时达到或超过 TA-Lib；更重要的系统级差异化来自 **Formula/Factor 计划复用、DirtyRange 局部重算、低分配 `_into`、Factor Research 复用以及多语言同一语义核心**。
 
 详细判定标准见 [竞品对比与超越路线](docs/competitive-positioning-zh.md)，TA-Lib 基准合同见 [BENCHMARK_VS_TALIB.md](docs/BENCHMARK_VS_TALIB.md)。
 

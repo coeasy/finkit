@@ -146,7 +146,7 @@ Strict performance contracts run in dedicated release-mode regression gates. The
 
 Finkit does not treat “fastest” as a permanent adjective. Direct competitor results are tied to a commit, CPU/platform, compiler, dataset, feature set, and competitor version.
 
-The repository includes a reproducible TA-Lib C comparison pipeline, machine-readable reports, and a scheduled TA-Lib 0.7.1 head-to-head guardrail. The long-term target for canonical hot paths is to match or beat TA-Lib while preserving parity; the broader differentiation is reusable Formula/Factor plans, safe DirtyRange recomputation, low-allocation execution, research reuse, and one semantic core across language bindings.
+The repository includes a reproducible TA-Lib C comparison pipeline, machine-readable reports, and a scheduled TA-Lib 0.8.1 head-to-head guardrail. The guardrail installs the same TA-Lib C release that `tests/contracts/talib_coverage_matrix_v1.json` pins, so the two can no longer drift apart. The long-term target for canonical hot paths is to match or beat TA-Lib while preserving parity; the broader differentiation is reusable Formula/Factor plans, safe DirtyRange recomputation, low-allocation execution, research reuse, and one semantic core across language bindings.
 
 See [the competitive positioning and superiority roadmap](docs/competitive-positioning-zh.md) and [TA-Lib benchmark contract](docs/BENCHMARK_VS_TALIB.md).
 

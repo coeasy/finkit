@@ -68,3 +68,25 @@ pub fn ffi_catch_f64<F: FnOnce() -> f64>(f: F) -> f64 {
 pub fn ffi_catch_void<F: FnOnce()>(f: F) {
     let _ = catch_unwind(AssertUnwindSafe(f));
 }
+
+/// Run a JSON request/response contract with panic isolation.
+///
+/// `handler` produces the success response; `error_envelope` turns a
+/// `(code, message)` pair into the canonical error response of that contract.
+///
+/// A null-pointer sentinel would be wrong here: the JSON contracts promise that
+/// a caller always receives a well-formed document it can parse and log, so a
+/// panic is reported as `panic_caught` through `error_envelope` instead. C and
+/// Java already did this inline; this is the shared implementation so the other
+/// bindings stop diverging.
+#[inline]
+pub fn ffi_catch_json<H, E>(handler: H, error_envelope: E, panic_message: &str) -> String
+where
+    H: FnOnce() -> String,
+    E: FnOnce(&str, &str) -> String,
+{
+    match catch_unwind(AssertUnwindSafe(handler)) {
+        Ok(response) => response,
+        Err(_) => error_envelope("panic_caught", panic_message),
+    }
+}

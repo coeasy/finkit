@@ -134,6 +134,8 @@ fn formula_error_code(err: &FormulaError) -> i32 {
         FormulaError::InvalidOperation(_) => 8,
         FormulaError::ParseError(_) => 9,
         FormulaError::UnsupportedFunction(_) => 10,
+        // The selected execution backend cannot serve the entry point.
+        FormulaError::BackendUnsupported { .. } => 11,
     }
 }
 

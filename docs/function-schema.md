@@ -54,7 +54,7 @@ terminal id, canonical parser dialect, and compatibility level; it does not
 claim that every function or drawing primitive from an external terminal is
 implemented.
 
-Current v0.1.2 declarations are:
+Current v0.1.15 declarations are:
 
 | Terminal id | Canonical dialect | Compatibility |
 | --- | --- | --- |

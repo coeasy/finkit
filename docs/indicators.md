@@ -1,6 +1,22 @@
-# Complete Indicator List
+# Indicator Overview
 
-This document provides a comprehensive list of all technical analysis indicators available in Finkit, organized by category.
+This document is a curated, TA-Lib-style overview of the indicator families the
+engine implements, grouped by category, with the conventional parameter lists.
+It is **not** the authoritative list and it is not exhaustive.
+
+For the authoritative, CI-verified lists use:
+
+- [`docs/generated/indicators.md`](generated/indicators.md) — every indicator in
+  the registry (235 entries), generated from `docs/indicator_registry.json`.
+- [`docs/generated/streaming-indicators.md`](generated/streaming-indicators.md) —
+  the streaming (incremental) subset.
+- `ffi/c-binding/include/finkit.h` — the 99 symbols actually published on the C
+  ABI, which is the definitive "can I call this from a native host" answer.
+
+Names here are written in TA-Lib spelling (`CDLENGULFING`, `WILLR`, `MEDPRICE`).
+The registry stores the same indicators under its own canonical names
+(`CDL_ENGULFING`, `Williams %R`, `MEDPRICE`); both refer to the same
+implementation.
 
 ## Overlap Studies
 
@@ -72,8 +88,12 @@ Volatility indicators measure the rate and magnitude of price fluctuations.
 |-----------|-----------|------------|--------|-------------|
 | ATR | Average True Range | `high, low, close, timeperiod` | Array | Average of true ranges over period |
 | NATR | Normalized Average True Range | `high, low, close, timeperiod` | Array | ATR normalized by closing price (percentage) |
-| TRANGE | True Range | `high, low, close` | Array | Greatest of: high-low, |high-prev_close|, |low-prev_close| |
-| KAMA_VOLATILITY | KAMA Volatility | `close, timeperiod` | Array | Volatility measure using Kaufman adaptive method |
+| TRANGE | True Range | `high, low, close` | Array | Greatest of: high-low, \|high-prev_close\|, \|low-prev_close\| |
+
+> This section previously listed `KAMA_VOLATILITY`. No such indicator exists —
+> there is no `ta_kama_volatility` symbol and no matching implementation. KAMA
+> is an *overlap* study (see above), not a volatility indicator, and it has no
+> volatility variant.
 
 ## Cycle Indicators
 
@@ -98,7 +118,10 @@ Price transforms convert OHLC data into alternative price representations.
 | MEDPRICE | Median Price | `high, low` | Array | (High + Low) / 2 |
 | TYPPRICE | Typical Price | `high, low, close` | Array | (High + Low + Close) / 3 |
 | WCLPRICE | Weighted Close Price | `high, low, close` | Array | (High + Low + Close*2) / 4 |
-| MEDIPRICE | Median Price with OHLC | `open, high, low, close` | Array | Weighted median price calculation |
+
+> This section previously listed `MEDIPRICE` ("Median Price with OHLC"). No such
+> indicator exists — there is no `ta_mediprice` symbol. The median price
+> indicator is `MEDPRICE` above, and it takes `high, low` only.
 
 ## Statistics
 
@@ -254,12 +277,31 @@ Chart patterns return arrays of detected pattern locations.
 
 ## Error Handling
 
-All indicators return `Result<Array<TaError>` with the following error types:
+Indicator functions return `Result<Array1<f64>>`, i.e.
+`std::result::Result<Array1<f64>, TaError>` — the crate-wide alias
+`finkit::Result<T>` fixes the error type to `TaError`. Multi-output indicators
+return `Result<PatternResult>` or a tuple of `Array1<f64>` instead, but the
+error type is always `TaError`.
 
-| Error | Description |
-|-------|-------------|
-| `InvalidPeriod` | Period parameter is too small or negative |
-| `InsufficientData` | Input array is too short for the specified period |
-| `InvalidParameters` | Parameter values are out of valid range |
-| `InvalidInput` | Input data contains NaN or infinite values |
-| `ComputationError` | Internal calculation error occurred |
+`TaError` is a *facade*: it wraps the three domain error enums. New code should
+match on the wrapped enum; the flat legacy variants are deprecated since
+`0.4.0` and kept only so older call sites keep compiling.
+
+| Canonical error | Meaning |
+|-----------------|---------|
+| `TaError::Indicator(IndicatorError::InsufficientData { required, actual })` | Not enough data points |
+| `TaError::Indicator(IndicatorError::InvalidParameter { param, reason })` | A parameter violates its constraint |
+| `TaError::Indicator(IndicatorError::NumericOverflow { indicator, index })` | Overflow detected inside an indicator |
+| `TaError::Indicator(IndicatorError::NanPropagation { indicator })` | NaN reached an indicator that rejects it |
+| `TaError::Formula(FormulaError)` | Parser / type-check / runtime error from the formula engine |
+| `TaError::Ffi(FfiError)` | Error raised at an FFI boundary |
+
+Deprecated legacy variants (still constructible, do not use in new code):
+`EmptyInput`, `InsufficientData { length, required }`,
+`InvalidParameter { name, constraint }`, `AllNaN`, `DivisionByZero`,
+`InvalidPrice { message }`, `ComputationError { message }`.
+
+> An earlier revision of this section claimed the return type was
+> `Result<Array<TaError>>` and listed the variants `InvalidPeriod`,
+> `InvalidParameters` and `InvalidInput`. None of those three variants exist in
+> any error enum, and the type was malformed.

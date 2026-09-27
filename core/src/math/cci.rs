@@ -1,8 +1,12 @@
-//! TA-Lib 0.7.1-compatible Commodity Channel Index kernel.
+//! TA-Lib 0.8.1-compatible Commodity Channel Index kernel.
 //!
 //! For the small periods used by CCI, the reference circular buffer plus two
 //! tight linear scans is both faster than maintaining a sorted Vec and exactly
 //! preserves TA-Lib's floating-point operation order.
+//!
+//! The cited release is the pinned `talib_core_version` in
+//! `tests/contracts/talib_coverage_matrix_v1.json`; `golden_talib_cci` is what
+//! makes the claim testable rather than aspirational.
 
 use crate::error::{Result, TaError};
 use ndarray::Array1;
@@ -52,7 +56,7 @@ pub fn cci(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Ar
         let last_value = typical_price(high[i], low[i], close[i]);
         circ[circ_idx] = last_value;
 
-        // Keep the same j=0..period accumulation order as TA_CCI 0.7.1.
+        // Keep the same j=0..period accumulation order as TA_CCI 0.8.1.
         let mut average = 0.0;
         for &value in &circ {
             average += value;

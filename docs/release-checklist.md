@@ -17,13 +17,20 @@ claim registry installation commands before a clean consumer test exists.
       `python scripts/optimize_python_bindings.py --check ffi/python-binding/src/*.rs`,
       `python scripts/check_python_stub.py`,
       `python scripts/check_streaming_registry_contract.py`,
-      `python scripts/gen_c_header.py --check ffi/c-binding/include/finkit.h`.
+      `python scripts/gen_c_header.py --check ffi/c-binding/include/finkit.h`,
+      `python scripts/check_ios_header_contract.py`.
+      The last two are the same contract for two different headers: every
+      shipped `#[no_mangle] extern "C"` symbol must be declared in the header
+      that documents it. The iOS header is separate from the C binding's and had
+      drifted by three undeclared entry points before this gate existed.
 - [ ] Run the repository hygiene gates, which fail on orphan automation
       (`make check-orphans`):
       `python scripts/check_orphan_scripts.py`,
-      `python scripts/check_workflow_liveness.py`.
-      A `scripts/` file with no consumer, or a workflow whose `on:` block can
-      never match an existing branch, reads as a live gate while doing nothing.
+      `python scripts/check_workflow_liveness.py`,
+      `python scripts/check_orphan_docs.py`.
+      A `scripts/` file with no consumer, a workflow whose `on:` block can never
+      match an existing branch, or a Markdown document no other document links
+      to, reads as something that exists while being unreachable.
 - [ ] Run the dead-code reason gate (`make check-dead-code`):
       `python scripts/check_dead_code_allows.py`.
       `#[allow(dead_code)]` turns off the only compiler check that can see

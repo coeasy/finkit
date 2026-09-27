@@ -3,11 +3,19 @@
 
 This intentionally validates repository-local paths only. External URLs and anchors are
 left to external link checkers because CI should not depend on network availability.
+
+It also fails when a link target exists in the working tree but is **not tracked
+by git**. CI checks out the committed tree, so an ignored or untracked file
+satisfies this check locally while a fresh clone gets a dangling link — which is
+exactly how `docs/archive/README.md` stayed invisible: `.gitignore` listed
+`docs/archive/`, so the archive index was present on the author's disk, absent
+from every clone, and this gate reported success anyway.
 """
 
 from __future__ import annotations
 
 import re
+import subprocess
 import sys
 from pathlib import Path
 from urllib.parse import unquote
@@ -22,6 +30,31 @@ EXTERNAL_SCHEMES = (
     "data:",
     "javascript:",
 )
+
+
+def tracked_files() -> set[str] | None:
+    """Repository-relative POSIX paths of every git-tracked file.
+
+    `None` when git is unavailable or this is not a work tree, in which case the
+    tracked-target check is skipped rather than reported as a failure.
+
+    `git ls-files -z` is required: the newline-separated form octal-escapes
+    non-ASCII paths, which would drop every Chinese-named document from the set.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "ls-files", "-z"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError:
+        return None
+    if result.returncode != 0:
+        return None
+    return {p for p in result.stdout.split("\0") if p}
 
 
 def markdown_files() -> list[Path]:
@@ -89,6 +122,7 @@ def resolve_local(source: Path, target: str) -> Path | None:
 
 def main() -> int:
     errors: list[str] = []
+    tracked = tracked_files()
 
     for source in markdown_files():
         text = source.read_text(encoding="utf-8")
@@ -100,7 +134,7 @@ def main() -> int:
                     continue
 
                 try:
-                    candidate.relative_to(ROOT)
+                    relative = candidate.relative_to(ROOT).as_posix()
                 except ValueError:
                     errors.append(
                         f"{source.relative_to(ROOT)}:{lineno}: local link escapes repository: {target}"
@@ -111,6 +145,12 @@ def main() -> int:
                     errors.append(
                         f"{source.relative_to(ROOT)}:{lineno}: missing local link target: {target}"
                     )
+                elif tracked is not None and relative not in tracked:
+                    errors.append(
+                        f"{source.relative_to(ROOT)}:{lineno}: link target exists on disk but is "
+                        f"not tracked by git, so a fresh clone will not have it: {target} "
+                        f"(add it with `git add -f`, or stop ignoring it)"
+                    )
 
     if errors:
         print("Documentation link check failed:", file=sys.stderr)
@@ -119,6 +159,8 @@ def main() -> int:
         return 1
 
     print(f"Documentation link check passed ({len(markdown_files())} Markdown files).")
+    if tracked is None:
+        print("Note: git is unavailable, so link targets were not checked for tracked status.")
     return 0
 
 

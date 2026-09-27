@@ -1,6 +1,6 @@
 # Core Contracts
 
-This page documents the stable v0.1.2 Rust contracts around the indicator,
+This page documents the stable v0.1.15 Rust contracts around the indicator,
 formula, factor, and runtime engines. They are intentionally data-source
 agnostic and do not turn Finkit into a data or trading platform.
 
@@ -288,7 +288,7 @@ let ast = parse_formula_for_terminal(
 )?;
 ```
 
-Only Finkit's own language is advertised as `Native` in v0.1.2. TongDaXin,
+Only Finkit's own language is advertised as `Native` in v0.1.15. TongDaXin,
 TongHuaShun, EastMoney, and TradingView/Pine adapters are explicitly
 `CommonSubset` contracts. Golden fixtures under `core/tests/fixtures/formula_compat`
 exercise representative parser/semantic behavior for each external terminal.

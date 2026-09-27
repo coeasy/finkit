@@ -138,7 +138,7 @@ Release-quality C/C++ validation should also install the SDK and compile an exte
 
 ### Go/.NET/mobile/WASM
 
-These source integrations are not part of the current `v0.1.3` binary Release contract. If changing them, add platform-appropriate native build and external-consumer tests before upgrading their documented maturity.
+These source integrations are not part of the current `v0.1.15` binary Release contract. If changing them, add platform-appropriate native build and external-consumer tests before upgrading their documented maturity.
 
 ## Documentation rules
 
@@ -181,7 +181,7 @@ For the current release architecture:
 8. publish to PyPI/crates.io/npm/Maven Central/NuGet/etc. only through an explicitly configured registry workflow or trusted-publishing path;
 9. after any registry publication, test a clean install from that registry before documenting it as supported.
 
-The `v0.1.3` GitHub Release currently proves Python wheel, Rust `.crate`, Linux CLI, and checksum assets. Node/Java/C++ are source/CI packaging paths; other bindings have narrower source/development status. Future releases should update documentation only after those facts change.
+The `v0.1.15` GitHub Release currently proves Python wheel, Rust `.crate`, Linux CLI, and checksum assets. Node/Java/C++ are source/CI packaging paths; other bindings have narrower source/development status. Future releases should update documentation only after those facts change.
 
 ## Issues and security
 

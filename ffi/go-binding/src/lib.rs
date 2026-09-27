@@ -1666,11 +1666,34 @@ unsafe fn research_request_json(ptr: *const std::os::raw::c_char) -> String {
     }
 }
 
+unsafe fn quant_request_json(ptr: *const std::os::raw::c_char) -> String {
+    if ptr.is_null() {
+        return finkit_ffi_common::quant_evaluation_error_json(
+            "null_pointer",
+            "request_json is null",
+        );
+    }
+    let request = unsafe { std::ffi::CStr::from_ptr(ptr) };
+    match request.to_str() {
+        Ok(request) => finkit_ffi_common::quant_evaluation_json(request),
+        Err(error) => {
+            finkit_ffi_common::quant_evaluation_error_json("invalid_utf8", &error.to_string())
+        }
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn finkit_go_factor_study_json(
     request_json: *const std::os::raw::c_char,
 ) -> *mut std::os::raw::c_char {
-    research_string_ptr(unsafe { research_request_json(request_json) })
+    // The research engine is reachable from user input, so a panic must be
+    // converted into the contract's error envelope rather than unwinding across
+    // `extern "C"`. C and Java already guard this call; Go did not.
+    research_string_ptr(ffi_catch_json(
+        || unsafe { research_request_json(request_json) },
+        finkit_ffi_common::factor_study_error_json,
+        "factor research engine panicked at the FFI boundary",
+    ))
 }
 #[no_mangle]
 pub unsafe extern "C" fn finkit_go_factor_study_free_string(value: *mut std::os::raw::c_char) {
@@ -1683,18 +1706,9 @@ pub unsafe extern "C" fn finkit_go_factor_study_free_string(value: *mut std::os:
 pub unsafe extern "C" fn finkit_go_quant_evaluation_json(
     request_json: *const std::os::raw::c_char,
 ) -> *mut std::os::raw::c_char {
-    if request_json.is_null() {
-        return research_string_ptr(finkit_ffi_common::quant_evaluation_error_json(
-            "null_pointer",
-            "request_json is null",
-        ));
-    }
-    let request = unsafe { std::ffi::CStr::from_ptr(request_json) };
-    let response = match request.to_str() {
-        Ok(value) => finkit_ffi_common::quant_evaluation_json(value),
-        Err(error) => {
-            finkit_ffi_common::quant_evaluation_error_json("invalid_utf8", &error.to_string())
-        }
-    };
-    research_string_ptr(response)
+    research_string_ptr(ffi_catch_json(
+        || unsafe { quant_request_json(request_json) },
+        finkit_ffi_common::quant_evaluation_error_json,
+        "quant evaluation engine panicked at the FFI boundary",
+    ))
 }

@@ -302,7 +302,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - run: cargo build -p finkit-wasm --target wasm32-unknown-unknown --release --locked
+      # `console_error_panic_hook` must be requested explicitly: its dependency
+      # is declared only for `cfg(target_arch = "wasm32")`, so it cannot be a
+      # default feature. Shipping without it turns every Rust panic into a bare
+      # `unreachable` trap with no diagnostic.
+      - run: cargo build -p finkit-wasm --target wasm32-unknown-unknown --release --locked --features console_error_panic_hook
       - name: Stage WASM module
         shell: bash
         run: |

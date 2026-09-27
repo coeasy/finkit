@@ -210,7 +210,7 @@ Streaming 解决“新 Bar 到来”，DirtyRange 解决“历史数据某个局
 - `core/benches/competitive_bench.rs`：Rust `ta` crate 对照；
 - `scripts/bench-vs-talib.sh`：本地一键配对运行；
 - `scripts/bench_report.py`：结果解析、schema 与 gate；
-- `.github/workflows/competitive-benchmark.yml`：每周 TA-Lib 0.7.1 真实 head-to-head。
+- `.github/workflows/competitive-benchmark.yml`：每周真实 head-to-head，TA-Lib C 版本由 `tests/contracts/talib_coverage_matrix_v1.json` 的 `talib_core_version`（当前 `0.8.1`）在运行时决定。
 
 报告必须记录 commit、CPU/平台、Rust、TA-Lib 版本与生成时间；没有有效 paired rows 时必须失败，不能生成“空报告成功”。
 

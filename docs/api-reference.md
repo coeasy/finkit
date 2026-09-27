@@ -319,12 +319,17 @@ pub trait Ohlcv {
     fn volume(&self) -> f64;
 }
 
-/// O(1) incremental update
+/// O(1) incremental update.
+///
+/// `next` returns `None` during warm-up and `Some(output)` once the indicator
+/// has converged — it never returns a NaN placeholder.
 pub trait StreamingIndicator<Input = f64, Output = f64> {
-    fn next(&mut self, input: Input) -> Output;
+    fn next(&mut self, input: Input) -> Option<Output>;
+    fn next_with_time(&mut self, input: Input, open_time: i64) -> Option<Output>;
     fn reset(&mut self);
     fn is_ready(&self) -> bool;
     fn count(&self) -> usize;
+    fn value(&self) -> Option<Output>;
 }
 
 /// Machine-readable metadata
@@ -336,6 +341,13 @@ pub trait IndicatorMeta {
 }
 ```
 
+> There is a second, unrelated trait also called `StreamingIndicator`, in
+> `finkit::traits`. That one is bar-oriented
+> (`update(&mut self, bar: &dyn Ohlcv) -> Option<Output>`, with `Config` /
+> `Output` associated types and a `convergence()` method) and is intended for
+> adapters. Importing both in one module requires an alias. The trait shown
+> above is the one the concrete `Streaming*` structs implement.
+
 #### Available Streaming Indicators
 
 | Struct | Input | Output | Module |
@@ -343,32 +355,37 @@ pub trait IndicatorMeta {
 | `StreamingSma` | `f64` | `f64` | `streaming::indicators` |
 | `StreamingEma` | `f64` | `f64` | `streaming::indicators` |
 | `StreamingRsi` | `f64` | `f64` | `streaming::indicators` |
-| `StreamingAtr` | `&dyn Ohlcv` | `f64` | `streaming::indicators` |
+| `StreamingAtr` | `(f64, f64, f64)` — high, low, close | `f64` | `streaming::indicators` |
 | `StreamingBoll` | `f64` | `BollOutput` | `streaming::indicators` |
 | `StreamingMacd` | `f64` | `MacdOutput` | `streaming::indicators` |
 
 ```rust
-use finkit::streaming::{StreamingIndicator, OhlcvBar};
-use finkit::streaming::indicators::{StreamingSma, StreamingMacd, MacdOutput};
+use finkit::streaming::StreamingIndicator;
+use finkit::streaming::indicators::{StreamingSma, StreamingMacd, MacdOutput, StreamingAtr};
 
-// Simple moving average — feed close prices one at a time
+// Simple moving average — feed close prices one at a time.
+// Warm-up yields `None`, not NaN.
 let mut sma = StreamingSma::new(3);
-assert!(sma.next(1.0).is_nan());   // warming up
-assert!(sma.next(2.0).is_nan());
-assert_eq!(sma.next(3.0), 2.0);    // ready
+assert_eq!(sma.next(1.0), None);   // warming up
+assert_eq!(sma.next(2.0), None);
+assert_eq!(sma.next(3.0), Some(2.0)); // ready
 assert!(sma.is_ready());
+assert_eq!(sma.value(), Some(2.0)); // last value, without advancing
 
 // MACD — returns structured output per bar
 let mut macd = StreamingMacd::new(12, 26, 9);
-let out: MacdOutput = macd.next(100.0);
-// out.macd, out.signal, out.histogram
+if let Some(out) = macd.next(100.0) {
+    // out.macd, out.signal, out.histogram
+}
 
-// OHLCV bar input for ATR
-use finkit::streaming::indicators::StreamingAtr;
-let bar = OhlcvBar::new(10.0, 12.0, 9.0, 11.0, 1000.0);
+// ATR takes a (high, low, close) tuple, not a bar object.
 let mut atr = StreamingAtr::new(14);
-let val = atr.next(&bar);
+let val = atr.next((12.0, 10.0, 11.0)); // Option<f64>
 ```
+
+To feed whole bars instead of raw prices, use `compute_bar(&OhlcvBar)` (available
+on the streaming indicators that carry repaint support) or the bar-oriented
+`finkit::traits::StreamingIndicator` adapter shown above.
 
 #### Output Structs
 

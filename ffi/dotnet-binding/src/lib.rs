@@ -55,32 +55,21 @@ struct MultiOutputDto {
 
 static VERSION: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\0").as_bytes();
 
-#[no_mangle]
-pub extern "C" fn ta_free(ptr: *mut c_double) {
-    ffi_catch_void(|| {
-        if ptr.is_null() {
-            return;
-        }
-        unsafe {
-            drop(Box::from_raw(ptr));
-        }
-    })
-}
+// The only heap the .NET binding hands across the boundary is a NUL-terminated
+// string, released with `ta_free_string` (declared in the C# wrapper as
+// `Indicators.cs`'s `ta_free_string` P/Invoke). Two earlier exports were
+// removed here because they had no producer and no consumer:
+//
+//   * `ta_free(*mut c_double)` and `ta_free_array(*mut c_double, c_int)` —
+//     no export in this crate ever returned `*mut c_double`, so the only
+//     pointers a caller could pass came from a different allocator, and
+//     `Vec::from_raw_parts(ptr, length, length)` additionally trusted a
+//     caller-supplied length that cannot be validated.
+//   * `ta_free_cstring` — byte-identical to `ta_free_string`; the C# wrapper
+//     uses `ta_free_string`, so the duplicate was dead ABI.
 
 #[no_mangle]
-pub extern "C" fn ta_free_array(ptr: *mut c_double, length: c_int) {
-    ffi_catch_void(|| {
-        if ptr.is_null() || length <= 0 {
-            return;
-        }
-        unsafe {
-            drop(Vec::from_raw_parts(ptr, length as usize, length as usize));
-        }
-    })
-}
-
-#[no_mangle]
-pub extern "C" fn ta_free_cstring(s: *mut c_char) {
+pub extern "C" fn ta_free_string(s: *mut c_char) {
     ffi_catch_void(|| {
         if !s.is_null() {
             unsafe {
@@ -137,9 +126,9 @@ mod tests {
 
     // A4 — FFI heap-ownership contract. .NET indicators write into a caller
     // buffer (no transfer); the only Rust-heap-returning path is
-    // `ta_formula_eval` → `*mut c_char`, freed by `ta_free_cstring`. We also
-    // exercise `ta_free` / `ta_free_array` directly. Loops assert the live
-    // heap returns to baseline (catches a forgotten free).
+    // `ta_formula_eval` → `*mut c_char`, freed by `ta_free_string` — the same
+    // export the C# wrapper P/Invokes. Loops assert the live heap returns to
+    // baseline (catches a forgotten free).
     //
     // NOTE: `ta_formula_eval` borrows the NUL-terminated source string for the
     // duration of the call; the caller-owned CString remains valid until return.
@@ -160,7 +149,7 @@ mod tests {
                 input.as_ptr(),
                 n,
             );
-            crate::ta_free_cstring(fe);
+            crate::ta_free_string(fe);
         }
         let baseline = live_bytes();
 
@@ -179,14 +168,7 @@ mod tests {
                 !fe.is_null(),
                 "ta_formula_eval must return a non-null CString to free"
             );
-            crate::ta_free_cstring(fe);
-
-            // Free-path smoke: a scalar and an array handed back to the free fns.
-            let p = Box::into_raw(Box::new(std::f64::consts::PI));
-            crate::ta_free(p);
-            let v = vec![1.0f64, 2.0, 3.0];
-            let (vp, vl, _vc) = v.into_raw_parts();
-            crate::ta_free_array(vp, vl as c_int);
+            crate::ta_free_string(fe);
         }
 
         let after = live_bytes();
@@ -1311,17 +1293,6 @@ pub extern "C" fn ta_formula_validate(source: *const c_char) -> c_int {
 }
 
 #[no_mangle]
-pub extern "C" fn ta_free_string(s: *mut c_char) {
-    ffi_catch_void(|| {
-        if !s.is_null() {
-            unsafe {
-                let _ = CString::from_raw(s);
-            }
-        }
-    })
-}
-
-#[no_mangle]
 pub extern "C" fn ta_formula_eval_zc_exec(
     source: *const c_char,
     open: *const c_double,
@@ -1420,11 +1391,34 @@ unsafe fn research_request_json(ptr: *const std::os::raw::c_char) -> String {
     }
 }
 
+unsafe fn quant_request_json(ptr: *const std::os::raw::c_char) -> String {
+    if ptr.is_null() {
+        return finkit_ffi_common::quant_evaluation_error_json(
+            "null_pointer",
+            "request_json is null",
+        );
+    }
+    let request = unsafe { std::ffi::CStr::from_ptr(ptr) };
+    match request.to_str() {
+        Ok(request) => finkit_ffi_common::quant_evaluation_json(request),
+        Err(error) => {
+            finkit_ffi_common::quant_evaluation_error_json("invalid_utf8", &error.to_string())
+        }
+    }
+}
+
 #[no_mangle]
 pub unsafe extern "C" fn finkit_dotnet_factor_study_json(
     request_json: *const std::os::raw::c_char,
 ) -> *mut std::os::raw::c_char {
-    research_string_ptr(unsafe { research_request_json(request_json) })
+    // The research engine is reachable from user input, so a panic must be
+    // converted into the contract's error envelope rather than unwinding across
+    // `extern "C"`. C and Java already guard this call; .NET did not.
+    research_string_ptr(ffi_catch_json(
+        || unsafe { research_request_json(request_json) },
+        finkit_ffi_common::factor_study_error_json,
+        "factor research engine panicked at the FFI boundary",
+    ))
 }
 #[no_mangle]
 pub unsafe extern "C" fn finkit_dotnet_factor_study_free_string(value: *mut std::os::raw::c_char) {
@@ -1437,18 +1431,9 @@ pub unsafe extern "C" fn finkit_dotnet_factor_study_free_string(value: *mut std:
 pub unsafe extern "C" fn finkit_dotnet_quant_evaluation_json(
     request_json: *const std::os::raw::c_char,
 ) -> *mut std::os::raw::c_char {
-    if request_json.is_null() {
-        return research_string_ptr(finkit_ffi_common::quant_evaluation_error_json(
-            "null_pointer",
-            "request_json is null",
-        ));
-    }
-    let request = unsafe { std::ffi::CStr::from_ptr(request_json) };
-    let response = match request.to_str() {
-        Ok(value) => finkit_ffi_common::quant_evaluation_json(value),
-        Err(error) => {
-            finkit_ffi_common::quant_evaluation_error_json("invalid_utf8", &error.to_string())
-        }
-    };
-    research_string_ptr(response)
+    research_string_ptr(ffi_catch_json(
+        || unsafe { quant_request_json(request_json) },
+        finkit_ffi_common::quant_evaluation_error_json,
+        "quant evaluation engine panicked at the FFI boundary",
+    ))
 }

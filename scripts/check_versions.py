@@ -28,6 +28,8 @@ CMAKE_PROJECT = ROOT / "ffi" / "c-binding" / "CMakeLists.txt"
 XML_PROJECT_VERSIONS = ((DOTNET_PROJECT, "Version"), (JAVA_POM, "version"))
 DOC_VERSION_FILES = (
     ROOT / "README.md",
+    ROOT / "CONTRIBUTING.md",
+    ROOT / "core" / "README.md",
     ROOT / "docs" / "README.md",
     ROOT / "docs" / "api-reference.md",
     ROOT / "docs" / "generated" / "version-matrix.md",
@@ -38,8 +40,20 @@ DOC_VERSION_FILES = (
     ROOT / "docs" / "language-bindings.md",
     ROOT / "docs" / "development.md",
     ROOT / "docs" / "release-checklist.md",
+    ROOT / "docs" / "usage.md",
+    ROOT / "docs" / "troubleshooting.md",
+    ROOT / "docs" / "screening-formulas.md",
+    ROOT / "docs" / "core-contracts.md",
+    ROOT / "docs" / "function-schema.md",
+    ROOT / "docs" / "BENCHMARK_VS_TALIB.md",
+    ROOT / "docs" / "indicators.md",
     ROOT / "ffi" / "python-binding" / "README.md",
+    ROOT / "ffi" / "node-binding" / "README.md",
+    ROOT / "ffi" / "java-binding" / "README.md",
+    ROOT / "ffi" / "dotnet-binding" / "README.md",
+    ROOT / "ffi" / "go-binding" / "README.md",
     ROOT / "examples" / "README.md",
+    ROOT / "tests" / "golden" / "talib" / "README.md",
     ROOT / "docs" / "indicator_registry.json",
     ROOT / "docs" / "ffi_registry.json",
 )
@@ -78,8 +92,10 @@ PUBLISHED_VERSION = "0.1.15"
 # rot.
 FOREIGN_VERSIONS = frozenset(
     {
-        "0.7.1",  # TA-Lib, named in README.md's head-to-head guardrail paragraph
+        "0.8.1",  # TA-Lib C, named in README.md's head-to-head guardrail paragraph
         "0.8.0",  # TA-Lib Python, in the docs index link to the coverage audit
+        "0.0.0",  # Go module placeholder (`require .../go v0.0.0`), not a release
+        "0.4.0",  # the `since` version of TaError's deprecated variants
     }
 )
 

@@ -128,9 +128,15 @@ target/criterion/
 # Go binding build artifacts
 ffi/go-binding/go/target/
 
-# Archived/legacy artifacts (preserved locally, not committed)
+# Legacy scripts preserved locally, not committed.
 scripts/archive/
-docs/archive/
+# NOTE: `docs/archive/` is deliberately NOT ignored. It is the repository's
+# audit trail — `docs/README.md` links to `docs/archive/README.md` and 11
+# archived plans are already tracked. Ignoring the directory meant any newly
+# archived document became untracked *and* invisible to `git status`, so moving
+# a file in silently deleted it from the repository and left the committed
+# `docs/README.md` pointing at a file that a fresh clone does not have.
+# `scripts/check_docs_links.py` now fails when a link target is not tracked.
 
 # Build output artifacts (packaging)
 packaging/usage/dotnet/tests/obj/

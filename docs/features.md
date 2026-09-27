@@ -64,21 +64,36 @@ let merged = matrix.merge(&other);
 Generate the same indicator with different lookback windows:
 
 ```rust
-use finkit::features::MultiPeriodFeature;
+use finkit::features::{FeatureEngine, MultiPeriodFeature};
 
 let close = vec![/* ... price data ... */];
 
-// Predefined templates
-let fast = MultiPeriodFeature::fast_periods("ema");   // [3, 5, 8, 13]
-let medium = MultiPeriodFeature::medium_periods("rsi"); // [7, 14, 21, 30]
-let slow = MultiPeriodFeature::slow_periods("sma");   // [20, 50, 100, 200]
+// Predefined period templates. The methods are `fast` / `medium` / `slow` /
+// `all_periods`; each accepts `impl Into<String>` for the indicator name.
+let fast = MultiPeriodFeature::fast("ema");       // periods [5, 8, 13]
+let medium = MultiPeriodFeature::medium("rsi");   // periods [14, 21, 34]
+let slow = MultiPeriodFeature::slow("sma");       // periods [50, 100, 200]
+let all = MultiPeriodFeature::all_periods("sma"); // the three sets concatenated
 
-// Custom periods
-let custom = MultiPeriodFeature::new("bbands_upper".into(), vec![10, 20, 30]);
+// Custom periods. `new` takes an owned `String`, so `.into()` is required for
+// a string literal.
+let custom = MultiPeriodFeature::new("sma".into(), vec![10, 20, 30]);
+
+// `generate` comes from the `FeatureEngine` trait, which must be in scope.
 let matrix = custom.generate(&close);
 ```
 
-Supported indicators: `sma`, `ema`, `wma`, `rsi`, `roc`, `mom`, `atr` (uses close as proxy), `bbands_upper`, `bbands_lower`, `std_dev`, `kama`.
+`generate` produces one column per period, named `<indicator>_<period>`.
+Periods whose indicator call fails are skipped rather than emitted as an empty
+column.
+
+Supported indicator names (the exact match arms in
+`core/src/features/multi_period.rs`; anything else is skipped):
+
+`sma`, `ema`, `wma`, `dema`, `tema`, `trima`, `kama`, `rsi`, `roc`, `mom`,
+`cmo`, `trix`, `cfo` (alias `chande_forecast`), `qstick`, `stddev`, `jma`,
+`efficiency_ratio`, `hv` (alias `historical_volatility`), `volume_momentum`,
+`volume_roc`.
 
 ## Signal Detection
 
@@ -98,10 +113,11 @@ for signal in &signals {
 let rsi = vec![30.0, 35.0, 45.0, 55.0, 70.0, 75.0, 65.0];
 let crosses = threshold_cross(&rsi, 50.0);
 
-// Divergence detection (price vs indicator)
+// Divergence detection (price vs indicator). Signature is
+// `divergence(price, indicator, lookback, min_distance)`.
 let price = vec![100.0, 102.0, 101.0, 103.0, 102.0, 104.0];
 let indicator = vec![50.0, 55.0, 52.0, 48.0, 45.0, 43.0];
-let divergences = divergence(&price, &indicator, 3);
+let divergences = divergence(&price, &indicator, 3, 2);
 ```
 
 ## Time Series Transformations
@@ -195,51 +211,58 @@ let ratio = feature_ratio(&feat_a, &feat_b);   // [0.5, 0.5, 0.5, ...]
 let spread = feature_spread(&feat_a, &feat_b); // [-1, -2, -3, ...]
 let corr = rolling_correlation(&feat_a, &feat_b, 3);
 
-// Correlation matrix for multiple features
-let features = vec![feat_a.clone(), feat_b.clone()];
-let corr_matrix = rolling_correlation_matrix(&features, 3);
+// Correlation matrix for multiple features. Takes named columns, not a
+// `Vec<Vec<f64>>`.
+let corr_matrix = rolling_correlation_matrix(
+    &[("a", feat_a.as_slice()), ("b", feat_b.as_slice())],
+    3,
+);
 ```
 
 ## Feature Selection
 
+All three selectors take a `&FeatureMatrix`, not a `Vec<Vec<f64>>` — build the
+matrix first (see [Export](#export) for the column API).
+
 ```rust
 use finkit::features::{variance_threshold, correlation_filter, mutual_information};
 
-let features = vec![
-    vec![1.0, 2.0, 3.0, 4.0, 5.0],
-    vec![1.0, 1.0, 1.0, 1.0, 1.0], // zero variance - will be removed
-    vec![2.0, 4.0, 6.0, 8.0, 10.0],
-];
+let mut matrix = FeatureMatrix::new();
+matrix.add_column(Feature::new("f_a", "custom", 0), vec![1.0, 2.0, 3.0, 4.0, 5.0]);
+matrix.add_column(Feature::new("f_const", "custom", 0), vec![1.0, 1.0, 1.0, 1.0, 1.0]);
+matrix.add_column(Feature::new("f_b", "custom", 0), vec![2.0, 4.0, 6.0, 8.0, 10.0]);
 
-// Remove near-zero variance features
-let kept = variance_threshold(&features, 0.01);
+// Remove near-zero variance features. Returns a new FeatureMatrix.
+let kept = variance_threshold(&matrix, 0.01);
 
-// Remove highly correlated features
-let uncorr = correlation_filter(&features, 0.95);
+// Remove highly correlated features. Returns a new FeatureMatrix.
+let uncorr = correlation_filter(&matrix, 0.95);
 
-// Mutual information with target
+// Mutual information against a target. Returns a `FeatureRanking`, not a
+// bare score vector.
 let target = vec![0.0, 1.0, 1.0, 0.0, 1.0];
-let mi_scores = mutual_information(&features, &target, 5);
+let ranking = mutual_information(&matrix, &target, 5);
+for (name, score) in ranking.top_k(2) {
+    println!("{name}: {score}");
+}
 ```
 
 ## Export
 
+The exporters **write to a path** and return `std::io::Result<()>` — they do not
+return a `String` that you write yourself.
+
 ```rust
-use finkit::features::{FeatureMatrix, to_csv, to_json_lines, to_arrow_ipc};
+use finkit::features::{Feature, FeatureMatrix, to_csv, to_json_lines, to_arrow_ipc};
 
-let matrix = FeatureMatrix::new();
-// ... add columns ...
+let mut matrix = FeatureMatrix::new();
+// `Feature::new` takes (name, category, period); the values go in `add_column`.
+matrix.add_column(Feature::new("sma_5", "overlap", 5), vec![1.0, 2.0, 3.0]);
+matrix.add_column(Feature::new("rsi_14", "momentum", 14), vec![55.0, 60.0, 48.0]);
 
-// CSV export
-let csv = to_csv(&matrix);
-std::fs::write("features.csv", csv).unwrap();
-
-// JSON Lines (one object per row)
-let jsonl = to_json_lines(&matrix);
-
-// Arrow IPC (simplified)
-let arrow = to_arrow_ipc(&matrix);
-std::fs::write("features.arrow", arrow).unwrap();
+to_csv(&matrix, "features.csv")?;            // CSV
+to_json_lines(&matrix, "features.jsonl")?;   // JSON Lines, one object per row
+to_arrow_ipc(&matrix, "features.arrow")?;    // Arrow IPC
 ```
 
 ## SIMD-Optimized Operations

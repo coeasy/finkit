@@ -158,6 +158,12 @@ fn formula_error_to_pyerr(e: FormulaError) -> PyErr {
                 msg
             ))
         }
+        FormulaError::BackendUnsupported { backend, entry } => {
+            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+                "`{}` is not available on the {} backend",
+                entry, backend
+            ))
+        }
         FormulaError::Timeout { elapsed_ms } => PyErr::new::<pyo3::exceptions::PyTimeoutError, _>(
             format!("Execution timeout after {}ms", elapsed_ms),
         ),

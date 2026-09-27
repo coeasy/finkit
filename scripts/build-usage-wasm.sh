@@ -36,7 +36,13 @@ build_target() {
   local target="$1"
   local out="$2"
   echo "[build-usage-wasm] wasm-pack build --target ${target} --out-dir ${out}"
-  ( cd "${WASM_CRATE}" && wasm-pack build --release --target "${target}" --out-dir "${out}" )
+  # `console_error_panic_hook` is what turns a Rust panic into a readable
+  # console message; without it the module traps with a bare `unreachable` and
+  # no cause. The feature is opt-in because its dependency is declared only for
+  # `cfg(target_arch = "wasm32")`, so every wasm build must ask for it
+  # explicitly — nothing else in the tree does.
+  ( cd "${WASM_CRATE}" && wasm-pack build --release --target "${target}" \
+      --features console_error_panic_hook --out-dir "${out}" )
 }
 
 build_target web       "${OUT_DIR}/web"

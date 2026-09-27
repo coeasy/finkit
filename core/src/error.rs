@@ -134,6 +134,22 @@ pub enum FormulaError {
     /// A function is not supported in the current context.
     #[error("unsupported function: {0}")]
     UnsupportedFunction(String),
+
+    /// The selected execution backend cannot serve this entry point.
+    ///
+    /// Raised by a source-level `FormulaEngine` `eval*` entry point that has no
+    /// lowering on the backend the caller selected with
+    /// [`FormulaExecutionMode`](crate::formula::FormulaExecutionMode). It is an
+    /// error rather than a fallback on purpose: quietly walking the tree would
+    /// make "I selected the plan backend" untrue and would hide the missing
+    /// lowering instead of reporting it.
+    #[error("`{entry}` is not available on the {backend} backend")]
+    BackendUnsupported {
+        /// Backend the caller selected (`"plan"`).
+        backend: String,
+        /// Entry point the backend cannot serve (`"eval_parallel"`).
+        entry: String,
+    },
 }
 
 /// FFI boundary error.

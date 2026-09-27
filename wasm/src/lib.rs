@@ -22,9 +22,16 @@ mod transforms;
 #[path = "chart.rs"]
 mod wasm_chart;
 
+/// Install the panic hook when the module loads.
+///
+/// The feature is opt-in (its dependency is declared only for
+/// `cfg(target_arch = "wasm32")`), so the wasm build commands in
+/// `scripts/build-usage-wasm.sh` and `.github/workflows/multilang-release.yml`
+/// pass `--features console_error_panic_hook` explicitly. Without the hook a
+/// panic traps the instance with an opaque `unreachable`.
 #[wasm_bindgen(start)]
 pub fn _start() {
-    #[cfg(feature = "console_error_panic_hook")]
+    #[cfg(all(feature = "console_error_panic_hook", target_arch = "wasm32"))]
     console_error_panic_hook::set_once();
 }
 

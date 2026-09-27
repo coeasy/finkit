@@ -65,7 +65,7 @@ cargo test -p finkit --test performance_regression --release --locked -- --test-
 
 `.github/workflows/competitive-benchmark.yml` 每周在固定 GitHub Linux runner 上：
 
-- 安装 TA-Lib 0.7.1；
+- 安装契约钉住的 TA-Lib C 版本（`tests/contracts/talib_coverage_matrix_v1.json` 的 `talib_core_version`，当前 `0.8.1`），并在记录环境时校验实际安装版本一致；
 - 编译并运行真实 `talib_c_comparison` Criterion benchmark；
 - 要求至少存在有效配对结果；
 - 阻止超过 TA-Lib 25% 的严重退化；

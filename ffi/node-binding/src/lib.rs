@@ -326,6 +326,10 @@ fn formula_error_to_napi(e: FormulaError) -> napi::Error {
             napi::Status::InvalidArg,
             format!("Unsupported function: {}", msg),
         ),
+        FormulaError::BackendUnsupported { backend, entry } => napi::Error::new(
+            napi::Status::GenericFailure,
+            format!("`{}` is not available on the {} backend", entry, backend),
+        ),
         FormulaError::Timeout { elapsed_ms } => napi::Error::new(
             napi::Status::GenericFailure,
             format!("Execution timeout after {}ms", elapsed_ms),

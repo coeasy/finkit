@@ -10,14 +10,14 @@
 //!
 //! ## std-only submodules
 //!
-//! - [`cci`](crate::math::cci) — TA-Lib 0.7.1-compatible Commodity Channel Index kernel (requires `std` feature)
+//! - [`cci`](crate::math::cci) — TA-Lib 0.8.1-compatible Commodity Channel Index kernel (requires `std` feature)
 //! - [`directional`](crate::math::directional) — single-output +DI/-DI Wilder kernels (requires `std` feature)
 //! - [`mfi`](crate::math::mfi) — fused Money Flow Index kernel without a full typical-price scratch array (requires `std` feature)
 //! - [`moving_avg`](crate::math::moving_avg) — canonical moving-average namespace with Architecture v3 hot-kernel overrides (requires `std` feature)
 //! - [`ohlc_family_state`](crate::math::ohlc_family_state) — shared TR/ATR/DM/DI/DX/ADX Wilder state (requires `std` feature)
 //! - [`statistics`](crate::math::statistics) — Rolling variance, standard deviation, min, max, correlation (requires `std` feature)
-//! - [`rolling_stats`](crate::math::rolling_stats) — TA-Lib 0.7.1-compatible rolling statistics (requires `std` feature)
-//! - [`sar`](crate::math::sar) — TA-Lib 0.7.1-compatible Parabolic SAR kernel (requires `std` feature)
+//! - [`rolling_stats`](crate::math::rolling_stats) — TA-Lib 0.8.1-compatible rolling statistics (requires `std` feature)
+//! - [`sar`](crate::math::sar) — TA-Lib 0.8.1-compatible Parabolic SAR kernel (requires `std` feature)
 //! - [`trange`](crate::math::trange) — single-write TA-Lib-compatible True Range kernel (requires `std` feature)
 //! - [`linear`](crate::math::linear) — Linear regression and related functions (requires `std` feature)
 //! - [`reduction`](crate::math::reduction) — allocation-free typed scalar reductions for f32/f64 (requires `std` feature)

@@ -1,6 +1,6 @@
 # Formula Runtime 契约
 
-- 适用版本：Finkit 0.1.x
+- 适用版本：Finkit 0.2.x（workspace 目标版本；已发布资产仍为 0.1.15）
 - 当前实现基线：main 上的 FormulaEngine、FormulaExecutor 和 Python CompiledFormula
 - 目标：明确计算结果、数据所有权、warm-up、增量上下文和并发边界，避免把局部优化误解为全局 zero-copy 保证
 
@@ -21,6 +21,36 @@
 | inspect_formula_compatibility | 检查终端兼容性 | 返回 semantic profile 和逐函数 exact/near/approximate/host_required/unsupported 状态 |
 | FormulaEngine.metadata | 查询结果元数据 | 返回长度、输出序列名、dtype、NaN 策略、lookback/warm-up、有效起点和流式能力 |
 | Python CompiledFormula.reset | 清空 retained context | 保留 compiled plan 和 engine cache；下一次带数组的 eval 建立新 context |
+
+### 1.1 执行后端契约（`FormulaExecutionMode`）
+
+`FormulaExecutionMode` 是**后端契约**，不是性能提示。选定的后端要么能服务
+这个入口，要么**报错**——不允许静默回退到另一条路径。
+
+| 后端 | 语义 |
+|---|---|
+| `FormulaExecutionMode::Tree` | 默认后端，也是差分门里的参考实现。所有入口都能跑。 |
+| `FormulaExecutionMode::Plan` | 生产载体。只有具备 plan kernel 的入口能跑；其余入口返回 `FormulaError::BackendUnsupported { backend, entry }`。 |
+
+**Tree-only 入口**（选定 Plan 时拒绝执行，而不是走 tree）——共 13 个：
+
+`eval_ast`、`eval_lazy`、`eval_parallel`、`eval_with_validation`、
+`eval_with_defaults`、`eval_template`、`eval_zero_copy`、
+`eval_zero_copy_cached`、`eval_zero_alloc`、`eval_optimized`、
+`eval_with_debug`、`eval_multi_with_dialect(Pine)`、
+`eval_multi_with_pine_security`。
+
+**Plan-capable 入口**：`eval`、`eval_with_params`（Plan 分支走
+`eval_plan_channels`）、`eval_batch`（全部公式无副作用时走共享编译路径）、以及
+所有显式 `*_contract_json` 契约入口。Plan 模式下 `plan_cache_size()` 会增长，
+可作为「Plan 后端确实被使用」的断言。
+
+跨语言错误码：C ABI 上 `BackendUnsupported` 映射为
+`FFI_FORMULA_BASE (50) + 11 = 61`；Python 抛 `RuntimeError`；Node 抛
+`GenericFailure`。详见 [ffi/error-codes.md](ffi/error-codes.md)。
+
+要评估一个 tree-only 入口（例如模板），在 Plan 模式下改用 `eval` 并把模板的
+`formula` 源串传进去；见 [formula-templates.md](formula-templates.md)。
 
 ## 2. 输入契约
 
@@ -94,6 +124,27 @@ LINEARREG(MA(CLOSE,5),9)
 
 这条对**冻结的** JIT 同样适用：`jit.rs` 模块头把"使该路径与 tree 路径不一致的缺陷"明确列为可修范围，因此补上该回退属于正确性修复，不是新增能力。
 
+### 3.4 执行后端是契约，不是提示（`BackendUnsupported`）
+
+`FormulaExecutionMode::{Tree, Plan}` 是**后端选择契约**。源级 `eval*` 入口分成三类，该划分由 `core/tests/formula_execution_mode.rs` 机械校验：
+
+| 类别 | 入口 | 选择 `Plan` 时的行为 |
+|---|---|---|
+| 受管辖、plan 可用 | `eval`、`eval_with_dialect`、`eval_with_params`、`eval_multi`、`eval_multi_with_dialect`、`eval_incremental`、`eval_simd`、`eval_batch`、`eval_batch_shared` | 在 plan 后端执行 |
+| 受管辖、仅 tree | `eval_ast`、`eval_lazy`、`eval_parallel`、`eval_optimized`、`eval_with_debug`、`eval_template`、`eval_with_validation`、`eval_with_defaults`、`eval_zero_copy`、`eval_zero_copy_cached`、`eval_zero_alloc`、`eval_multi_with_pine_security` | 返回 `FormulaError::BackendUnsupported` |
+| 后端显式（不受管辖） | `eval_plan*`、`compile_plan*`、`eval_jit`、`compile_jit`、`execute_jit`、`compile_bytecode`、`execute_bytecode`，以及所有接受 `&CompiledFormula` 的入口 | 运行其参数类型所声明的后端 |
+
+**契约**：第二类入口在选中 `Plan` 时**必须报错，不得静默回退到 tree**。回退会让"我选了 plan 后端"这句话失真，并把缺失的 lowering 藏起来而不是报出来。
+
+```rust
+FormulaError::BackendUnsupported { backend: "plan".into(), entry: "eval_parallel".into() }
+// Display: "`eval_parallel` is not available on the plan backend"
+```
+
+错误信息中 `entry` 是入口名、`backend` 是调用方选择的后端名，便于调用方在日志里直接定位。各绑定对应该错误已分派：Rust `61`、C `61`、Python/Node 抛带该信息的异常。
+
+第三类入口之所以不受管辖，是因为其参数本身**就是**后端选择：`CompiledFormula` / `AstNode` / `Bytecode` 是 tree 的产物，构造它即等于选了 tree；对应的 plan 入口是 `compile_plan` / `eval_plan`。
+
 ## 4. Range、Last 和 Append 的一致性
 
 必须满足以下等价关系：
@@ -140,11 +191,12 @@ LINEARREG(MA(CLOSE,5),9)
 - 静态分析应能识别依赖、lookback、未来数据和未知函数；
 - 每个外部终端公式应能输出语义 profile 和逐函数兼容状态；
 - TA-Lib Python 公共 161 函数目录必须保持唯一、可查询；目录登记、运行时已注册、host_required 和 unsupported 必须在兼容报告中区分；
-- 跨 Python、C、Node、CLI 的 golden fixture 保持输出命名、warm-up 和错误类别一致。
+- 跨 Python、C、Node、CLI 的 golden fixture 保持输出命名、warm-up 和错误类别一致；
+- 受管辖的源级 `eval*` 入口在选中 `Plan` 时，仅-tree 的那些必须返回 `BackendUnsupported`，plan 可用的那些必须真正填充 plan 缓存（`core/tests/formula_execution_mode.rs`）。
 
 ## 8. 版本策略
 
-本契约属于 0.1.x 稳定化工作。若要改变输出键、warm-up、NaN、range 边界、append 缺失字段或线程模型，必须：
+本契约属于 0.1.x 稳定化工作。若要改变输出键、warm-up、NaN、range 边界、append 缺失字段、线程模型或**执行后端选择语义**（哪个入口归哪一类、`BackendUnsupported` 的字段），必须：
 
 1. 更新本文件和 API 文档；
 2. 增加兼容性/回归测试；

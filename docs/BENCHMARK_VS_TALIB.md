@@ -9,7 +9,12 @@ TA-Lib is a long-lived production technical-analysis library with a C/C++ core, 
 - a **numerical compatibility reference** for overlapping indicators; and
 - a **direct native-performance competitor** for equivalent batch workloads.
 
-The comparison target used by the scheduled workflow is **TA-Lib 0.7.1**. When another version is used locally, that version must appear in `dist/bench/environment.json`.
+The comparison target used by the scheduled workflow is **TA-Lib C 0.8.1**, read
+at run time from `tests/contracts/talib_coverage_matrix_v1.json`
+(`talib_core_version`). The job fails rather than record evidence when the
+installed library disagrees with that pin, so the guardrail can never measure
+Finkit against a superseded upstream. When another version is used locally, that
+version must appear in `dist/bench/environment.json`.
 
 Official reference: <https://ta-lib.org/>.
 
@@ -100,11 +105,11 @@ cargo bench -p finkit --no-run --locked
 
 The dedicated `.github/workflows/competitive-benchmark.yml` runs weekly and manually:
 
-1. installs TA-Lib 0.7.1;
+1. resolves the pinned TA-Lib C version from `tests/contracts/talib_coverage_matrix_v1.json` and installs it;
 2. runs the paired Criterion suite;
 3. requires a non-empty benchmark set;
 4. blocks >25% competitor regressions;
-5. uploads report + JSON + environment evidence.
+5. verifies the installed version matches the pin, then uploads report + JSON + environment evidence.
 
 This separation is intentional: PR CI must stay reliable and fast enough for development, while direct native competitor measurements run in a reproducible dedicated workflow.
 
@@ -164,7 +169,7 @@ These workloads are where Finkit's Unified Runtime can create a structural advan
 
 Allowed:
 
-> On benchmark artifact X, Finkit SMA/RSI/etc. was Yx faster than TA-Lib 0.7.1 on the recorded runner.
+> On benchmark artifact X, Finkit SMA/RSI/etc. was Yx faster than TA-Lib on the recorded runner. (Name the TA-Lib version exactly as that artifact's `dist/bench/environment.json` records it — never hard-code a version into the claim.)
 
 Allowed:
 

@@ -277,6 +277,18 @@ execute(compiled, inputs, host, limits) -> ExecutionResult
 - 选择 Tree 时不再误报 Plan metrics；
 - 所有旧调用方行为有兼容测试。
 
+**当前状态（2026-09-26 复核）：部分落地。** 已实现的是"后端是契约"这一半：
+
+| 任务 | 状态 | 落点 |
+|---|---|---|
+| 1. `BackendRequest`（mode + fallback policy + dialect + host req + limits + output policy） | ❌ 未实现 | 目前只有 `execution_mode()` / `set_execution_mode()` / `with_execution_mode()` 三个入口；fallback policy 恒为"禁止回退"且不可配置 |
+| 2. 绕过 mode 的入口改为统一 dispatch | ✅ 已实现 | `FormulaEngine::require_tree_backend`（`core/src/formula/engine.rs`，13 个调用点） |
+| 3. 仅-tree 能力显式返回 | ⚠️ 部分 | 错误变体**实际形状是** `BackendUnsupported { backend, entry }`（`entry` 是入口名，不是 `capability`/`function`）；`TreeOnly` 结果 metadata **未实现** |
+| 4. 禁止"偷偷走 Tree" | ✅ 已实现 | 见 `plan_mode_fails_loudly_instead_of_falling_back` |
+| 5. `eval_simd` 保留为兼容别名、不宣称独立 backend | ✅ 已实现 | `eval_simd_alias_is_governed_like_eval` |
+
+因此**本文件第 3 条任务里写的 `BackendUnsupported { backend, capability, function }` 是设计稿，不是最终签名**；以 `core/src/error.rs` 的 `{ backend, entry }` 为准（`docs/formula-runtime-contract.md` §3.4 是权威描述）。剩余工作是把 `BackendRequest` 与 `TreeOnly` metadata 补上。
+
 ### Phase 3：完成 Plan capability closure
 
 **目标：** 让 Plan 从“部分生产候选”变成可按 capability 集合安全启用的生产路径。

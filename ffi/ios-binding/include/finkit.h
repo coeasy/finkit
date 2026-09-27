@@ -47,6 +47,27 @@ int32_t alpha_ta_detect_candlestick(const double *open, const double *high,
                                     const double *low, const double *close,
                                     int32_t len);
 
+// ---- research / quant evaluation (JSON contracts) --------------------------
+//
+// Both functions return a newly allocated NUL-terminated JSON document, or
+// `NULL` only when allocation fails; an invalid request is reported as an
+// error document, never as `NULL`. Release the result with
+// `finkit_ios_factor_study_free_string` — one free function serves both
+// entry points because both allocate the same way. Passing `NULL` to the free
+// function is a no-op.
+//
+// `alpha_ta_ffi_panic_test` is deliberately absent: it is compiled only under
+// `cfg(test)` and is not part of the shipped symbol set.
+
+/// Runs the factor-research JSON contract.
+char *finkit_ios_factor_study_json(const char *request_json);
+
+/// Runs the quantitative-evaluation JSON contract.
+char *finkit_ios_quant_evaluation_json(const char *request_json);
+
+/// Frees a string returned by either of the two functions above.
+void finkit_ios_factor_study_free_string(char *value);
+
 #ifdef __cplusplus
 }
 #endif

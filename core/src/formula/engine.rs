@@ -350,6 +350,35 @@ pub enum FormulaExecutionMode {
     Plan,
 }
 
+/// 公式引擎主入口
+///
+/// # Which entry points [`FormulaExecutionMode`] governs
+///
+/// The switch is a **backend contract**, so the split below is exhaustive and
+/// machine-checked by `core/tests/formula_execution_mode.rs`:
+///
+/// | Family | Entries | Under [`FormulaExecutionMode::Plan`] |
+/// |---|---|---|
+/// | Governed, plan-capable | `eval`, `eval_with_dialect`, `eval_with_params`, `eval_multi`, `eval_multi_with_dialect`, `eval_incremental`, `eval_simd`, `eval_batch`, `eval_batch_shared` | run on the plan backend |
+/// | Governed, tree-only | `eval_ast`, `eval_lazy`, `eval_parallel`, `eval_optimized`, `eval_with_debug`, `eval_template`, `eval_with_validation`, `eval_with_defaults`, `eval_zero_copy`, `eval_zero_copy_cached`, `eval_zero_alloc`, `eval_multi_with_pine_security` | [`FormulaError::BackendUnsupported`] |
+/// | Backend-explicit (never governed) | `eval_plan*`, `compile_plan*`, `eval_jit`, `compile_jit`, `execute_jit`, `compile_bytecode`, `execute_bytecode`, and every entry taking a `&CompiledFormula` (`execute`, `eval_into`, `eval_range`, `eval_range_zero_copy_inputs`, `eval_last`, `eval_zero_copy_inputs`, `execute_zero_copy_cached`) | runs the backend its argument type declares |
+///
+/// Two rules follow from that table:
+///
+/// 1. A *source-level* entry point never silently runs a backend the caller did
+///    not select. A tree-only one fails with
+///    [`FormulaError::BackendUnsupported`] naming itself and the selected
+///    backend.
+/// 2. An entry point whose argument is already a tree artifact
+///    (`CompiledFormula`, `AstNode`, `Bytecode`) is backend-explicit: building
+///    that artifact *is* the backend choice. Its plan counterpart is
+///    `compile_plan`/`eval_plan`.
+///
+/// # See also
+///
+/// [`FormulaEngine::execution_mode`] to query the selection,
+/// [`FormulaEngine::set_execution_mode`] to change it, and
+/// `docs/formula-runtime-contract.md` for the cross-language view.
 pub struct FormulaEngine {
     /// Execution path used by the `eval*` entry points.
     execution_mode: FormulaExecutionMode,
@@ -417,6 +446,28 @@ impl FormulaEngine {
     /// Execution path the `eval*` entry points currently use.
     pub const fn execution_mode(&self) -> FormulaExecutionMode {
         self.execution_mode
+    }
+
+    /// Whether the caller selected the compiled-plan backend.
+    fn plan_selected(&self) -> bool {
+        self.execution_mode == FormulaExecutionMode::Plan
+    }
+
+    /// Refuse a tree-only entry point while the caller selected `Plan`.
+    ///
+    /// [`FormulaExecutionMode`] is a backend contract, not a hint. An entry
+    /// point that only the tree-walker can serve must report that instead of
+    /// quietly running a backend the caller did not choose — see the enum
+    /// documentation for the exact split between governed and backend-explicit
+    /// entry points.
+    fn require_tree_backend(&self, entry: &'static str) -> Result<(), FormulaError> {
+        if self.plan_selected() {
+            return Err(FormulaError::BackendUnsupported {
+                backend: "plan".to_string(),
+                entry: entry.to_string(),
+            });
+        }
+        Ok(())
     }
 
     pub fn with_cache_size(cache_size: usize) -> Self {
@@ -1638,11 +1689,16 @@ impl FormulaEngine {
     /// maps Pine → AlphaTA `AstNode`) and hand the resulting node here, so
     /// Pine indicators reuse the full AlphaTA execution pipeline (bytecode,
     /// JIT, SIMD, partial-eval).
+    ///
+    /// Tree-only: an `AstNode` is a tree-walker artifact, so this reports
+    /// [`FormulaError::BackendUnsupported`] under
+    /// [`FormulaExecutionMode::Plan`] instead of silently walking the tree.
     pub fn eval_ast(
         &self,
         ast: &AstNode,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        self.require_tree_backend("eval_ast")?;
         ctx.validate_alignment()?;
         self.executor.execute(ast, ctx)
     }
@@ -1714,6 +1770,7 @@ impl FormulaEngine {
             | FormulaDialect::TongHuaShun
             | FormulaDialect::EastMoney => self.eval_multi(&normalized, ctx),
             FormulaDialect::Pine => {
+                self.require_tree_backend("eval_multi_with_dialect(Pine)")?;
                 let vars_before: std::collections::HashSet<Arc<str>> =
                     ctx.variables.keys().cloned().collect();
                 let ast = parse_formula_with_dialect(&normalized, dialect)
@@ -1740,6 +1797,7 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
         resolver: &dyn PineSecurityResolver,
     ) -> Result<MultiOutput, FormulaError> {
+        self.require_tree_backend("eval_multi_with_pine_security")?;
         let normalized = normalize_formula_source(source, FormulaDialect::Pine);
         let pine = parse_pine(&normalized)
             .map_err(|error| FormulaError::ParseError(format!("Pine parse error: {error}")))?;
@@ -1758,11 +1816,17 @@ impl FormulaEngine {
     }
 
     /// 惰性求值：通过依赖分析只计算最终输出所需的变量
+    ///
+    /// Tree-only: the pruning is an AST rewrite. Under
+    /// [`FormulaExecutionMode::Plan`] this reports
+    /// [`FormulaError::BackendUnsupported`] rather than silently walking the
+    /// tree; the plan backend already drops unreachable operations itself.
     pub fn eval_lazy(
         &mut self,
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        self.require_tree_backend("eval_lazy")?;
         let formula = self.compile(source)?;
         let pruned = DependencyAnalyzer::analyze_and_prune(&formula.ast);
         self.executor.execute(&pruned, ctx)
@@ -1784,11 +1848,17 @@ impl FormulaEngine {
 
     /// 并行计算：分析 AST 中的独立子表达式，并行求值无依赖的分支。
     /// 当 rayon feature 未启用时，退化为串行求值（结果一致）。
+    ///
+    /// Tree-only: parallelism is scheduled over the AST. Under
+    /// [`FormulaExecutionMode::Plan`] this reports
+    /// [`FormulaError::BackendUnsupported`] instead of silently walking the
+    /// tree.
     pub fn eval_parallel(
         &mut self,
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        self.require_tree_backend("eval_parallel")?;
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
         self.execute_parallel(&ast, ctx)
     }
@@ -1894,12 +1964,18 @@ impl FormulaEngine {
     }
 
     /// 验证参数并执行
+    ///
+    /// Tree-only: parameter rewriting happens on the AST before dispatch. Under
+    /// [`FormulaExecutionMode::Plan`] this reports
+    /// [`FormulaError::BackendUnsupported`]; use
+    /// [`Self::eval_with_params`], which the plan backend does implement.
     pub fn eval_with_validation(
         &mut self,
         source: &str,
         ctx: &mut FormulaContext,
         params: &ParamValues,
     ) -> Result<Array1<f64>, FormulaError> {
+        self.require_tree_backend("eval_with_validation")?;
         let formula = self.compile(source)?;
         let param_defs = parse_params(&formula.ast)?;
         validate_params(&param_defs, params)?;
@@ -1908,11 +1984,17 @@ impl FormulaEngine {
     }
 
     /// 使用默认参数执行
+    ///
+    /// Tree-only: parameter rewriting happens on the AST before dispatch. Under
+    /// [`FormulaExecutionMode::Plan`] this reports
+    /// [`FormulaError::BackendUnsupported`]; use
+    /// [`Self::eval_with_params`] with the declared defaults instead.
     pub fn eval_with_defaults(
         &mut self,
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        self.require_tree_backend("eval_with_defaults")?;
         let formula = self.compile(source)?;
         let param_defs = parse_params(&formula.ast)?;
         let defaults: ParamValues = param_defs
@@ -1925,6 +2007,11 @@ impl FormulaEngine {
 
     /// Batch evaluation: compute multiple formulas in a single pass.
     /// Shares the same context across all formulas, reducing data traversal overhead.
+    ///
+    /// The fused single-graph path is a tree-walker optimization (AST fusion
+    /// plus the expression optimizer), so it is skipped while the plan backend
+    /// is selected: each formula is evaluated through its own plan instead of
+    /// silently fusing ASTs behind the caller's back.
     pub fn eval_batch(
         &mut self,
         formulas: &[&str],
@@ -1934,23 +2021,31 @@ impl FormulaEngine {
             .iter()
             .map(|source| self.analyze(source))
             .collect::<Result<_, _>>()?;
-        if analyses
+        let all_effect_free = analyses
             .iter()
-            .all(|analysis| !analysis.has_observable_effects)
-        {
+            .all(|analysis| !analysis.has_observable_effects);
+        if all_effect_free && !self.plan_selected() {
             return self.eval_batch_shared_compiled(formulas, ctx);
         }
         let mut results: Vec<Option<Array1<f64>>> = vec![None; formulas.len()];
+        // A duplicated formula may only reuse an earlier result while nothing in
+        // the batch has mutated the context. One effectful formula can change a
+        // variable that a later duplicate reads, so a batch containing any
+        // observable effect is evaluated strictly in order and nothing is
+        // cached — previously every result was cached, which silently skipped
+        // the effects of a repeated formula.
         let mut completed: HashMap<String, Array1<f64>> = HashMap::new();
         for (index, &source) in formulas.iter().enumerate() {
-            if let Some(cached) = completed.get(source) {
-                results[index] = Some(cached.clone());
-                continue;
+            if all_effect_free {
+                if let Some(cached) = completed.get(source) {
+                    results[index] = Some(cached.clone());
+                    continue;
+                }
             }
             let result = self.eval(source, ctx)?;
-            // Reusing a result is only semantics-preserving for formulas that
-            // do not expose assignments, outputs or drawing side effects.
-            completed.insert(source.to_string(), result.clone());
+            if all_effect_free {
+                completed.insert(source.to_string(), result.clone());
+            }
             results[index] = Some(result);
         }
         Ok(results
@@ -2088,21 +2183,31 @@ impl FormulaEngine {
         Ok(exec_result.final_value)
     }
 
+    /// Tree-only: the optimization is an AST rewrite, so under
+    /// [`FormulaExecutionMode::Plan`] this reports
+    /// [`FormulaError::BackendUnsupported`] rather than silently walking the
+    /// tree.
     pub fn eval_optimized(
         &mut self,
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        self.require_tree_backend("eval_optimized")?;
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
         let optimized = FormulaOptimizer::optimize(&ast);
         self.executor.execute(&optimized, ctx)
     }
 
+    /// Tree-only: tracing instruments the tree-walker, so under
+    /// [`FormulaExecutionMode::Plan`] this reports
+    /// [`FormulaError::BackendUnsupported`] rather than silently walking the
+    /// tree.
     pub fn eval_with_debug(
         &mut self,
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<(Array1<f64>, FormulaDebugger), FormulaError> {
+        self.require_tree_backend("eval_with_debug")?;
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
         let mut debugger = FormulaDebugger::new();
         debugger.enable_trace();
@@ -2123,6 +2228,7 @@ impl FormulaEngine {
         name: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        self.require_tree_backend("eval_template")?;
         let tmpl = self
             .templates
             .get(name)
@@ -2191,6 +2297,7 @@ impl FormulaEngine {
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        self.require_tree_backend("eval_zero_copy")?;
         let formula = self.compile(source)?;
         self.executor.execute_zero_copy(&formula.ast, ctx)
     }
@@ -2201,6 +2308,7 @@ impl FormulaEngine {
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        self.require_tree_backend("eval_zero_copy_cached")?;
         let formula = self.compile(source)?;
         self.executor.execute_zero_copy_cached(&formula.ast, ctx)
     }
@@ -2210,6 +2318,7 @@ impl FormulaEngine {
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        self.require_tree_backend("eval_zero_alloc")?;
         let formula = self.compile(source)?;
         let val = self.executor.execute_val(&formula.ast, ctx)?;
         Ok(val.to_array(ctx.data_len))

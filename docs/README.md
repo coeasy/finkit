@@ -115,6 +115,7 @@ A target is only considered CI validated after its final-head job actually runs 
 | [troubleshooting.md](troubleshooting.md) | Failure isolation across install/runtime/native build paths |
 | [indicators.md](indicators.md) | Human-readable indicator reference |
 | [features.md](features.md) | Feature engineering API/module guide |
+| [quant-evaluation.md](quant-evaluation.md) | Shared returns/risk/performance evaluation stack and its per-language surface |
 
 Binding-specific source guides also live with their implementations, including `ffi/go-binding/README.md`, `ffi/dotnet-binding/README.md`, `ffi/android-binding/README.md`, `ffi/ios-binding/README.md`, and `wasm/README.md`.
 
@@ -128,6 +129,7 @@ Binding-specific source guides also live with their implementations, including `
 | [formula-runtime.md](formula-runtime.md) | Persistent compiled plans and incremental execution |
 | [formula-runtime-contract.md](formula-runtime-contract.md) | Ownership, `eval_range`, `eval_last`, append, warm-up composability, multi-path agreement and concurrency semantics |
 | [formula-templates.md](formula-templates.md) | Reusable formula patterns |
+| [formula-talib-contract.md](formula-talib-contract.md) | The formula runtime / TA-Lib catalog split: what "catalog entry" vs "runtime-registered" vs "numerically verified" each claim |
 | [formula-performance.md](formula-performance.md) | Formula optimization and benchmark notes |
 | [migration/pine-to-finkit.md](migration/pine-to-finkit.md) | Pine migration guidance and semantic boundaries |
 
@@ -157,10 +159,42 @@ For exact supported functions and Pine mappings, prefer generated catalogs over 
 | [BENCHMARK_VS_TALIB.md](BENCHMARK_VS_TALIB.md) | TA-Lib comparison and reproducibility contract |
 | [talib-0.8.0-coverage-audit-2026-09-19.md](talib-0.8.0-coverage-audit-2026-09-19.md) | TA-Lib Python 0.8.0 public-surface gap audit |
 | [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) | Checked-in historical benchmark snapshot |
+| [finkit-vs-talib-expanded-benchmark-results.md](finkit-vs-talib-expanded-benchmark-results.md) | Expanded installed-package benchmark snapshot |
+| [finkit-outperform-talib-architecture-v3.md](finkit-outperform-talib-architecture-v3.md) | **Live spec** — the speedup semantics `scripts/benchmark_talib_arch_v3_gate.py` encodes |
+| [finkit-vs-talib-performance-optimization-plan.md](finkit-vs-talib-performance-optimization-plan.md) | **Live spec** — backs `scripts/apply_talib_performance_plan.py` |
 | [FUZZING.md](FUZZING.md) | Fuzz targets and crash reproduction |
 | [development.md](development.md) | Build, test, benchmark, package and CI workflow |
 
 Benchmark values are measured snapshots, not universal latency/throughput guarantees. Re-run the benchmark harness on the target CPU/compiler/runtime before making production commitments. The scheduled `competitive-benchmark.yml` workflow produces commit-bound TA-Lib evidence; it complements, rather than replaces, correctness and regression gates in normal PR CI.
+
+## Dated analyses and roadmaps — records, not guidance
+
+These are dated snapshots: competitive analyses, roadmap proposals and progress
+matrices. They are kept for the record and are **not** descriptions of current
+behaviour; where one conflicts with the code, the code wins. They are listed
+here because a document nothing links to is unreachable, and an unreachable
+document is indistinguishable from one that was deleted.
+
+| Document | Date | What it records |
+| --- | --- | --- |
+| [competitive-analysis/竞品综合对比总览-2026-09-23.md](competitive-analysis/竞品综合对比总览-2026-09-23.md) | 2026-09-23 | Cross-competitor summary |
+| [competitive-analysis/竞品全景图-finkit-2026-09-23.md](competitive-analysis/竞品全景图-finkit-2026-09-23.md) | 2026-09-23 | Competitor landscape map |
+| [competitive-analysis/计算库竞品深入分析-finkit-2026-09-23.md](competitive-analysis/计算库竞品深入分析-finkit-2026-09-23.md) | 2026-09-23 | Deep dive: numeric libraries |
+| [competitive-analysis/公式系统竞品深入分析-finkit-2026-09-23.md](competitive-analysis/公式系统竞品深入分析-finkit-2026-09-23.md) | 2026-09-23 | Deep dive: formula systems |
+| [competitive-analysis/因子研究竞品深入分析-finkit-2026-09-23.md](competitive-analysis/因子研究竞品深入分析-finkit-2026-09-23.md) | 2026-09-23 | Deep dive: factor research |
+| [competitive-analysis/finkit-竞争战略与优先级排序-2026-09-23.md](competitive-analysis/finkit-竞争战略与优先级排序-2026-09-23.md) | 2026-09-23 | Strategy and prioritisation |
+| [competitive-analysis/finkit-差距分析与战略补足建议书-2026-09-23.md](competitive-analysis/finkit-差距分析与战略补足建议书-2026-09-23.md) | 2026-09-23 | Gap analysis and remediation proposal |
+| [competitive-analysis/finkit-全量覆盖与工业级收敛方案-2026-09-23.md](competitive-analysis/finkit-全量覆盖与工业级收敛方案-2026-09-23.md) | 2026-09-23 | Full-coverage convergence proposal |
+| [competitive-analysis/finkit-落地开发计划-2026-09-23.md](competitive-analysis/finkit-落地开发计划-2026-09-23.md) | 2026-09-23 | Implementation plan |
+| [chan-visualization-roadmap-zh.md](chan-visualization-roadmap-zh.md) | — | 缠论可视化路线图 |
+| [chart-improvement-plan-zh.md](chart-improvement-plan-zh.md) | — | 图表能力改进计划 |
+| [gpu-rendering-architecture-zh.md](gpu-rendering-architecture-zh.md) | — | GPU 渲染架构设想 |
+| [market-calendar-adapters-zh.md](market-calendar-adapters-zh.md) | — | 交易日历适配器方案 |
+| [upgrade-completion-matrix-zh.md](upgrade-completion-matrix-zh.md) | — | 升级完成度矩阵（进度快照） |
+
+Dated **architecture/refactor** plans live in [`archive/`](archive/README.md)
+instead, together with the list of documents that were deliberately kept out of
+the archive and why.
 
 ## Current refactor baseline
 

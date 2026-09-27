@@ -1,7 +1,16 @@
 // ─────────────────────────────────────────────────────────────────────
 // GENERATED FILE — do not edit by hand.
-// Source of truth: docs/indicator_registry.json (ffi.bodies.<lang>).
-// Regenerate with: python3 scripts/sync_bindings.py --lang dotnet --generate --rewrite
+// This file has no in-tree generator: the `ffi.bodies` block it used to come
+// from is not present in docs/indicator_registry.json or docs/ffi_registry.json,
+// and `scripts/sync_bindings.py` reports the `dotnet` language as DEFERRED, so
+// it stores no bodies to regenerate from. Edit it in place.
+//
+// Invariants that must hold for every function below:
+//   * 0 means success and a negative value means failure, so a panic at the
+//     boundary is mapped to a negative code, never to 0.
+//   * every write into a caller buffer is clamped to the smaller of the core
+//     result and the caller's `length`, so a shorter result cannot index past
+//     its own end (see `copy_result` in ffi/c-binding/src/lib.rs).
 // ─────────────────────────────────────────────────────────────────────
 
 #[no_mangle]
@@ -11,15 +20,16 @@ pub extern "C" fn ta_sma(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match moving_avg::sma(input_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -36,15 +46,16 @@ pub extern "C" fn ta_ema(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match moving_avg::ema(input_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -61,15 +72,16 @@ pub extern "C" fn ta_wma(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match moving_avg::wma(input_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -86,15 +98,16 @@ pub extern "C" fn ta_dema(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match moving_avg::dema(input_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -111,15 +124,16 @@ pub extern "C" fn ta_tema(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match moving_avg::tema(input_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -138,7 +152,7 @@ pub extern "C" fn ta_kama(
     slow_period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
@@ -150,8 +164,9 @@ if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         slow_period as usize,
     ) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -170,16 +185,17 @@ pub extern "C" fn ta_mama(
     out_mama: *mut c_double,
     out_fama: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out_mama.is_null() || out_fama.is_null() || length <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::mama(input_slice, fast_limit, slow_limit) {
         Ok(result) => {
-            let mama_slice = unsafe { std::slice::from_raw_parts_mut(out_mama, length as usize) };
-            let fama_slice = unsafe { std::slice::from_raw_parts_mut(out_fama, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.mama.len().min(result.fama.len()).min(length as usize);
+            let mama_slice = unsafe { std::slice::from_raw_parts_mut(out_mama, copy_len) };
+            let fama_slice = unsafe { std::slice::from_raw_parts_mut(out_fama, copy_len) };
+            for i in 0..copy_len {
                 mama_slice[i] = result.mama[i];
                 fama_slice[i] = result.fama[i];
             }
@@ -198,15 +214,16 @@ pub extern "C" fn ta_t3(
     vfactor: c_double,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::t3(input_slice, period as usize, vfactor) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -227,7 +244,7 @@ pub extern "C" fn ta_bbands(
     out_middle: *mut c_double,
     out_lower: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null()
         || out_upper.is_null()
         || out_middle.is_null()
@@ -240,11 +257,12 @@ if input.is_null()
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::bbands(input_slice, period as usize, nb_dev_up, nb_dev_dn) {
         Ok(result) => {
-            let upper_slice = unsafe { std::slice::from_raw_parts_mut(out_upper, length as usize) };
+            let copy_len = result.upper.len().min(result.middle.len()).min(result.lower.len()).min(length as usize);
+            let upper_slice = unsafe { std::slice::from_raw_parts_mut(out_upper, copy_len) };
             let middle_slice =
-                unsafe { std::slice::from_raw_parts_mut(out_middle, length as usize) };
-            let lower_slice = unsafe { std::slice::from_raw_parts_mut(out_lower, length as usize) };
-            for i in 0..length as usize {
+                unsafe { std::slice::from_raw_parts_mut(out_middle, copy_len) };
+            let lower_slice = unsafe { std::slice::from_raw_parts_mut(out_lower, copy_len) };
+            for i in 0..copy_len {
                 upper_slice[i] = result.upper[i];
                 middle_slice[i] = result.middle[i];
                 lower_slice[i] = result.lower[i];
@@ -263,15 +281,16 @@ pub extern "C" fn ta_rsi(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::rsi(input_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -292,7 +311,7 @@ pub extern "C" fn ta_macd(
     out_signal: *mut c_double,
     out_hist: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null()
         || out_macd.is_null()
         || out_signal.is_null()
@@ -309,11 +328,12 @@ if input.is_null()
         signal_period as usize,
     ) {
         Ok(result) => {
-            let macd_slice = unsafe { std::slice::from_raw_parts_mut(out_macd, length as usize) };
+            let copy_len = result.macd.len().min(result.signal.len()).min(result.hist.len()).min(length as usize);
+            let macd_slice = unsafe { std::slice::from_raw_parts_mut(out_macd, copy_len) };
             let signal_slice =
-                unsafe { std::slice::from_raw_parts_mut(out_signal, length as usize) };
-            let hist_slice = unsafe { std::slice::from_raw_parts_mut(out_hist, length as usize) };
-            for i in 0..length as usize {
+                unsafe { std::slice::from_raw_parts_mut(out_signal, copy_len) };
+            let hist_slice = unsafe { std::slice::from_raw_parts_mut(out_hist, copy_len) };
+            for i in 0..copy_len {
                 macd_slice[i] = result.macd[i];
                 signal_slice[i] = result.signal[i];
                 hist_slice[i] = result.hist[i];
@@ -337,7 +357,7 @@ pub extern "C" fn ta_stoch(
     out_k: *mut c_double,
     out_d: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if high.is_null()
         || low.is_null()
         || close.is_null()
@@ -359,9 +379,10 @@ if high.is_null()
         d_period as usize,
     ) {
         Ok(result) => {
-            let k_slice = unsafe { std::slice::from_raw_parts_mut(out_k, length as usize) };
-            let d_slice = unsafe { std::slice::from_raw_parts_mut(out_d, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.k.len().min(result.d.len()).min(length as usize);
+            let k_slice = unsafe { std::slice::from_raw_parts_mut(out_k, copy_len) };
+            let d_slice = unsafe { std::slice::from_raw_parts_mut(out_d, copy_len) };
+            for i in 0..copy_len {
                 k_slice[i] = result.k[i];
                 d_slice[i] = result.d[i];
             }
@@ -381,7 +402,7 @@ pub extern "C" fn ta_adx(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if high.is_null()
         || low.is_null()
         || close.is_null()
@@ -396,8 +417,9 @@ if high.is_null()
     let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
     match indicators::adx(high_slice, low_slice, close_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -416,7 +438,7 @@ pub extern "C" fn ta_aroon(
     out_up: *mut c_double,
     out_down: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if high.is_null()
         || low.is_null()
         || out_up.is_null()
@@ -430,9 +452,10 @@ if high.is_null()
     let low_slice = unsafe { std::slice::from_raw_parts(low, length as usize) };
     match indicators::aroon(high_slice, low_slice, period as usize) {
         Ok(result) => {
-            let up_slice = unsafe { std::slice::from_raw_parts_mut(out_up, length as usize) };
-            let down_slice = unsafe { std::slice::from_raw_parts_mut(out_down, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.aroon_up.len().min(result.aroon_down.len()).min(length as usize);
+            let up_slice = unsafe { std::slice::from_raw_parts_mut(out_up, copy_len) };
+            let down_slice = unsafe { std::slice::from_raw_parts_mut(out_down, copy_len) };
+            for i in 0..copy_len {
                 up_slice[i] = result.aroon_up[i];
                 down_slice[i] = result.aroon_down[i];
             }
@@ -452,7 +475,7 @@ pub extern "C" fn ta_cci(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if high.is_null()
         || low.is_null()
         || close.is_null()
@@ -467,8 +490,9 @@ if high.is_null()
     let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
     match indicators::cci(high_slice, low_slice, close_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -485,15 +509,16 @@ pub extern "C" fn ta_mom(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::mom(input_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -510,15 +535,16 @@ pub extern "C" fn ta_roc(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::roc(input_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -537,7 +563,7 @@ pub extern "C" fn ta_willr(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if high.is_null()
         || low.is_null()
         || close.is_null()
@@ -552,8 +578,9 @@ if high.is_null()
     let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
     match indicators::willr(high_slice, low_slice, close_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -572,7 +599,7 @@ pub extern "C" fn ta_atr(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if high.is_null()
         || low.is_null()
         || close.is_null()
@@ -587,8 +614,9 @@ if high.is_null()
     let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
     match indicators::atr(high_slice, low_slice, close_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -607,7 +635,7 @@ pub extern "C" fn ta_natr(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if high.is_null()
         || low.is_null()
         || close.is_null()
@@ -622,8 +650,9 @@ if high.is_null()
     let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
     match indicators::natr(high_slice, low_slice, close_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -641,7 +670,7 @@ pub extern "C" fn ta_trange(
     length: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if high.is_null() || low.is_null() || close.is_null() || out.is_null() || length <= 0 {
         return -1;
     }
@@ -650,8 +679,9 @@ if high.is_null() || low.is_null() || close.is_null() || out.is_null() || length
     let close_slice = unsafe { std::slice::from_raw_parts(close, length as usize) };
     match indicators::trange(high_slice, low_slice, close_slice) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -668,7 +698,7 @@ pub extern "C" fn ta_obv(
     length: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if close.is_null() || volume.is_null() || out.is_null() || length <= 0 {
         return -1;
     }
@@ -676,8 +706,9 @@ if close.is_null() || volume.is_null() || out.is_null() || length <= 0 {
     let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
     match indicators::obv(close_slice, volume_slice) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -696,7 +727,7 @@ pub extern "C" fn ta_ad(
     length: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if high.is_null()
         || low.is_null()
         || close.is_null()
@@ -712,8 +743,9 @@ if high.is_null()
     let volume_slice = unsafe { std::slice::from_raw_parts(volume, length as usize) };
     match indicators::ad(high_slice, low_slice, close_slice, volume_slice) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -729,15 +761,16 @@ pub extern "C" fn ta_ht_dcperiod(
     length: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::ht_dcperiod(input_slice) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -753,15 +786,16 @@ pub extern "C" fn ta_ht_dcphase(
     length: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::ht_dcphase(input_slice) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -778,18 +812,19 @@ pub extern "C" fn ta_ht_phasor(
     out_inphase: *mut c_double,
     out_quadrature: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out_inphase.is_null() || out_quadrature.is_null() || length <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::ht_phasor(input_slice) {
         Ok((in_phase, quadrature)) => {
+            let copy_len = in_phase.len().min(quadrature.len()).min(length as usize);
             let inphase_slice =
-                unsafe { std::slice::from_raw_parts_mut(out_inphase, length as usize) };
+                unsafe { std::slice::from_raw_parts_mut(out_inphase, copy_len) };
             let quadrature_slice =
-                unsafe { std::slice::from_raw_parts_mut(out_quadrature, length as usize) };
-            for i in 0..length as usize {
+                unsafe { std::slice::from_raw_parts_mut(out_quadrature, copy_len) };
+            for i in 0..copy_len {
                 inphase_slice[i] = in_phase[i];
                 quadrature_slice[i] = quadrature[i];
             }
@@ -807,16 +842,17 @@ pub extern "C" fn ta_ht_sine(
     out_sine: *mut c_double,
     out_lead: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out_sine.is_null() || out_lead.is_null() || length <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::ht_sine(input_slice) {
         Ok((sine, lead_sine)) => {
-            let sine_slice = unsafe { std::slice::from_raw_parts_mut(out_sine, length as usize) };
-            let lead_slice = unsafe { std::slice::from_raw_parts_mut(out_lead, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = sine.len().min(lead_sine.len()).min(length as usize);
+            let sine_slice = unsafe { std::slice::from_raw_parts_mut(out_sine, copy_len) };
+            let lead_slice = unsafe { std::slice::from_raw_parts_mut(out_lead, copy_len) };
+            for i in 0..copy_len {
                 sine_slice[i] = sine[i];
                 lead_slice[i] = lead_sine[i];
             }
@@ -833,15 +869,16 @@ pub extern "C" fn ta_ht_trendmode(
     length: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::ht_trendmode(input_slice) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -857,15 +894,16 @@ pub extern "C" fn ta_ht_trendline(
     length: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::ht_trendline(input_slice) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -882,15 +920,16 @@ pub extern "C" fn ta_zscore(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::zscore(input_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -908,7 +947,7 @@ pub extern "C" fn ta_beta(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if asset.is_null() || benchmark.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
@@ -916,8 +955,9 @@ if asset.is_null() || benchmark.is_null() || out.is_null() || length <= 0 || per
     let benchmark_slice = unsafe { std::slice::from_raw_parts(benchmark, length as usize) };
     match indicators::beta(asset_slice, benchmark_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -935,7 +975,7 @@ pub extern "C" fn ta_correlation(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input_a.is_null() || input_b.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
@@ -943,8 +983,9 @@ if input_a.is_null() || input_b.is_null() || out.is_null() || length <= 0 || per
     let b_slice = unsafe { std::slice::from_raw_parts(input_b, length as usize) };
     match indicators::correlation(a_slice, b_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -961,15 +1002,16 @@ pub extern "C" fn ta_tsf(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::tsf(input_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -986,15 +1028,16 @@ pub extern "C" fn ta_linear_reg(
     period: c_int,
     out: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if input.is_null() || out.is_null() || length <= 0 || period <= 0 {
         return -1;
     }
     let input_slice = unsafe { std::slice::from_raw_parts(input, length as usize) };
     match indicators::linearreg(input_slice, period as usize) {
         Ok(result) => {
-            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, length as usize) };
-            for i in 0..length as usize {
+            let copy_len = result.len().min(length as usize);
+            let out_slice = unsafe { std::slice::from_raw_parts_mut(out, copy_len) };
+            for i in 0..copy_len {
                 out_slice[i] = result[i];
             }
             0
@@ -1016,7 +1059,7 @@ pub extern "C" fn ta_darvas_box(
     out_bottom: *mut c_double,
     out_signal: *mut c_int,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if high.is_null() || low.is_null() || close.is_null() || length <= 0 {
         return -1;
     }
@@ -1029,21 +1072,13 @@ if high.is_null() || low.is_null() || close.is_null() || length <= 0 {
         match indicators::darvas_box(h, l, c, lb, conf) {
             Ok(r) => {
                 if !out_top.is_null() {
-                    std::ptr::copy_nonoverlapping(r.box_top.as_ptr(), out_top, length as usize);
+                    std::ptr::copy_nonoverlapping(r.box_top.as_ptr(), out_top, r.box_top.len().min(length as usize));
                 }
                 if !out_bottom.is_null() {
-                    std::ptr::copy_nonoverlapping(
-                        r.box_bottom.as_ptr(),
-                        out_bottom,
-                        length as usize,
-                    );
+                    std::ptr::copy_nonoverlapping(r.box_bottom.as_ptr(), out_bottom, r.box_bottom.len().min(length as usize));
                 }
                 if !out_signal.is_null() {
-                    std::ptr::copy_nonoverlapping(
-                        r.signal.as_ptr(),
-                        out_signal,
-                        length as usize,
-                    );
+                    std::ptr::copy_nonoverlapping(r.signal.as_ptr(), out_signal, r.signal.len().min(length as usize));
                 }
                 0
             }
@@ -1062,7 +1097,7 @@ pub extern "C" fn ta_renko(
     out_bricks: *mut c_double,
     out_dir: *mut c_int,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if high.is_null() || low.is_null() || out_bricks.is_null() || length <= 0 || box_size <= 0.0 {
         return -1;
     }
@@ -1071,9 +1106,9 @@ if high.is_null() || low.is_null() || out_bricks.is_null() || length <= 0 || box
         let l = std::slice::from_raw_parts(low, length as usize);
         match indicators::renko(h, l, box_size) {
             Ok(r) => {
-                std::ptr::copy_nonoverlapping(r.bricks.as_ptr(), out_bricks, length as usize);
+                std::ptr::copy_nonoverlapping(r.bricks.as_ptr(), out_bricks, r.bricks.len().min(length as usize));
                 if !out_dir.is_null() {
-                    std::ptr::copy_nonoverlapping(r.direction.as_ptr(), out_dir, length as usize);
+                    std::ptr::copy_nonoverlapping(r.direction.as_ptr(), out_dir, r.direction.len().min(length as usize));
                 }
                 0
             }
@@ -1091,7 +1126,7 @@ pub extern "C" fn ta_kagi(
     out_kagi: *mut c_double,
     out_dir: *mut c_int,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if close.is_null() || out_kagi.is_null() || length <= 0 || reversal <= 0.0 {
         return -1;
     }
@@ -1099,9 +1134,9 @@ if close.is_null() || out_kagi.is_null() || length <= 0 || reversal <= 0.0 {
         let c = std::slice::from_raw_parts(close, length as usize);
         match indicators::kagi(c, reversal) {
             Ok(r) => {
-                std::ptr::copy_nonoverlapping(r.kagi.as_ptr(), out_kagi, length as usize);
+                std::ptr::copy_nonoverlapping(r.kagi.as_ptr(), out_kagi, r.kagi.len().min(length as usize));
                 if !out_dir.is_null() {
-                    std::ptr::copy_nonoverlapping(r.direction.as_ptr(), out_dir, length as usize);
+                    std::ptr::copy_nonoverlapping(r.direction.as_ptr(), out_dir, r.direction.len().min(length as usize));
                 }
                 0
             }
@@ -1122,7 +1157,7 @@ pub extern "C" fn ta_point_and_figure(
     out_col: *mut c_int,
     out_new: *mut c_int,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if high.is_null() || low.is_null() || out_pnf.is_null() || length <= 0 || box_size <= 0.0 {
         return -1;
     }
@@ -1132,12 +1167,12 @@ if high.is_null() || low.is_null() || out_pnf.is_null() || length <= 0 || box_si
         let rev = if reversal > 0 { reversal as usize } else { 3 };
         match indicators::point_and_figure(h, l, box_size, rev) {
             Ok(r) => {
-                std::ptr::copy_nonoverlapping(r.pnf.as_ptr(), out_pnf, length as usize);
+                std::ptr::copy_nonoverlapping(r.pnf.as_ptr(), out_pnf, r.pnf.len().min(length as usize));
                 if !out_col.is_null() {
-                    std::ptr::copy_nonoverlapping(r.column_type.as_ptr(), out_col, length as usize);
+                    std::ptr::copy_nonoverlapping(r.column_type.as_ptr(), out_col, r.column_type.len().min(length as usize));
                 }
                 if !out_new.is_null() {
-                    std::ptr::copy_nonoverlapping(r.new_column.as_ptr(), out_new, length as usize);
+                    std::ptr::copy_nonoverlapping(r.new_column.as_ptr(), out_new, r.new_column.len().min(length as usize));
                 }
                 0
             }
@@ -1155,7 +1190,7 @@ pub extern "C" fn ta_three_line_break(
     out_line: *mut c_double,
     out_dir: *mut c_int,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if close.is_null() || out_line.is_null() || length <= 0 || lines <= 0 {
         return -1;
     }
@@ -1163,9 +1198,9 @@ if close.is_null() || out_line.is_null() || length <= 0 || lines <= 0 {
         let c = std::slice::from_raw_parts(close, length as usize);
         match indicators::three_line_break(c, lines as usize) {
             Ok(r) => {
-                std::ptr::copy_nonoverlapping(r.line.as_ptr(), out_line, length as usize);
+                std::ptr::copy_nonoverlapping(r.line.as_ptr(), out_line, r.line.len().min(length as usize));
                 if !out_dir.is_null() {
-                    std::ptr::copy_nonoverlapping(r.direction.as_ptr(), out_dir, length as usize);
+                    std::ptr::copy_nonoverlapping(r.direction.as_ptr(), out_dir, r.direction.len().min(length as usize));
                 }
                 0
             }
@@ -1183,7 +1218,7 @@ pub extern "C" fn ta_williams_alligator(
     out_teeth: *mut c_double,
     out_lips: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if close.is_null() || out_jaw.is_null() || out_teeth.is_null() || out_lips.is_null() || length <= 0 {
         return -1;
     }
@@ -1191,9 +1226,9 @@ if close.is_null() || out_jaw.is_null() || out_teeth.is_null() || out_lips.is_nu
         let c = std::slice::from_raw_parts(close, length as usize);
         match indicators::williams_alligator(c) {
             Ok(r) => {
-                std::ptr::copy_nonoverlapping(r.jaw.as_ptr(), out_jaw, length as usize);
-                std::ptr::copy_nonoverlapping(r.teeth.as_ptr(), out_teeth, length as usize);
-                std::ptr::copy_nonoverlapping(r.lips.as_ptr(), out_lips, length as usize);
+                std::ptr::copy_nonoverlapping(r.jaw.as_ptr(), out_jaw, r.jaw.len().min(length as usize));
+                std::ptr::copy_nonoverlapping(r.teeth.as_ptr(), out_teeth, r.teeth.len().min(length as usize));
+                std::ptr::copy_nonoverlapping(r.lips.as_ptr(), out_lips, r.lips.len().min(length as usize));
                 0
             }
             Err(_) => -2,
@@ -1214,7 +1249,7 @@ pub extern "C" fn ta_heikin_ashi(
     out_l: *mut c_double,
     out_c: *mut c_double,
 ) -> c_int {
-    ffi_catch_i32(|| {
+    ffi_catch_i32_neg(|| {
 if open.is_null() || high.is_null() || low.is_null() || close.is_null() || length <= 0 {
         return -1;
     }
@@ -1226,16 +1261,16 @@ if open.is_null() || high.is_null() || low.is_null() || close.is_null() || lengt
         match indicators::heikin_ashi(o, h, l, c) {
             Ok(r) => {
                 if !out_o.is_null() {
-                    std::ptr::copy_nonoverlapping(r.ha_open.as_ptr(), out_o, length as usize);
+                    std::ptr::copy_nonoverlapping(r.ha_open.as_ptr(), out_o, r.ha_open.len().min(length as usize));
                 }
                 if !out_h.is_null() {
-                    std::ptr::copy_nonoverlapping(r.ha_high.as_ptr(), out_h, length as usize);
+                    std::ptr::copy_nonoverlapping(r.ha_high.as_ptr(), out_h, r.ha_high.len().min(length as usize));
                 }
                 if !out_l.is_null() {
-                    std::ptr::copy_nonoverlapping(r.ha_low.as_ptr(), out_l, length as usize);
+                    std::ptr::copy_nonoverlapping(r.ha_low.as_ptr(), out_l, r.ha_low.len().min(length as usize));
                 }
                 if !out_c.is_null() {
-                    std::ptr::copy_nonoverlapping(r.ha_close.as_ptr(), out_c, length as usize);
+                    std::ptr::copy_nonoverlapping(r.ha_close.as_ptr(), out_c, r.ha_close.len().min(length as usize));
                 }
                 0
             }

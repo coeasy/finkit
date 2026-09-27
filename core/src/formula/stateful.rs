@@ -516,6 +516,13 @@ impl FormulaStatementState {
                     let mut current = *start;
                     let mut iterations = 0usize;
                     loop {
+                        // Defensive backstop only. `compile_program_nodes`
+                        // rejects a FOR whose constant bound exceeds
+                        // `STATEFUL_MAX_LOOP_ITERATIONS` before this statement
+                        // is ever built, so a validated program cannot reach
+                        // this branch. It returns NaN rather than an error
+                        // because `next` has no error channel; the loud
+                        // rejection happens at construction time.
                         if iterations >= STATEFUL_MAX_LOOP_ITERATIONS {
                             return f64::NAN;
                         }

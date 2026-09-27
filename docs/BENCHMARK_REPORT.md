@@ -55,7 +55,7 @@
 - `core/tests/performance_regression.rs` — O(n) 相对复杂度、HT_SINE release throughput、DirtyRange 行级效率与 full-equivalence；
 - `core/benches/talib_c_comparison.rs` — Finkit vs TA-Lib C 配对基准；
 - `scripts/bench_report.py` — schema、paired-row 校验与 competitor gate；
-- `.github/workflows/competitive-benchmark.yml` — 定期 TA-Lib 0.7.1 head-to-head 证据。
+- `.github/workflows/competitive-benchmark.yml` — 定期 head-to-head 证据；安装的 TA-Lib C 版本由 `tests/contracts/talib_coverage_matrix_v1.json` 的 `talib_core_version`（当前 `0.8.1`）在运行时决定，版本不符则拒绝记录证据。
 
 ---
 

@@ -7,9 +7,13 @@
 use crate::error::Result;
 use ndarray::Array1;
 
-/// Commodity Channel Index using the TA-Lib 0.7.1 circular-buffer operation
+/// Commodity Channel Index using the TA-Lib 0.8.1 circular-buffer operation
 /// order. This avoids the float-reordering drift of the sorted-window research
 /// implementation while also reducing overhead for the common small periods.
+///
+/// The version above is the pinned `talib_core_version` in
+/// `tests/contracts/talib_coverage_matrix_v1.json`, i.e. the release the
+/// `golden_talib_cci` parity test compares against.
 pub fn cci(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
     crate::math::cci::cci(high, low, close, period).map(Array1::from_vec)
 }

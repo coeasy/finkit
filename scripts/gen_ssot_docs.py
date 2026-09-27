@@ -39,6 +39,7 @@ FORMULA_FUNCTION_SOURCES = (
 )
 FEATURES_MOD = ROOT / "core" / "src" / "features" / "mod.rs"
 PINE_BUILTIN = ROOT / "core" / "src" / "formula" / "pine" / "builtin_table.rs"
+TEMPLATES_SOURCE = ROOT / "core" / "src" / "formula" / "templates.rs"
 FFI_LIB = ROOT / "ffi" / "c-binding" / "src" / "lib.rs"
 WORKSPACE_CARGO = ROOT / "Cargo.toml"
 DOTNET_PROJECT = ROOT / "ffi" / "dotnet-binding" / "src" / "Finkit" / "Finkit.csproj"
@@ -55,6 +56,7 @@ OUT_STREAMING = GENERATED_DIR / "streaming-indicators.md"
 OUT_FORMULA = GENERATED_DIR / "formula-functions.md"
 OUT_FEATURES = GENERATED_DIR / "features.md"
 OUT_PINE = GENERATED_DIR / "pine-compatibility.md"
+OUT_TEMPLATES = GENERATED_DIR / "formula-templates.md"
 OUT_ERROR_CODES = GENERATED_DIR / "error-codes.md"
 OUT_VERSION_MATRIX = GENERATED_DIR / "version-matrix.md"
 
@@ -81,6 +83,16 @@ class BenchStats:
     mean_ns: float | None
     median_ns: float | None
     stddev_ns: float | None
+
+
+@dataclass
+class TemplateRecord:
+    key: str
+    name: str
+    description: str
+    category: str
+    source: str
+    parameters: list[tuple[str, float, float, float]]
 
 
 def read_workspace_version() -> str:
@@ -268,6 +280,107 @@ def parse_formula_functions() -> list[str]:
                 registered.update(alias_re.findall(match.group(2)))
 
     return sorted(registered)
+
+
+def parse_formula_templates() -> list["TemplateRecord"]:
+    """Parse the built-in formula template library for a complete catalogue.
+
+    Every template is one `map.insert("<key>".to_string(), FormulaTemplate { .. })`
+    literal, so the fields are read straight out of that block rather than from a
+    hand-maintained table. An earlier version of `docs/formula-templates.md`
+    documented 79 templates of which 16 named keys that do not exist, which is
+    exactly the drift this generator removes.
+    """
+    if not TEMPLATES_SOURCE.is_file():
+        return []
+
+    text = TEMPLATES_SOURCE.read_text(encoding="utf-8")
+    blocks = text.split("map.insert(")[1:]
+    # Rustfmt wraps long literals, so the `"..."` and its `.to_string()` call are
+    # frequently on different lines: every field regex has to allow whitespace
+    # between the closing quote and the method call.
+    str_field = lambda name, block: (  # noqa: E731 - local shorthand
+        re.search(rf'{name}:\s*"((?:[^"\\]|\\.)*)"\s*\.to_string\(\)', block)
+    )
+    records: list[TemplateRecord] = []
+    for block in blocks:
+        key = re.search(r'^\s*"((?:[^"\\]|\\.)*)"\s*\.to_string\(\)', block, re.M)
+        category = re.search(r"category:\s*TemplateCategory::(\w+)", block)
+        source = str_field("source", block)
+        if not (key and category and source):
+            continue
+        name = str_field("name", block)
+        description = str_field("description", block)
+        params = re.findall(
+            r'\("((?:[^"\\]|\\.)*)"\.to_string\(\),\s*'
+            r"(-?[\d.]+),\s*(-?[\d.]+),\s*(-?[\d.]+)\)",
+            block,
+        )
+        records.append(
+            TemplateRecord(
+                key=key.group(1),
+                name=name.group(1) if name else "",
+                description=description.group(1) if description else "",
+                category=category.group(1),
+                source=source.group(1),
+                parameters=[(p[0], float(p[1]), float(p[2]), float(p[3])) for p in params],
+            )
+        )
+    return sorted(records, key=lambda record: (record.category, record.key))
+
+
+def format_templates_md(records: list["TemplateRecord"]) -> str:
+    """Render the template catalogue, grouped by category."""
+    by_category: dict[str, list[TemplateRecord]] = {}
+    for record in records:
+        by_category.setdefault(record.category, []).append(record)
+
+    lines: list[str] = [
+        "# Built-in Formula Template Catalogue",
+        "",
+        f"**{len(records)} templates in {len(by_category)} categories.**",
+        "",
+        "Generated from `core/src/formula/templates.rs` by",
+        "`python scripts/gen_ssot_docs.py --generate`; the CI gate",
+        "`python scripts/gen_ssot_docs.py --check` fails when this file and the",
+        "source disagree. Do not edit it by hand.",
+        "",
+        "The `Key` column is the argument to `FormulaTemplates::get` (Rust),",
+        "`formula_get_template` (Python) and `formulaGetTemplate` (Node).",
+        "",
+        "## Categories",
+        "",
+        "| Category | Templates |",
+        "|----------|-----------|",
+    ]
+    for category in sorted(by_category):
+        lines.append(f"| `{category}` | {len(by_category[category])} |")
+    lines.append("")
+
+    for category in sorted(by_category):
+        lines.append(f"## {category}")
+        lines.append("")
+        for record in by_category[category]:
+            lines.append(f"### `{record.key}` — {record.name}")
+            lines.append("")
+            if record.description:
+                lines.append(record.description)
+                lines.append("")
+            lines.append("```text")
+            lines.append(record.source)
+            lines.append("```")
+            lines.append("")
+            if record.parameters:
+                lines.append("| Parameter | Default | Min | Max |")
+                lines.append("|-----------|---------|-----|-----|")
+                for param_name, default, minimum, maximum in record.parameters:
+                    lines.append(
+                        f"| `{param_name}` | {default:g} | {minimum:g} | {maximum:g} |"
+                    )
+                lines.append("")
+        lines.append("")
+
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def parse_features_modules() -> list[str]:
@@ -811,6 +924,7 @@ def generate_all(criterion_dir: Path) -> dict[Path, str]:
     formula_functions = parse_formula_functions()
     features_modules = parse_features_modules()
     pine_builtins = parse_pine_builtins()
+    formula_templates = parse_formula_templates()
 
     outputs = {
         OUT_INDICATORS: format_indicators_md(catalog),
@@ -837,6 +951,10 @@ def generate_all(criterion_dir: Path) -> dict[Path, str]:
     # Add Pine compatibility doc if data available
     if pine_builtins:
         outputs[OUT_PINE] = format_pine_md(pine_builtins)
+
+    # Add the formula template catalogue if data available
+    if formula_templates:
+        outputs[OUT_TEMPLATES] = format_templates_md(formula_templates)
 
     return outputs
 

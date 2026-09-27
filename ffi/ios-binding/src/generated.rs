@@ -1,7 +1,11 @@
 // ─────────────────────────────────────────────────────────────────────
 // GENERATED FILE — do not edit by hand.
-// Source of truth: docs/indicator_registry.json (ffi.bodies.<lang>).
-// Regenerate with: python3 scripts/sync_bindings.py --lang ios --generate --rewrite
+// This file has no in-tree generator: the `ffi.bodies` block it used to come
+// from is not present in docs/indicator_registry.json or docs/ffi_registry.json,
+// and `scripts/sync_bindings.py` reports the `ios` language as DEFERRED, so it
+// stores no bodies to regenerate from. Edit it in place, and keep the error
+// contract below in sync with `ffi/c-binding/src/generated.rs`: a core failure
+// must return -1, never a success code with the caller's buffer left untouched.
 // ─────────────────────────────────────────────────────────────────────
 
 #[no_mangle]
@@ -16,7 +20,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = moving_avg::sma(data, period as usize).unwrap_or_default();
+    let result = match moving_avg::sma(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -36,7 +43,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = moving_avg::ema(data, period as usize).unwrap_or_default();
+    let result = match moving_avg::ema(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -56,7 +66,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = moving_avg::wma(data, period as usize).unwrap_or_default();
+    let result = match moving_avg::wma(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -76,7 +89,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = moving_avg::dema(data, period as usize).unwrap_or_default();
+    let result = match moving_avg::dema(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -96,7 +112,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = moving_avg::tema(data, period as usize).unwrap_or_default();
+    let result = match moving_avg::tema(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -116,7 +135,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = indicators::midpoint(data, period as usize).unwrap_or_default();
+    let result = match indicators::midpoint(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -136,7 +158,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = indicators::rsi(data, period as usize).unwrap_or_default();
+    let result = match indicators::rsi(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -156,7 +181,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = indicators::mom(data, period as usize).unwrap_or_default();
+    let result = match indicators::mom(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -176,7 +204,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = indicators::roc(data, period as usize).unwrap_or_default();
+    let result = match indicators::roc(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -196,7 +227,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = indicators::cmo(data, period as usize).unwrap_or_default();
+    let result = match indicators::cmo(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -216,7 +250,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = indicators::trix(data, period as usize).unwrap_or_default();
+    let result = match indicators::trix(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -236,7 +273,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = indicators::zscore(data, period as usize).unwrap_or_default();
+    let result = match indicators::zscore(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -256,7 +296,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = indicators::tsf(data, period as usize).unwrap_or_default();
+    let result = match indicators::tsf(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -276,7 +319,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = indicators::linearreg(data, period as usize).unwrap_or_default();
+    let result = match indicators::linearreg(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }
@@ -296,7 +342,10 @@ if input.is_null() || out.is_null() || period <= 0 || len < period {
         return -1;
     }
     let data = from_raw(input, len);
-    let result = indicators::percent_rank(data, period as usize).unwrap_or_default();
+    let result = match indicators::percent_rank(data, period as usize) {
+        Ok(result) => result,
+        Err(_) => return -1,
+    };
     if !write_result(out, result.as_slice().unwrap()) {
         return -1;
     }

@@ -16,7 +16,7 @@ Defined in `ffi/c-binding/src/lib.rs` as `#[repr(i32)]` for stable ABI:
 | `-5` | `InvalidUtf8` | C string argument is not valid UTF-8 |
 | `-99` | `Unknown` | Unclassified error |
 
-Retrieve the most recent code on the current thread with `ta_last_error_code()`. Human-readable detail is available from `ta_last_error()` (allocate with `ta_last_error`, release with `alphata_free_string`).
+Retrieve the most recent code on the current thread with `ta_last_error_code()`. Human-readable detail is available from `ta_last_error()` (allocate with `ta_last_error`, release with `finkit_free_string`).
 
 ## Legacy and detailed codes (`ta_last_error_code`)
 
@@ -38,7 +38,25 @@ For backward compatibility, many functions still return legacy negative codes di
 | `52` | Formula | Type mismatch |
 | `53` | Formula | Timeout |
 | `54` | Formula | Memory limit |
-| `55`–`59` | Formula | Tuple-style compatibility variants |
+| `55` | Formula | Insufficient data (tuple-style compatibility variant) |
+| `56` | Formula | Invalid parameter (tuple-style compatibility variant) |
+| `57` | Formula | Runtime error (tuple-style compatibility variant) |
+| `58` | Formula | Invalid operation (tuple-style compatibility variant) |
+| `59` | Formula | Parse error (tuple-style compatibility variant) |
+| `60` | Formula | Unsupported function (tuple-style compatibility variant) |
+| `61` | Formula | **Backend unsupported** — the selected `FormulaExecutionMode` cannot serve the entry point |
+
+The formula tier is `FFI_FORMULA_BASE (50) + formula_error_code(variant)`, and
+`formula_error_code` has **11** arms (offsets `0`–`10`), so the tier runs
+`50`–`61`. Codes `60` and `61` were previously undocumented, and `55`–`59` were
+collapsed into a single vague row.
+
+`61` is the one to handle explicitly: it means the caller asked for
+`FormulaExecutionMode::Plan` on an entry point that is tree-only (for example
+`eval_ast`, `eval_lazy`, `eval_template`, `eval_with_params`). It is a
+*programming* error, not a data error — retry with the tree backend or call
+`eval` instead. See
+[`../formula-runtime-contract.md`](../formula-runtime-contract.md).
 
 When a Rust panic is caught at the boundary, both the function return (where applicable) and `ta_last_error_code()` use **`FfiStatus::InternalError` (`-4`)**, and `ta_last_error()` contains `"internal error: panic at FFI boundary"`.
 

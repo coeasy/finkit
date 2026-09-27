@@ -1,6 +1,21 @@
 # FFI Memory Ownership Contract
 
-This document describes memory ownership for every `extern "C"` export in `ffi/c-binding/src/lib.rs`. It is the authoritative reference for C/C++/language-binding authors integrating Finkit.
+This document describes memory ownership for every shipped `extern "C"` export in
+`ffi/c-binding/src/` — `lib.rs` (fixed-template entry points), `generated.rs`
+(one `ta_*` per indicator) and `research.rs` (factor-study / quant-evaluation
+JSON). It is the authoritative reference for C/C++/language-binding authors
+integrating Finkit. `scripts/gen_c_header.py --check` enforces that the set of
+exports matches `ffi/c-binding/include/*.h`, so this document describes the same
+99 symbols the header declares.
+
+> An earlier revision described a `alphata_*` chart API
+> (`alphata_kline_data_new`, `alphata_kline_chart_add_ma`, …) and a free function
+> `alphata_free_string`. **None of those symbols exist** in any binding. The
+> kline-chart surface is implemented for the Java binding and the CLI only; the
+> C ABI has never exposed it. That revision also omitted the entire JSON-contract
+> surface (`ta_formula_*_contract_json`, `ta_factor_*_json`, …) and the research
+> surface, so 18 real exports had no documented ownership. Both are corrected
+> below.
 
 ## Ownership vocabulary
 
@@ -10,17 +25,36 @@ This document describes memory ownership for every `extern "C"` export in `ffi/c
 | **caller-owned** | Caller allocates and owns the resource before and after the call. For output buffers, caller must pre-allocate `len` elements (`f64` or `i32` as documented). |
 | **callee-owned** | Library allocates; caller receives ownership and must release with the matching free function. |
 
-## String and handle free functions
+## String free functions
 
-| Returned / created by | Release with | Notes |
-|----------------------|--------------|-------|
-| `ta_version()` | `alphata_free_string()` | NUL-terminated version string (`CString`). |
-| `ta_last_error()` | `alphata_free_string()` | Per-thread error message snapshot. |
-| `alphata_kline_chart_to_svg()` | `alphata_free_string()` | SVG document in memory. |
-| `alphata_kline_data_new()` | `alphata_kline_data_free()` | Opaque `i64` handle (`0` = failure). |
-| `alphata_kline_chart_new()` | `alphata_kline_chart_free()` | Opaque `i64` handle (`0` = failure). |
+There is exactly **one** allocator and therefore one free function per string
+family. All of them wrap `CString::into_raw`, so any of the string free
+functions can release any of these strings; the specific one to call is listed
+for clarity, not because the others would be wrong.
 
-**Never** pass the same pointer to `alphata_free_string()` twice. **Never** mix free functions (e.g. do not `free()` a string returned by `ta_version()`).
+| Returned by | Release with | Notes |
+|-------------|--------------|-------|
+| `ta_version()` | `finkit_free_string()` | NUL-terminated version string. |
+| `ta_last_error()` | `finkit_free_string()` | Per-thread error message snapshot. |
+| `ta_operation_catalog_json()` | `finkit_free_string()` | Operation catalog JSON. |
+| `ta_factor_catalog_json()` | `finkit_free_string()` | Factor catalog JSON. |
+| `ta_operation_execute_json()` | `finkit_free_string()` | Execution result JSON. |
+| `ta_factor_execute_json()` | `finkit_free_string()` | Factor result JSON. |
+| `ta_factor_cross_sectional_execute_json()` | `finkit_free_string()` | Cross-sectional factor JSON. |
+| `ta_factor_stream_execute_json()` | `finkit_free_string()` | Streaming factor JSON. |
+| `ta_composite_execute_json()` | `finkit_free_string()` | Composite result JSON. |
+| `ta_composite_stream_execute_json()` | `finkit_free_string()` | Streaming composite JSON. |
+| `ta_formula_eval_contract_json()` | `finkit_free_string()` | Formula evaluation JSON. |
+| `ta_formula_eval_temporal_contract_json()` | `finkit_free_string()` | Temporal-contract JSON. |
+| `ta_formula_eval_panel_contract_json()` | `finkit_free_string()` | Panel-contract JSON. |
+| `ta_formula_eval_cross_sectional_contract_json()` | `finkit_free_string()` | Cross-sectional contract JSON. |
+| `ta_formula_stream_execute_json()` | `finkit_free_string()` | Streaming formula JSON. |
+| `ta_formula_compatibility_report_json()` | `finkit_free_string()` | Compatibility report JSON. |
+| `finkit_factor_study_json()` | `finkit_factor_study_free_string()` | Factor-research JSON. |
+| `finkit_quant_evaluation_json()` | `finkit_factor_study_free_string()` | Quant-evaluation JSON. |
+
+**Never** pass the same pointer to a free function twice. **Never** mix allocators
+(for example, do not call the C `free()` on a string returned by `ta_version()`).
 
 ## Thread safety
 
@@ -28,7 +62,7 @@ This document describes memory ownership for every `extern "C"` export in `ffi/c
 |------|-----------|
 | **Indicator / pattern `ta_*` calculations** | Safe to call concurrently from multiple threads when each call uses **disjoint** input/output buffers. Functions do not mutate caller-owned arrays beyond writing results. |
 | **`ta_last_error()` / `ta_last_error_code()`** | **Thread-local.** Each thread has its own last-error string and code (`thread_local` in `lib.rs`). Safe to call concurrently; no cross-thread visibility. |
-| **Opaque handles (`alphata_kline_*`)** | **Not thread-safe.** A handle must be used from one thread at a time, or guarded by external synchronization. Do not share a chart handle across threads without a lock. |
+| **JSON-contract entry points** | Stateless per call: each call allocates and returns its own string. Safe to call concurrently; the caller owns each returned pointer independently. |
 | **Panic isolation** | All exports are wrapped in `catch_unwind`. A Rust panic becomes `FfiStatus::InternalError` (`-4`) instead of aborting the process. Invalid non-null pointers are still undefined behaviour. |
 
 ## Return value convention
@@ -38,7 +72,8 @@ Most `ta_*` functions return `i32`:
 - `0` — success (`TA_OK`)
 - negative — error (see [error-codes.md](./error-codes.md))
 
-Functions returning `*mut char` return `NULL` on failure. Handle constructors return `0` on failure.
+Functions returning `*mut char` return `NULL` only when allocation fails; an
+invalid request is reported as an error JSON document, not as `NULL`.
 
 ---
 
@@ -46,10 +81,11 @@ Functions returning `*mut char` return `NULL` on failure. Handle constructors re
 
 | Function | Inputs | Outputs / return | Notes |
 |----------|--------|------------------|-------|
-| `ta_version` | — | return `char*` **callee-owned** | → `alphata_free_string` |
-| `ta_last_error` | — | return `char*` **callee-owned** | Thread-local snapshot → `alphata_free_string` |
+| `ta_version` | — | return `char*` **callee-owned** | → `finkit_free_string` |
+| `ta_last_error` | — | return `char*` **callee-owned** | Thread-local snapshot → `finkit_free_string` |
 | `ta_last_error_code` | — | return `i32` (value) | Thread-local code |
-| `alphata_free_string` | `s` **callee-owned** (from library) | — | Frees strings from table above |
+| `finkit_free_string` | `s` **callee-owned** (from library) | — | Frees any string in the table above |
+| `finkit_factor_study_free_string` | `s` **callee-owned** (from library) | — | Same allocator; provided so the research surface is self-describing |
 
 ---
 
@@ -186,21 +222,50 @@ Optional outputs may be `NULL` (skipped). When non-null, caller pre-allocates `l
 
 ---
 
-## Ownership matrix — K-line visualization
+## Ownership matrix — JSON contract surface
 
-| Function | Inputs | Outputs / return | Ownership |
-|----------|--------|------------------|-----------|
-| `alphata_kline_data_new` | `dates` **borrowed** (`len` NUL-terminated C strings), `opens`, `highs`, `lows`, `closes`, `volumes` **borrowed** | return `i64` handle **callee-owned** | Library copies all data into the handle |
-| `alphata_kline_data_free` | handle **callee-owned** | — | Destroys handle |
-| `alphata_kline_data_validate` | handle **borrowed** | return `i32` | Read-only |
-| `alphata_kline_chart_new` | `data_handle` **borrowed**, `language`, `title` **borrowed**, `width`, `height` | return `i64` handle **callee-owned** | Clones data from data handle |
-| `alphata_kline_chart_free` | handle **callee-owned** | — | Destroys chart |
-| `alphata_kline_chart_add_ma` | handle **borrowed** (mutated), `periods` **borrowed** | return `i32` | |
-| `alphata_kline_chart_add_macd` | handle **borrowed** (mutated) | return `i32` | |
-| `alphata_kline_chart_add_rsi` | handle **borrowed** (mutated) | return `i32` | |
-| `alphata_kline_chart_add_boll` | handle **borrowed** (mutated) | return `i32` | |
-| `alphata_kline_chart_save_as_svg` | handle **borrowed**, `path` **borrowed** | return `i32` | Writes to caller's filesystem path |
-| `alphata_kline_chart_to_svg` | handle **borrowed** | return `char*` **callee-owned** | → `alphata_free_string` |
+Every function below takes borrowed NUL-terminated UTF-8 request strings and
+returns a **callee-owned** `char*` JSON document. Release it with
+`finkit_free_string` (or `finkit_factor_study_free_string` for the research
+pair). A `NULL` return means allocation failed only.
+
+| Function | Borrowed inputs | Return | Release with |
+|----------|-----------------|--------|--------------|
+| `ta_operation_catalog_json` | `language` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_factor_catalog_json` | `language` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_operation_execute_json` | `request_json` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_factor_execute_json` | `request_json` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_factor_cross_sectional_execute_json` | `request_json` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_factor_stream_execute_json` | `request_json` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_composite_execute_json` | `request_json` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_composite_stream_execute_json` | `request_json` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_formula_eval_contract_json` | `source`, `dialect`, OHLCV arrays, `len` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_formula_eval_temporal_contract_json` | `request_json` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_formula_eval_panel_contract_json` | `request_json` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_formula_eval_cross_sectional_contract_json` | `request_json` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_formula_stream_execute_json` | `request_json` | `char*` **callee-owned** | `finkit_free_string` |
+| `ta_formula_compatibility_report_json` | `source`, `terminal` | `char*` **callee-owned** | `finkit_free_string` |
+| `finkit_factor_study_json` | `request_json` | `char*` **callee-owned** | `finkit_factor_study_free_string` |
+| `finkit_quant_evaluation_json` | `request_json` | `char*` **callee-owned** | `finkit_factor_study_free_string` |
+
+The OHLCV arrays passed to `ta_formula_eval_contract_json` are **borrowed** for
+the duration of the call; the caller keeps ownership.
+
+---
+
+## K-line visualization
+
+**There is no C ABI for charts.** `ffi/c-binding` exports no `kline_*` symbol and
+`ffi/c-binding/include/*.h` declares none, so there is nothing here to document.
+Chart rendering is reachable through:
+
+- the CLI (`finkit chart --format svg|html|json`), and
+- the Java binding (`com.finkit.KlineChart`, backed by
+  `Java_com_finkit_KlineChart_*`), which owns long-lived handles and frees them
+  with `klineDataFree` / `klineChartFree`.
+
+A C consumer that needs a chart should render through the CLI and read the file
+it writes.
 
 ---
 
@@ -208,15 +273,21 @@ Optional outputs may be `NULL` (skipped). When non-null, caller pre-allocates `l
 
 Use this checklist when validating bindings:
 
-1. After `ta_version()` / `ta_last_error()` / `alphata_kline_chart_to_svg()`, call `alphata_free_string()` exactly once.
-2. After `alphata_kline_data_new()`, call `alphata_kline_data_free()` on success (`handle != 0`).
-3. After `alphata_kline_chart_new()`, call `alphata_kline_chart_free()` on success (`handle != 0`).
-4. Indicator calls: no library allocation visible to caller — only caller buffers are used.
-5. Repeated `ta_last_error()` without freeing previous strings leaks on the C heap.
+1. After any JSON-contract call, release the returned string exactly once with
+   `finkit_free_string` (`finkit_factor_study_free_string` for the research
+   pair). This includes `ta_version()` and `ta_last_error()`.
+2. Indicator calls: no library allocation visible to caller — only caller
+   buffers are used.
+3. Repeated `ta_last_error()` without freeing previous strings leaks on the C
+   heap.
+4. A `NULL` return from a JSON entry point must not be passed to a free
+   function; the free functions accept `NULL` as a no-op, but treating `NULL` as
+   a document is a caller bug.
 
 ---
 
 ## Related documents
 
 - [error-codes.md](./error-codes.md) — `FfiStatus` and `ta_last_error_code()` mapping
-- `ffi/c-binding/include/alphata.h` — C declarations (kept in sync with `lib.rs`)
+- `ffi/c-binding/include/finkit.h` — C declarations for the indicator and fixed-template surface
+- `ffi/c-binding/include/finkit_research.h` — C declarations for the research surface
