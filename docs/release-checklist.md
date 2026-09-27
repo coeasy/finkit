@@ -11,7 +11,8 @@ claim registry installation commands before a clean consumer test exists.
       `python scripts/check_versions.py`,
       `python scripts/check_changelog.py CHANGELOG.md`,
       `python scripts/gen_ssot_docs.py --check`,
-      `python scripts/check_docs_links.py`.
+      `python scripts/check_docs_links.py`,
+      `python scripts/check_orphan_docs.py`.
 - [ ] Run the binding SSOT contracts (CI job `binding-ssot`):
       `python scripts/sync_bindings.py --check --all`,
       `python scripts/optimize_python_bindings.py --check ffi/python-binding/src/*.rs`,
@@ -23,6 +24,19 @@ claim registry installation commands before a clean consumer test exists.
       shipped `#[no_mangle] extern "C"` symbol must be declared in the header
       that documents it. The iOS header is separate from the C binding's and had
       drifted by three undeclared entry points before this gate existed.
+      `check_python_stub.py` covers both directions: a name declared in the stub
+      must exist, and a documented Python call must be declared.
+- [ ] Run the per-crate test suites (CI jobs `test`, `research-test`,
+      `runtime-integration-tests`, `binding-unit-tests`). `--no-fail-fast` is
+      required — without it the first failing binary hides every later one, and
+      the aggregate "ok" is meaningless:
+      `cargo test -p finkit -p finkit-factor-analysis -p finkit-cli \
+        -p finkit-visualization -p finkit-ffi-common -p finkit-ffi \
+        --locked --no-fail-fast`,
+      `cargo test -p finkit-go -p finkit-dotnet -p finkit-java \
+        -p finkit-android -p finkit-ios -p finkit-wasm --locked --no-fail-fast`.
+      The second set exists because those crates were only ever *compiled* by
+      the multi-language workflows; their Rust-side FFI tests never ran.
 - [ ] Run the TA-Lib transcription gate (`make check-talib-ffi`):
       `python scripts/check_talib_ffi_contract.py`.
       `core/src/talib_ffi.rs` transcribes TA-Lib's `ta_func.h` for the

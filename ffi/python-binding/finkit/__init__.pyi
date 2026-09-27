@@ -1259,8 +1259,8 @@ def chan_analyze(
     min_fractal_range_ratio: float = 0.0,
     signal_min_strength: float = 0.0,
     center_break_ratio: float = 0.0,
-) -> List[Dict[str, Any]]:
-    """Chanlun structures as plain dictionaries."""
+) -> Dict[str, Any]:
+    """Chanlun structures as a dict with `strokes`, `centers` and `signals`."""
     ...
 
 def chan_analyze_multi(

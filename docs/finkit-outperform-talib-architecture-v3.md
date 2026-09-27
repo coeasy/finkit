@@ -641,6 +641,17 @@ compile flags
 
 ## 10.1 API
 
+> **Status: design target, not implemented.** `finkit.compile` and `finkit.stream`
+> do not exist as module-level functions. What ships today is the
+> `CompiledFormula` class (`finkit.CompiledFormula(source)`), which owns the
+> retained stream context through `eval`, `eval_zero_copy`, `eval_range`,
+> `eval_last`, `append_bar` and `reset`, plus the `Streaming*` classes
+> (`StreamingSMA`, `StreamingEMA`, `StreamingRSI`, `StreamingMACD`,
+> `StreamingATR`, ...) for single-indicator incremental updates. Treat the sketch
+> below as the direction of travel, and see
+> [`python.md`](python.md) and [`formula-runtime-contract.md`](formula-runtime-contract.md)
+> for the callable surface.
+
 ```python
 plan = finkit.compile(formula)
 session = plan.stream()

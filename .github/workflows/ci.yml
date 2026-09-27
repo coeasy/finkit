@@ -262,6 +262,33 @@ jobs:
           node scripts/test_webgl_runtime.mjs improved_chart_webgpu.html
           node scripts/test_webgl_runtime.mjs improved_chart_webgpu.html --webgpu
 
+  binding-unit-tests:
+    name: Binding crate unit tests
+    needs: version-consistency
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    env:
+      RUSTFLAGS: "-D warnings"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # `multilang-release.yml` builds every one of these crates and runs their
+      # *language-level* test suites (go test, dotnet test, ctest, ...), but it
+      # never ran `cargo test` on them. Their Rust-side `#[test]` functions --
+      # the ones that exercise the FFI boundary directly, without a language
+      # runtime in the way -- were therefore compiled and never executed.
+      - name: Test the binding crates CI only compiles
+        run: |
+          cargo test \
+            -p finkit-go \
+            -p finkit-dotnet \
+            -p finkit-java \
+            -p finkit-android \
+            -p finkit-ios \
+            -p finkit-wasm \
+            --locked --no-fail-fast
+
   package-contract:
     name: Rust package contract
     needs: version-consistency

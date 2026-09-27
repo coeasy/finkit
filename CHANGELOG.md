@@ -109,6 +109,29 @@ reused.
 
 ### Fixed
 
+- **Six binding crates had `#[test]` functions that CI never ran.** `ci.yml`
+  tested `finkit`, `finkit-factor-analysis`, `finkit-cli`,
+  `finkit-visualization` and `finkit-ffi-common`; `multilang-release.yml` built
+  `finkit-go`, `finkit-dotnet`, `finkit-java`, `finkit-android`, `finkit-ios`
+  and `finkit-wasm` but only *compiled* them, and it drove the C/C++ `ctest`
+  suite without ever running `cargo test -p finkit-ffi`. That left 55 Rust unit
+  tests unexecuted — 31 in the C binding alone, including the
+  `dispatch_ta`-unknown-name test that guards a fix from the previous round.
+  `cargo test -p finkit-ffi` now runs in `ci.yml` and in the `v*`-tag job, and
+  a new `binding-unit-tests` job covers the other six crates on every push and
+  pull request.
+- **The shipped Python type stub did not cover the documented surface.** Its
+  own docstring promises it "covers the documented surface rather than all 400+
+  exported names", but 16 documented, registered functions were missing from
+  it: `formula_get_template`, `formula_search_templates`,
+  `formula_list_categories`, `bbands`, `compute_indicators`, `cdl_doji`,
+  `cdl_engulfing`, `cdl_hammer`, `detect_double_top`, `detect_double_bottom`,
+  `detect_head_shoulders`, the four `chan_analyze*` entry points and the
+  `FormulaRegistry` class. Each was callable at runtime and shown in `docs/`,
+  and each was a type error for a `mypy`/`pyright` user. All 16 are now
+  declared, and `check_python_stub.py` gained the reverse check that would have
+  caught them — it previously only verified that a name *declared* in the stub
+  exists, never that a documented name *is* declared.
 - **`docs/generated/version-matrix.md` recorded a number that could not be
   correct in CI.** The "Criterion JSON benchmarks indexed: N" line counted files
   under a hard-coded `target/criterion/`, but this repository builds to

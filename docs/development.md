@@ -70,6 +70,13 @@ cargo check --workspace --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 cargo test -p finkit --locked
 cargo test --workspace --doc --locked
+# The CI package set, plus the binding crates CI only compiles. `--no-fail-fast`
+# matters: without it the first failing binary hides every later one.
+cargo test -p finkit -p finkit-factor-analysis -p finkit-cli \
+  -p finkit-visualization -p finkit-ffi-common -p finkit-ffi \
+  --locked --no-fail-fast
+cargo test -p finkit-go -p finkit-dotnet -p finkit-java \
+  -p finkit-android -p finkit-ios -p finkit-wasm --locked --no-fail-fast
 python scripts/check_versions.py
 python scripts/gen_ssot_docs.py --check
 python scripts/check_docs_links.py
