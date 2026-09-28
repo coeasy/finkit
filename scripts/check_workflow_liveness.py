@@ -35,10 +35,20 @@ ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = ROOT / '.github' / 'workflows'
 
 # Triggers that fire without depending on which branch is pushed.
+#
+# `workflow_dispatch` is deliberately **absent** from this set even though it is
+# unconditional in practice. Including it made the whole check meaningless: every
+# workflow here is created with `workflow_dispatch` (it is part of GitHub's own
+# template), so `keys & UNCONDITIONAL` was always true and `evaluate` returned
+# "reachable" before reading a single branch filter. A workflow pinned to a
+# branch deleted months ago still reported "every workflow has a trigger that
+# can fire". Manual triggers are honoured as a *fallback* below, not as a
+# blanket excuse to stop looking.
 UNCONDITIONAL = {
-    'workflow_dispatch', 'schedule', 'release', 'workflow_call',
+    'schedule', 'release', 'workflow_call',
     'merge_group', 'repository_dispatch',
 }
+MANUAL_ONLY = {'workflow_dispatch'}
 BRANCH_FILTERED = {'push', 'pull_request', 'pull_request_target'}
 BRANCH_KEYS = ('branches', 'branches-ignore')
 
@@ -186,7 +196,18 @@ def dormant_notes(triggers: dict[str, dict[str, list[str]]], branches: set[str],
 
 def evaluate(triggers: dict[str, dict[str, list[str]]], branches: set[str],
              branches_known: bool) -> tuple[bool, list[str], list[str]]:
-    """Return (reachable, reasons_why_not, informational_notes)."""
+    """Return (reachable, reasons_why_not, informational_notes).
+
+    A workflow is reachable when something *automatic* can start it. Once the
+    automatic triggers have been examined and none can fire, `workflow_dispatch`
+    is accepted as a fallback -- but loudly, as a note, because a workflow that
+    only a human can start is not what "liveness" is trying to establish.
+
+    The important difference from the previous version is ordering: the
+    branch-filter analysis below now actually runs. Previously a single
+    `workflow_dispatch` short-circuited it, so a workflow whose every branch
+    filter pointed at a deleted branch was indistinguishable from a healthy one.
+    """
     keys = set(triggers)
     notes = dormant_notes(triggers, branches, branches_known)
 
@@ -194,8 +215,17 @@ def evaluate(triggers: dict[str, dict[str, list[str]]], branches: set[str],
         return True, [], notes
 
     if not (keys & BRANCH_FILTERED):
+        if keys & MANUAL_ONLY:
+            notes.append(
+                'no automatic trigger; fires only via workflow_dispatch '
+                '(manual release tooling, assumed intentional)'
+            )
+            return True, [], notes
         return False, [f'no trigger can fire (found only: {sorted(keys) or "none"})'], notes
 
+    # Every branch-filtered trigger whose patterns all match nothing is dormant.
+    # The OR across *all* triggers is what matters: a workflow may legitimately
+    # list `main` plus a retired release-branch pattern.
     for trigger in sorted(keys & BRANCH_FILTERED):
         patterns = branch_patterns(triggers[trigger])
         if not patterns:
@@ -207,10 +237,21 @@ def evaluate(triggers: dict[str, dict[str, list[str]]], branches: set[str],
             return True, [], notes
 
     reasons = [
-        'every trigger is branch-filtered and no filtered branch exists, '
-        'and there is no workflow_dispatch/schedule/release/workflow_call',
+        'every branch filter matches no existing branch',
     ]
-    return False, reasons, notes
+    if keys & MANUAL_ONLY:
+        # Not reachable automatically, but a human can still start it. Report it
+        # and pass: the alternative would red the pipeline for any retired
+        # branch reference, which is a warning signal rather than a blocker.
+        notes.append(
+            'reachable only by hand via workflow_dispatch; no automatic trigger '
+            'can fire - review whether this workflow still earns its keep'
+        )
+    else:
+        reasons.append('and there is no workflow_dispatch/schedule/release/workflow_call')
+        return False, reasons, notes
+
+    return True, [], notes
 
 
 def main() -> int:

@@ -28,10 +28,22 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# Only `dist/manifest.json` is written by anything in this repository
+# (scripts/build-usage-packages.sh and build-quick.sh). The per-platform
+# `dist/python/<platform>/manifest.json` used to be listed here too, but no
+# script ever produced it -- which made `check-release-manifests` permanently
+# red with "missing" for a file nobody could create. Listing only what exists is
+# what lets the gate mean anything.
 MANIFESTS = [
     ROOT / 'dist' / 'manifest.json',
-    ROOT / 'dist' / 'python' / 'windows-x64' / 'manifest.json',
 ]
+
+# The manifests do not agree on one name for the list of shipped files, so both
+# are accepted. Reading only `artifacts` (a key no writer ever emits) silently
+# validated an empty list and let every refresh and check succeed while doing
+# nothing -- the gate was green for exactly as long as nobody looked.
+ENTRY_LIST_KEYS = ('components', 'artifacts')
+ENTRY_PATH_KEYS = ('path', 'file')
 
 
 def sha256_of(path: Path) -> tuple[str, int]:
@@ -67,20 +79,41 @@ def main() -> int:
         doc = json.loads(manifest.read_text(encoding='utf-8'))
         changed = False
 
-        for art in doc.get('artifacts', []):
-            target = resolve(manifest, art['file'])
+        entries = next(
+            (doc[key] for key in ENTRY_LIST_KEYS if key in doc), None
+        )
+        if entries is None:
+            # An unknown schema must not be mistaken for an empty manifest:
+            # both would yield "OK", but only one is actually verified.
+            problems.append(
+                f'{manifest.relative_to(ROOT)}: no recognised entry list '
+                f'(expected one of {", ".join(ENTRY_LIST_KEYS)})'
+            )
+            continue
+
+        for entry in entries:
+            relative = next(
+                (entry[key] for key in ENTRY_PATH_KEYS if key in entry), None
+            )
+            if relative is None:
+                problems.append(
+                    f'{manifest.relative_to(ROOT)}: entry has none of '
+                    f'{", ".join(ENTRY_PATH_KEYS)}'
+                )
+                continue
+            target = resolve(manifest, relative)
             if not target.is_file():
                 problems.append(f'{target.relative_to(ROOT)}: artifact missing')
                 continue
             sha, size = sha256_of(target)
-            if art.get('sha256') != sha or art.get('size_bytes') != size:
+            if entry.get('sha256') != sha or entry.get('size_bytes') != size:
                 if args.check:
                     problems.append(
                         f'{target.relative_to(ROOT)}: manifest says '
-                        f'{art.get("size_bytes")}/{str(art.get("sha256"))[:16]}…, '
+                        f'{entry.get("size_bytes")}/{str(entry.get("sha256"))[:16]}…, '
                         f'disk has {size}/{sha[:16]}…')
                 else:
-                    art['sha256'], art['size_bytes'] = sha, size
+                    entry['sha256'], entry['size_bytes'] = sha, size
                     changed = True
                     updates += 1
             print(f'  {target.relative_to(ROOT)}  {size} bytes  {sha[:16]}…')

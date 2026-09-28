@@ -1,0 +1,292 @@
+name: Release installers
+
+# What this workflow is for
+# -------------------------
+# Every other release workflow here is tag-driven: it fires when a `v*` tag is
+# pushed and, as a side effect, creates the GitHub Release itself. That covers
+# the "push a tag" path but **not** the "publish a Release" path -- and a
+# Release published from the GitHub UI (or with `gh release create`) never
+# emits a tag push, so nothing built a single asset for it. The Release notes
+# looked fine and the asset list was quietly empty.
+#
+# Therefore this workflow listens to the `release` event as a first-class
+# trigger. Whichever path starts it, the destination is the same: the existing
+# Release receives platform installers.
+#
+# Both paths can legitimately run for one version (push the tag, then publish
+# the Release). They do not race for the Release object -- every upload uses
+# `gh release upload --clobber`, which replaces same-named assets instead of
+# failing on them -- so the second run simply refreshes what the first uploaded.
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag whose Release should receive the installers"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# A release pipeline must never cancel itself mid-upload: cancelling during
+# `gh release upload --clobber` leaves a half-populated Release that looks
+# complete. Serialising re-runs instead is why this is `false`.
+concurrency:
+  group: release-installers-${{ github.event.release.tag_name || github.ref_name || github.run_id }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version-contract:
+    name: Resolve and validate the version
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      publish: ${{ steps.resolve.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Run the repository version gate
+        run: python scripts/check_versions.py
+
+      - id: version
+        name: Read the workspace version
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import sys
+          sys.path.insert(0, "scripts")
+          from build_native_archive import workspace_version
+
+          print(f"version={workspace_version()}")
+          PY
+
+      - id: resolve
+        name: Work out the target tag and whether to publish
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag=""
+          case "$EVENT_NAME" in
+            release)          tag="$RELEASE_TAG" ;;
+            push)             tag="$REF_NAME" ;;
+            workflow_dispatch) tag="$INPUT_TAG" ;;
+            *)
+              echo "unsupported event: $EVENT_NAME" >&2
+              exit 1
+              ;;
+          esac
+          test -n "$tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+          # Publish for every trigger here: each one is an explicit request to
+          # put installers on a Release (`workflow_dispatch` because the caller
+          # named a tag; `push` of a `v*` tag because the tag is the release
+          # signal; `release` because the Release already exists). Anything else
+          # would build artifacts and then throw them away.
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "target tag: $tag"
+
+      - name: Check the MSI payload agrees with the native archive
+        # Both describe the same payload; without this they drift apart and
+        # Windows users silently receive a different SDK from everyone else.
+        run: python scripts/check_installer_contract.py
+
+  installers:
+    name: ${{ matrix.name }}
+    needs: version-contract
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            name: linux-x64 (native + deb + rpm)
+            slug: linux-x64
+            # `native` always succeeds; deb/rpm need tooling installed below.
+            targets: "native deb rpm"
+          - os: macos-14
+            name: macos (native + pkg + dmg)
+            slug: macos-arm64
+            targets: "native pkg dmg"
+          - os: windows-2022
+            name: windows-x64 (native + msi)
+            slug: windows-x64
+            targets: "native msi"
+
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          # dpkg-dev brings dpkg-deb + dpkg-architecture (multiarch triplets),
+          # fakeroot is what lets dpkg-deb build as root without being root,
+          # and rpm provides rpmbuild.
+          sudo apt-get install -y --no-install-recommends dpkg-dev fakeroot rpm
+
+      - name: Install the WiX Toolset (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # No `heat.exe` harvest step anywhere in this pipeline: the product
+        # definition names every file explicitly, so only the compiler and
+        # linker are needed.
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = "$env:RUNNER_TEMP\wix314-binaries.zip"
+          Invoke-WebRequest -Uri 'https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip' -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath "$env:RUNNER_TEMP\wix" -Force
+          Add-Content -Path $env:GITHUB_PATH -Value "$env:RUNNER_TEMP\wix"
+          if (-not (Test-Path "$env:RUNNER_TEMP\wix\candle.exe")) {
+            throw "WiX install did not produce candle.exe"
+          }
+          Write-Host "WiX installed at $env:RUNNER_TEMP\wix"
+
+      - name: Build installers
+        shell: bash
+        env:
+          TARGETS: ${{ matrix.targets }}
+        run: |
+          set -euo pipefail
+          args=()
+          for t in ${TARGETS}; do
+            args+=(--target "$t")
+          done
+          if [[ ${#args[@]} -eq 0 ]]; then
+            echo "::error::matrix.targets was empty; refusing to build nothing"
+            exit 1
+          fi
+          # `--strict` turns a missing tool into a failure instead of a silent
+          # skip: this job exists to produce exactly these installers, so a
+          # Release that quietly lacks one is worse than a red job.
+          bash scripts/build-installer.sh "${args[@]}" --strict
+
+      - name: Assert every requested installer was produced
+        shell: bash
+        env:
+          TARGETS: ${{ matrix.targets }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for t in ${TARGETS}; do
+            case "$t" in
+              msi)  compgen -G 'dist/installer/*.msi'   >/dev/null || missing=1 ;;
+              deb)  compgen -G 'dist/installer/*.deb'   >/dev/null || missing=1 ;;
+              rpm)  compgen -G 'dist/installer/*.rpm'   >/dev/null || missing=1 ;;
+              pkg)  compgen -G 'dist/installer/*.pkg'   >/dev/null || missing=1 ;;
+              dmg)  compgen -G 'dist/installer/*.dmg'   >/dev/null || missing=1 ;;
+              native)
+                compgen -G 'dist/installer/*.tar.gz' >/dev/null || \
+                compgen -G 'dist/installer/*.zip'    >/dev/null || missing=1 ;;
+            esac
+          done
+          if [[ "$missing" -ne 0 ]]; then
+            echo "::error::one or more requested installers were not produced"
+            ls -R dist/installer || true
+            exit 1
+          fi
+          echo "all requested installers present:"
+          ls -l dist/installer
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-installers-${{ matrix.slug }}
+          path: dist/installer/*
+          if-no-files-found: error
+
+  publish:
+    name: Attach installers to the Release
+    needs:
+      - version-contract
+      - installers
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: release-installers-*
+          path: release-installers
+          merge-multiple: true
+
+      - name: Checksum the installers
+        run: |
+          set -euo pipefail
+          cd release-installers
+          test -n "$(find . -maxdepth 1 -type f -print -quit)"
+          sha256sum * | sort -k2 > SHA256SUMS.installers
+          cat SHA256SUMS.installers
+
+      - name: Upload to the Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.version-contract.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --clobber \
+            release-installers/*
+
+  # A Release whose download list silently lost a platform is indistinguishable
+  # from a complete one until somebody files a bug. Say it out loud instead.
+  report:
+    name: Report skipped or failed installers
+    if: ${{ always() && contains(needs.*.result, 'failure') }}
+    needs:
+      - version-contract
+      - installers
+      - publish
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Summarise what failed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RESULTS: ${{ toJSON(needs) }}
+          TAG: ${{ needs.version-contract.outputs.tag }}
+        run: |
+          set -euo pipefail
+          echo "::error::release $TAG did not receive its full installer set"
+          echo "$RESULTS" | python -c 'import json,sys; [print(f"{k}: {v[\"result\"]}") for k,v in json.load(sys.stdin).items()]'
+
+          body="The automated installer build for \`$TAG\` did not complete, so the GitHub Release is missing installers.
+
+          Job results:
+          \`\`\`
+          $(echo "$RESULTS" | python -c 'import json,sys; [print(f"{k}: {v[\"result\"]}") for k,v in json.load(sys.stdin).items()]')
+          \`\`\`
+
+          Re-run the \`Release installers\` workflow once the cause is fixed; it uploads with \`--clobber\`, so a re-run repairs the Release in place."
+
+          gh issue create \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Release $TAG is missing installer assets" \
+            --body "$body" \
+            --label bug || echo "could not open an issue (label may not exist)" >&2

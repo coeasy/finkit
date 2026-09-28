@@ -438,13 +438,23 @@ distribution version through `importlib.metadata` as above.)
 > taken from the host.
 
 The OS-level installer targets (`scripts/build-installer.sh`,
-`scripts/build-installer-msi.cmd`) are **not buildable from a clean checkout**:
-they stage a payload and then hand it to WiX, but the `packaging/wix/`
-product definition they reference has never been committed to this repository,
-and the WiX toolset is not installed by any workflow. Those scripts now fail
-with an explicit message naming the missing file instead of a mid-build tool
-error. `scripts/build-usage-packages.sh` is in the same state: its per-language
-verification tree (`packaging/usage/<lang>/`) is likewise absent.
+`scripts/build-installer-msi.cmd`) **are buildable from a clean checkout**.
+They stage the native SDK archive (see below) plus the committed WiX product
+definition at `packaging/wix/Product.wxs`, then hand it to the platform packager:
+
+- `native` → a self-contained `.zip`/`.tar.gz` of the SDK (no external tool
+  required, always buildable on the host OS).
+- `msi` → `candle.exe` + `light.exe` from the WiX Toolset v3 (Windows only;
+  skipped with a clear message when WiX is absent, or fails under `--strict`).
+- `deb` / `rpm` / `pkg` / `dmg` → the platform's native toolchain when present
+  on the host, otherwise skipped.
+
+`scripts/build-installer.sh --target native --target msi` builds everything the
+current host can produce. On a GitHub release, `.github/workflows/release-installers.yml`
+runs the Windows job (native + MSI via WiX) and the Ubuntu job (native + deb +
+rpm), uploading every installer that the host was able to build to the release
+assets. Run `scripts/check_installer_contract.py` to assert that the MSI
+payload and the native archive agree on their member list.
 
 ### Native C/C++ archive
 
@@ -472,7 +482,11 @@ licence — **8 members** in total:
 | `share/finkit/LICENSE` | `LICENSE` |
 
 `scripts/build_native_archive.py` is the single definition of this list; if the
-two disagree, the script wins.
+two disagree, the script wins. The table above is the `windows-x64` layout; the
+same script also builds `linux-x64`, `linux-aarch64`, `macos-x64` and
+`macos-arm64` bundles (`.tar.gz` with the platform's shared library and static
+archive instead of the `.dll`/`.lib` trio), sharing the same header/licence
+members.
 
 Every member is stored with a fixed 1980-01-01 timestamp, so two runs over
 identical inputs produce a byte-identical archive. The *linker* output is not

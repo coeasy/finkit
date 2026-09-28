@@ -7,7 +7,59 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Fixed - 2026-09-29
+
+This maintenance pass connects the release pipelines end-to-end and removes the
+last broken links, orphan logic and silent-pass gates so the project reaches a
+publishable state.
+
+- **GitHub Release now auto-builds installers.** New workflow
+  `.github/workflows/release-installers.yml` listens to the `release:
+  published` event (the "publish a Release from the UI / `gh release create`"
+  path that every other tag-driven workflow silently missed) and builds
+  native + MSI (Windows), native + deb + rpm (Linux) and native + pkg + dmg
+  (macOS), then attaches them to the Release with `--clobber` so re-runs
+  repair in place. A `report` job opens an issue if any installer is missing.
+- **Installer build scripts are now real.** `scripts/build-installer.sh`
+  supports multiple `--target` flags (previously repeated flags silently
+  overwrote each other, dropping installers), fails loudly on unknown targets
+  and missing tools instead of returning exit 0, and builds a self-contained
+  `native` bundle on every host. The committed `packaging/wix/Product.wxs`
+  (previously referenced but never committed, making the MSI target dead) now
+  defines the Windows installer. `scripts/build-installer-msi.cmd` is reduced to
+  a thin wrapper over the bash script.
+- **Native SDK archive is cross-platform.** `scripts/build_native_archive.py`
+  now builds `linux-x64`, `linux-aarch64`, `macos-x64` and `macos-arm64`
+  (`.tar.gz`) in addition to `windows-x64` (`.zip`), which is why it was an
+  orphan in CI. `scripts/check_installer_contract.py` asserts the MSI payload
+  and the native archive agree on their member list.
+- **Gates no longer lie.** `scripts/check_versions.py` ignored three real
+  version mismatches (it now passes). `scripts/check_workflow_liveness.py` no
+  longer short-circuits to "healthy" on `workflow_dispatch`, so the workflow
+  pinned to a deleted `main` branch is now correctly flagged.
+- **Release manifest gate is live.** `scripts/refresh_release_manifests.py`
+  read a non-existent `artifacts` field (always empty → always passed); it now
+  validates the real `components` entries and refreshes digests in place.
+- **Makefile ghosts removed.** `make packages` (always failed), `make
+  docker-bench` (no recipe) and the missing `installer` entry point are fixed.
+- **Node binding type contract fixed.** Two Rust structs both named
+  `MacdResult` (vector in `lib.rs`, scalar in `streaming.rs`) produced two
+  `MacdResult` interfaces in `ffi/node-binding/index.d.ts`, a duplicate-identifier
+  error for TypeScript consumers; the streaming struct is now
+  `StreamingMacdResult`.
+- **API reference corrected.** Go (function names, returns, module path),
+  .NET (method names, `MacdResult`/`BbandsResult` fields, example), Python
+  (exception class names), Rust (removed non-existent `bollinger_bands` /
+  `head_shoulders`) and Node.js (camelCase names, required params, `cdlDoji` /
+  `detectDoubleTop` moved out of `Indicators`) now match the actual exports.
+  Java `macd`/`bbands`/`stoch` are correctly documented as `void` methods that
+  write into a pre-allocated result object; pattern functions live in `Patterns`
+  / `ChartPatterns`.
+
 ### Added
+
+- `scripts/check_coverage.py` is wired into CI so it is no longer an orphan.
+- `scripts/check_installer_contract.py` is wired into CI.
 
 - The 31 TA-Lib 0.7/0.8 indicator functions that were numeric-green but
   unreachable from the formula engine: `AC`, `ACCBANDS`, `ADR`, `AO`, `AROON`,

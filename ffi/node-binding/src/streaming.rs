@@ -92,7 +92,7 @@ napi_streaming_f64!(NapiStreamingRoc, roc, StreamingRoc);
 // ============================================================================
 
 #[napi(object)]
-pub struct MacdResult {
+pub struct StreamingMacdResult {
     pub macd: f64,
     pub signal: f64,
     pub histogram: f64,
@@ -121,14 +121,14 @@ impl NapiStreamingMacd {
     }
 
     #[napi]
-    pub fn update(&mut self, value: f64) -> MacdResult {
+    pub fn update(&mut self, value: f64) -> StreamingMacdResult {
         match self.inner.next(value) {
-            Some(out) => MacdResult {
+            Some(out) => StreamingMacdResult {
                 macd: out.macd,
                 signal: out.signal,
                 histogram: out.histogram,
             },
-            None => MacdResult {
+            None => StreamingMacdResult {
                 macd: f64::NAN,
                 signal: f64::NAN,
                 histogram: f64::NAN,
@@ -188,14 +188,14 @@ impl NapiStreamingMacdExt {
     }
 
     #[napi]
-    pub fn update(&mut self, value: f64) -> MacdResult {
+    pub fn update(&mut self, value: f64) -> StreamingMacdResult {
         match self.inner.next(value) {
-            Some(out) => MacdResult {
+            Some(out) => StreamingMacdResult {
                 macd: out.macd,
                 signal: out.signal,
                 histogram: out.histogram,
             },
-            None => MacdResult {
+            None => StreamingMacdResult {
                 macd: f64::NAN,
                 signal: f64::NAN,
                 histogram: f64::NAN,
@@ -204,7 +204,7 @@ impl NapiStreamingMacdExt {
     }
 
     #[napi]
-    pub fn update_batch(&mut self, values: Vec<f64>) -> Vec<MacdResult> {
+    pub fn update_batch(&mut self, values: Vec<f64>) -> Vec<StreamingMacdResult> {
         values.into_iter().map(|value| self.update(value)).collect()
     }
 

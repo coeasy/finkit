@@ -96,6 +96,7 @@ FOREIGN_VERSIONS = frozenset(
         "0.8.0",  # TA-Lib Python, in the docs index link to the coverage audit
         "0.0.0",  # Go module placeholder (`require .../go v0.0.0`), not a release
         "0.4.0",  # the `since` version of TaError's deprecated variants
+        "0.6.8",  # TA-Lib Python binding pinned in docs/BENCHMARK_VS_TALIB.md
     }
 )
 

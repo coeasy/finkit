@@ -147,6 +147,13 @@ jobs:
       # `make check-script-refs`.
       - name: Check every `scripts/` reference resolves
         run: python scripts/check_script_references.py
+      # The Windows MSI and the portable native archive describe one payload
+      # from two files. They are checked together here rather than at release
+      # time: discovering during a tag build that the Windows installer would
+      # ship a different SDK from every other platform is too late to fix
+      # cheaply, and too easy to wave through to hit a date.
+      - name: Check the MSI payload matches the native archive
+        run: python scripts/check_installer_contract.py
 
   fmt:
     name: Format
@@ -224,6 +231,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Enforce research single-source-of-truth ownership
         run: python scripts/check_research_ssot.py
+      - name: Report indicator coverage across registry / streaming / batch
+        # Measurement, not a gate: this prints how much of the registry is
+        # reachable through each execution model so the trend stays visible. It
+        # lives here because a coverage report nobody runs rots into the same
+        # kind of orphan it was written to find -- it previously had no CI
+        # caller at all, so its numbers were always somebody's stale local run.
+        run: python scripts/check_coverage.py --json
       - name: Run factor-analysis unit, integration, invariant and doc tests
         run: cargo test -p finkit-factor-analysis --locked
 

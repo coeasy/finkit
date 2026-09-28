@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+     Windows Installer (MSI) product definition for the Finkit native SDK.
+
+     This file is hand-authored rather than harvested with WiX's `heat.exe`.
+     Harvesting would make the MSI rely on a directory listing taken at build
+     time: a stray object file left in the staging tree silently becomes a
+     shipped file, and the file list can drift between two builds of the same
+     tag. Naming every member explicitly keeps the payload a property of *this*
+     file, so a change to it shows up in review.
+
+     Members mirror exactly what `scripts/build_native_archive.py` packs for
+     the same platform. The two are checked against each other by
+     `scripts/check_installer_contract.py`, so adding a member here without
+     adding it there (or vice versa) fails the build instead of shipping an
+     inconsistent Windows and cross-platform payload.
+
+     Build (WiX Toolset v3):
+       candle.exe -dVersion=0.2.0 -dPayloadDir=dist/installer/_stage Product.wxs
+       light.exe -ext WixUIExtension -out dist/installer/finkit-0.2.0-x86_64.msi Product.wixobj
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+
+  <!-- Product/@Id="*" makes every build regenerate the product code; the
+       stable UpgradeCode below is what actually identifies this product line
+       across versions, and <MajorUpgrade> uses it to replace an older install
+       rather than colliding with it. -->
+  <Product
+      Id="*"
+      Name="Finkit"
+      Language="1033"
+      Version="$(var.Version)"
+      Manufacturer="Finkit Contributors"
+      UpgradeCode="{1FA16833-45AF-40F1-9090-ADAE3236DAE8}">
+
+    <Package
+        InstallerVersion="200"
+        Compressed="yes"
+        InstallScope="perMachine"
+        Description="Finkit native SDK - C/C++ technical analysis library"
+        Comments="High-performance quantitative finance engine (MIT OR Apache-2.0)" />
+
+    <!-- Refuse to install over a newer release. Without this, an older MSI is
+         happy to downgrade a machine and leave the user debugging an old bug
+         they already upgraded away from. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Finkit is already installed." />
+
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Property, not a hardcoded path: environment variables are how a
+         per-machine MSI advertises itself to the C/C++ build tools that must
+         find finkit_ffi.lib and the headers without extra configuration. -->
+    <Property Id="FINKIT_ROOT" Value="[INSTALLFOLDER]" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="Finkit">
+          <!-- IMPORTANT: this single component owns the environment variable.
+               It must have a KeyPath, otherwise the MSI cannot tell whether
+               the component is already installed and will re-run it on repair. -->
+          <Component Id="CmpEnvironment" Guid="*">
+            <Environment
+                Id="EnvFinkitRoot"
+                Name="FINKIT_ROOT"
+                Value="[INSTALLFOLDER]"
+                Permanent="no"
+                Part="all"
+                Action="set"
+                System="yes" />
+            <RegistryValue
+                Root="HKLM"
+                Key="Software\Finkit"
+                Name="InstallDir"
+                Type="string"
+                Value="[INSTALLFOLDER]"
+                KeyPath="yes" />
+          </Component>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder" />
+    </Directory>
+
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Directory Id="DIR_bin" Name="bin" />
+      <Directory Id="DIR_lib" Name="lib" />
+      <Directory Id="DIR_include" Name="include" />
+      <Directory Id="DIR_share" Name="share">
+        <Directory Id="DIR_share_finkit" Name="finkit" />
+      </Directory>
+      <Directory Id="DIR_meta" Name="meta" />
+    </DirectoryRef>
+
+    <ComponentGroup Id="PayloadComponents">
+      <!-- Layout here mirrors build_native_archive.py member-for-member.
+           scripts/check_installer_contract.py enforces that. -->
+      <Component Id="CmpLicense" Directory="DIR_share_finkit" Guid="*">
+        <File Id="FileLicense"
+              Name="LICENSE"
+              Source="$(var.PayloadDir)\share\finkit\LICENSE"
+              KeyPath="yes" />
+      </Component>
+
+      <!-- The import library is what a consumer links against; the DLL is what
+           that consumer must find at run time. Both therefore live in PATH,
+           not just in the SDK directories. -->
+      <Component Id="CmpRuntimeDll" Directory="DIR_bin" Guid="*">
+        <File Id="FileRuntimeDll"
+              Name="finkit_ffi.dll"
+              Source="$(var.PayloadDir)\bin\finkit_ffi.dll"
+              KeyPath="yes" />
+      </Component>
+
+      <Component Id="CmpDllImportLib" Directory="DIR_lib" Guid="*">
+        <File Id="FileDllImportLib"
+              Name="finkit_ffi.dll.lib"
+              Source="$(var.PayloadDir)\lib\finkit_ffi.dll.lib"
+              KeyPath="yes" />
+      </Component>
+
+      <Component Id="CmpStaticLib" Directory="DIR_lib" Guid="*">
+        <File Id="FileStaticLib"
+              Name="finkit_ffi.lib"
+              Source="$(var.PayloadDir)\lib\finkit_ffi.lib"
+              KeyPath="yes" />
+      </Component>
+
+      <Component Id="CmpMainHeader" Directory="DIR_include" Guid="*">
+        <File Id="FileMainHeader"
+              Name="finkit.h"
+              Source="$(var.PayloadDir)\include\finkit.h"
+              KeyPath="yes" />
+      </Component>
+
+      <Component Id="CmpCppHeader" Directory="DIR_include" Guid="*">
+        <File Id="FileCppHeader"
+              Name="finkit.hpp"
+              Source="$(var.PayloadDir)\include\finkit.hpp"
+              KeyPath="yes" />
+      </Component>
+
+      <Component Id="CmpResearchHeader" Directory="DIR_include" Guid="*">
+        <File Id="FileResearchHeader"
+              Name="finkit_research.h"
+              Source="$(var.PayloadDir)\include\finkit_research.h"
+              KeyPath="yes" />
+      </Component>
+
+      <Component Id="CmpResearchCppHeader" Directory="DIR_include" Guid="*">
+        <File Id="FileResearchCppHeader"
+              Name="finkit_research.hpp"
+              Source="$(var.PayloadDir)\include\finkit_research.hpp"
+              KeyPath="yes" />
+      </Component>
+    </ComponentGroup>
+
+    <Feature Id="ProductFeature"
+             Title="Finkit native SDK"
+             Description="C headers, import libraries and runtime DLL"
+             Level="1"
+             ConfigurableDirectory="INSTALLFOLDER"
+             Absent="disallow">
+      <ComponentGroupRef Id="PayloadComponents" />
+      <ComponentRef Id="CmpEnvironment" />
+    </Feature>
+
+    <!-- License shown by the wizard. Must be RTF, not text. -->
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.PayloadDir)\meta\license.rtf" />
+
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+    <UIRef Id="WixUI_InstallDir" />
+  </Product>
+</Wix>

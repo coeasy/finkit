@@ -167,27 +167,38 @@ pub fn sma(data: &[f64], period: usize) -> Result<Vec<f64>>;
 pub fn ema(data: &[f64], period: usize) -> Result<Vec<f64>>;
 
 /// Bollinger Bands
-pub fn bollinger_bands(
-    data: &[f64],
-    timeperiod: usize,
-    nbdevup: f64,
-    nbdevdn: f64
+pub fn bbands(
+    input: &[f64],
+    period: usize,
+    nb_dev_up: f64,
+    nb_dev_dn: f64
 ) -> Result<BbandsResult>;
 
 pub struct BbandsResult {
-    pub upper: Vec<f64>,
-    pub middle: Vec<f64>,
-    pub lower: Vec<f64>,
+    pub upper: Array1<f64>,
+    pub middle: Array1<f64>,
+    pub lower: Array1<f64>,
 }
 
 /// Parabolic SAR
+///
+/// Note the return shape: unlike most overlap indicators this one returns two
+/// series, so it yields `SarResult` rather than a bare array.
 pub fn sar(
     high: &[f64],
     low: &[f64],
     acceleration: f64,
     maximum: f64
-) -> Result<Vec<f64>>;
+) -> Result<SarResult>;
+
+pub struct SarResult {
+    pub sar: Array1<f64>,
+    pub af: Array1<f64>,
+}
 ```
+
+> **Return type convention.** Floating-point outputs are `ndarray::Array1<f64>`,
+> not `Vec<f64>`. Call `.to_vec()` if you need an owned `Vec`.
 
 ### Momentum Indicators
 
@@ -292,12 +303,25 @@ pub fn double_top(
 ) -> Result<Vec<usize>>;
 
 /// Head and Shoulders Detection
-pub fn head_shoulders(
+// Chart patterns are top/bottom pairs -- there is no single `head_shoulders`.
+// Both return ChartPatternResult (an Array1<i32> marker series).
+pub fn head_and_shoulders_top(
     high: &[f64],
-    lookback: usize,
-    tolerance: f64
-) -> Result<Vec<usize>>;
+    min_bars_between_peaks: usize,
+    head_height_ratio: f64
+) -> Result<ChartPatternResult>;
+
+pub fn head_and_shoulders_bottom(
+    low: &[f64],
+    min_bars_between_peaks: usize,
+    head_depth_ratio: f64
+) -> Result<ChartPatternResult>;
 ```
+
+> **Pattern modules.** Candlestick patterns live in `finkit::patterns::candlestick`
+> and return `PatternResult`; chart patterns live in `finkit::patterns::chart` and
+> return `ChartPatternResult`. They are *not* re-exported from
+> `finkit::indicators`.
 
 ### Streaming API (Incremental)
 
@@ -902,30 +926,30 @@ export interface BbandsResult {
 }
 
 // Overlap Studies
-export function sma(close: number[], timeperiod?: number): number[];
-export function ema(close: number[], timeperiod?: number): number[];
-export function bollinger_bands(
+export function sma(close: number[], timeperiod: number): number[];
+export function ema(close: number[], timeperiod: number): number[];
+export function bollingerBands(
   close: number[],
-  timeperiod?: number,
-  nbdevup?: number,
-  nbdevdn?: number
+  timeperiod: number,
+  nbdevup: number,
+  nbdevdn: number
 ): BbandsResult;
 
 // Momentum
-export function rsi(close: number[], timeperiod?: number): number[];
+export function rsi(close: number[], timeperiod: number): number[];
 export function macd(
   close: number[],
-  fastperiod?: number,
-  slowperiod?: number,
-  signalperiod?: number
+  fastperiod: number,
+  slowperiod: number,
+  signalperiod: number
 ): MacdResult;
 export function stoch(
   high: number[],
   low: number[],
   close: number[],
-  fastk_period?: number,
-  slowk_period?: number,
-  slowd_period?: number
+  fastkPeriod: number,
+  slowkPeriod: number,
+  slowdPeriod: number
 ): StochResult;
 
 // Volatility
@@ -933,25 +957,25 @@ export function atr(
   high: number[],
   low: number[],
   close: number[],
-  timeperiod?: number
+  timeperiod: number
 ): number[];
 
 // Volume
 export function obv(close: number[], volume: number[]): number[];
 
 // Pattern Recognition
-export function cdl_doji(
+export function cdlDoji(
   open: number[],
   high: number[],
   low: number[],
   close: number[],
-  doji_pct?: number
+  dojiPct: number
 ): number[];
 
-export function detect_double_top(
+export function detectDoubleTop(
   high: number[],
-  lookback?: number,
-  tolerance?: number
+  lookback: number,
+  tolerance: number
 ): number[];
 ```
 
@@ -959,9 +983,9 @@ export function detect_double_top(
 
 ```typescript
 import {
-  sma, ema, rsi, macd, bollinger_bands,
+  sma, ema, rsi, macd, bollingerBands,
   stoch, atr, obv,
-  cdl_doji, cdl_hammer, detect_double_top
+  cdlDoji, cdlHammer, detectDoubleTop
 } from 'finkit';
 
 const close = Array.from({ length: 100 }, (_, i) => 100 + i + Math.random());
@@ -972,11 +996,11 @@ const volume = Array.from({ length: 100 }, () => Math.random() * 4000 + 1000);
 const smaResult = sma(close, 20);
 const rsiResult = rsi(close, 14);
 const macdResult = macd(close, 12, 26, 9);
-const bbandsResult = bollinger_bands(close);
+const bbandsResult = bollingerBands(close, 20, 2, 2);
 const atrResult = atr(high, low, close, 14);
 
-const doji = cdl_doji(close, high, low, close);
-const doubleTops = detect_double_top(high);
+const doji = cdlDoji(close, high, low, close, 0.1);
+const doubleTops = detectDoubleTop(high, 20, 0.03);
 ```
 
 ## Java API
@@ -998,25 +1022,36 @@ mvn -B -f ffi/java-binding/pom.xml -DskipTests package
 package com.finkit;
 
 public class Indicators {
-    // Overlap Studies
-    public static native double[] sma(double[] close, int timeperiod);
-    public static native double[] ema(double[] close, int timeperiod);
-    public static native BbandsResult bbands(double[] close, int timeperiod, double nbdevup, double nbdevdn);
+    // Overlap Studies (return arrays directly)
+    public static native double[] sma(double[] input, int period);
+    public static native double[] ema(double[] input, int period);
+    // bbands writes into a pre-allocated result object
+    public static native void bbands(double[] input, int timePeriod, double nbDevUp, double nbDevDn, BbandsResult result);
 
     // Momentum
-    public static native double[] rsi(double[] close, int timeperiod);
-    public static native MacdResult macd(double[] close, int fastperiod, int slowperiod, int signalperiod);
-    public static native StochResult stoch(double[] high, double[] low, double[] close, int fastk_period, int slowk_period, int slowd_period);
+    public static native double[] rsi(double[] input, int period);
+    // macd writes into a pre-allocated result object
+    public static native void macd(double[] input, int fastPeriod, int slowPeriod, int signalPeriod, MacdResult result);
+    // stoch writes into a pre-allocated result object
+    public static native void stoch(double[] high, double[] low, double[] close, int fastK, int slowK, int slowD, StochResult result);
 
     // Volatility
-    public static native double[] atr(double[] high, double[] low, double[] close, int timeperiod);
+    public static native double[] atr(double[] high, double[] low, double[] close, int period);
 
     // Volume
     public static native double[] obv(double[] close, double[] volume);
+}
 
-    // Pattern Recognition
-    public static native int[] cdlDoji(double[] open, double[] high, double[] low, double[] close, double dojiPct);
+// Pattern recognition lives in dedicated classes, not Indicators.
+public final class Patterns {
+    public static native int[] cdlDoji(double[] open, double[] high, double[] low, double[] close);
+    public static native int[] cdlDojiWithThreshold(double[] open, double[] high, double[] low, double[] close, double dojiPct);
+    public static native int[] cdlHammer(double[] open, double[] high, double[] low, double[] close);
+}
+
+public final class ChartPatterns {
     public static native int[] detectDoubleTop(double[] high, int lookback, double tolerance);
+    public static native int[] detectDoubleBottom(double[] low, int lookback, double tolerance);
 }
 
 public class MacdResult {
@@ -1042,6 +1077,9 @@ public class StochResult {
 ```java
 import com.finkit.Indicators;
 import com.finkit.MacdResult;
+import com.finkit.BbandsResult;
+import com.finkit.Patterns;
+import com.finkit.ChartPatterns;
 
 public class Example {
     public static void main(String[] args) {
@@ -1052,7 +1090,15 @@ public class Example {
 
         double[] sma20 = Indicators.sma(close, 20);
         double[] rsi14 = Indicators.rsi(close, 14);
-        MacdResult macd = Indicators.macd(close, 12, 26, 9);
+
+        MacdResult macd = new MacdResult();
+        Indicators.macd(close, 12, 26, 9, macd);
+
+        BbandsResult bbands = new BbandsResult();
+        Indicators.bbands(close, 20, 2.0, 2.0, bbands);
+
+        int[] doji = Patterns.cdlDoji(close, close, close, close);
+        int[] doubleTops = ChartPatterns.detectDoubleTop(close, 20, 0.03);
 
         System.out.println("SMA length: " + sma20.length);
         System.out.println("RSI length: " + rsi14.length);
@@ -1081,25 +1127,49 @@ go test ./...
 package ta
 
 // Overlap Studies
-func SMA(close []float64, timeperiod int) ([]float64, error)
-func EMA(close []float64, timeperiod int) ([]float64, error)
-func BBands(close []float64, timeperiod int, nbdevup, nbdevdn float64) (upper, middle, lower []float64, err error)
+func Sma(input []float64, period int) ([]float64, error)
+func Ema(input []float64, period int) ([]float64, error)
+func Bbands(input []float64, period int, nbDevUp, nbDevDn float64) (*BbandsResult, error)
 
 // Momentum
-func RSI(close []float64, timeperiod int) ([]float64, error)
-func MACD(close []float64, fastperiod, slowperiod, signalperiod int) (macd, signal, hist []float64, err error)
-func Stoch(high, low, close []float64, fastk_period, slowk_period, slowd_period int) (k, d []float64, err error)
+func Rsi(input []float64, period int) ([]float64, error)
+func Macd(input []float64, fastPeriod, slowPeriod, signalPeriod int) (*MacdResult, error)
+func Stoch(high, low, close []float64, kPeriod, kSlow, dPeriod int) (*StochResult, error)
 
 // Volatility
-func ATR(high, low, close []float64, timeperiod int) ([]float64, error)
+func Atr(high, low, close []float64, period int) ([]float64, error)
 
 // Volume
-func OBV(close, volume []float64) ([]float64, error)
-
-// Pattern Recognition
-func CDLDoji(open, high, low, close []float64, doji_pct float64) ([]int32, error)
-func DetectDoubleTop(high []float64, lookback int, tolerance float64) ([]int, error)
+func Obv(close, volume []float64) ([]float64, error)
 ```
+
+Go follows Go naming: every function is exported `CamelCase` (`Sma`, not `SMA`), and a
+multi-output indicator returns a pointer to a result struct rather than several
+slices. The result payloads are:
+
+```go
+type MacdResult struct {
+    Macd   []float64
+    Signal []float64
+    Hist   []float64
+}
+
+type BbandsResult struct {
+    Upper  []float64
+    Middle []float64
+    Lower  []float64
+}
+
+type StochResult struct {
+    K []float64
+   D  []float64
+}
+```
+
+> **No pattern-recognition surface.** Unlike Python and Node, the Go binding does
+> **not** expose `CDLDoji` or `DetectDoubleTop`. Candlestick and chart patterns
+> are reachable only from those other bindings; the omission is in the binding,
+> not in this document.
 
 ### Complete Example
 
@@ -1108,7 +1178,7 @@ package main
 
 import (
     "fmt"
-    "github.com/coeasy/finkit/go/ta"
+    "github.com/coeasy/finkit/ffi/go-binding/go/ta"
 )
 
 func main() {
@@ -1117,24 +1187,24 @@ func main() {
         close[i] = float64(i + 1)
     }
 
-    sma, err := ta.SMA(close, 20)
+    sma, err := ta.Sma(close, 20)
     if err != nil {
         panic(err)
     }
 
-    rsi, err := ta.RSI(close, 14)
+    rsi, err := ta.Rsi(close, 14)
     if err != nil {
         panic(err)
     }
 
-    macd, signal, hist, err := ta.MACD(close, 12, 26, 9)
+    macd, err := ta.Macd(close, 12, 26, 9)
     if err != nil {
         panic(err)
     }
 
     fmt.Printf("SMA length: %d\n", len(sma))
     fmt.Printf("RSI length: %d\n", len(rsi))
-    fmt.Printf("MACD length: %d\n", len(macd))
+    fmt.Printf("MACD length: %d\n", len(macd.Macd))
 }
 ```
 
@@ -1156,27 +1226,29 @@ dotnet pack ffi/dotnet-binding/src/Finkit/Finkit.csproj -c Release -o dist/dotne
 ```csharp
 namespace Finkit;
 
-public class Indicators
+public static class Indicators
 {
     // Overlap Studies
-    public static double[] SMA(double[] close, int timeperiod = 14);
-    public static double[] EMA(double[] close, int timeperiod = 14);
-    public static BbandsResult BBands(double[] close, int timeperiod = 20, double nbdevup = 2.0, double nbdevdn = 2.0);
+    public static double[] Sma(double[] input, int period);
+    public static double[] Ema(double[] input, int period);
+    public static BbandsResult Bbands(double[] input, int period, double nbDevUp = 2.0, double nbDevDn = 2.0);
 
     // Momentum
-    public static double[] RSI(double[] close, int timeperiod = 14);
-    public static MacdResult MACD(double[] close, int fastperiod = 12, int slowperiod = 26, int signalperiod = 9);
+    public static double[] Rsi(double[] input, int period = 14);
+    public static MacdResult Macd(double[] input, int fastPeriod = 12, int slowPeriod = 26, int signalPeriod = 9);
 
     // Volatility
-    public static double[] ATR(double[] high, double[] low, double[] close, int timeperiod = 14);
+    public static double[] Atr(double[] high, double[] low, double[] close, int period = 14);
 
     // Volume
-    public static double[] OBV(double[] close, double[] volume);
-
-    // Pattern Recognition
-    public static int[] CDLDoji(double[] open, double[] high, double[] low, double[] close, double dojiPct = 0.1);
-    public static int[] DetectDoubleTop(double[] high, int lookback = 20, double tolerance = 0.03);
+    public static double[] Obv(double[] close, double[] volume);
 }
+
+> **Two things that surprise people coming from TA-Lib.** Methods follow the .NET
+> framework naming convention (`Sma`, not `SMA`), and `period` has **no default**
+> on `Sma`, `Ema` and `Bbands` -- it must be passed explicitly. There is also no
+> candlestick or chart-pattern surface; unlike Python and Node, the .NET binding
+> does not expose `CDLDoji` or `DetectDoubleTop`.
 
 public class MacdResult
 {
@@ -1208,9 +1280,9 @@ class Program
             .Select(i => 100.0 + i + new Random().NextDouble())
             .ToArray();
 
-        var sma20 = Indicators.SMA(close, 20);
-        var rsi14 = Indicators.RSI(close, 14);
-        var macd = Indicators.MACD(close);
+        var sma20 = Indicators.Sma(close, 20);
+        var rsi14 = Indicators.Rsi(close, 14);
+        var macd = Indicators.Macd(close);
 
         Console.WriteLine($"SMA length: {sma20.Length}");
         Console.WriteLine($"RSI length: {rsi14.Length}");
@@ -1363,22 +1435,27 @@ pub enum TaError {
 ### Python
 
 ```python
-class TaLibError(Exception):
-    """Base exception for all TA-Lib errors."""
+class FinkitError(Exception):
+    """Base exception for every Finkit error."""
     pass
 
-class InvalidPeriodError(TaLibError):
-    """Raised when period parameter is invalid."""
+class InsufficientDataError(FinkitError, ValueError):
+    """Raised when the input is shorter than the requested period."""
     pass
 
-class InsufficientDataError(TaLibError):
-    """Raised when input data is too short."""
+class InvalidParameterError(FinkitError, ValueError):
+    """Raised when a parameter is outside its valid range."""
     pass
 
-class InvalidParametersError(TaLibError):
-    """Raised when parameters are out of valid range."""
+class IndicatorNotFoundError(FinkitError, KeyError):
+    """Raised when an indicator id does not exist in the registry."""
     pass
 ```
+
+`InsufficientDataError` and `InvalidParameterError` also inherit from
+`ValueError`, and `IndicatorNotFoundError` also inherits from `KeyError`, so code
+written against the built-in exceptions keeps working. Catch `FinkitError` to
+handle anything this library raises.
 
 ### Node.js
 

@@ -321,19 +321,27 @@ jobs:
             echo "Invalid release tag: $release_tag" >&2
             exit 1
           fi
+          # Guard the create against the race with the other tag-triggered
+          # workflows: two of them can see "no release yet" and both try to
+          # create it, and the loser otherwise dies here reporting "release
+          # already exists" -- which reads like a no-op but actually aborts the
+          # upload below, leaving the Release with no wheels, no .crate and no
+          # CLI. Falling back to `gh release view` makes the loser continue.
           if ! gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
               gh release create "$release_tag" \
                 --repo "$GITHUB_REPOSITORY" \
                 --verify-tag \
                 --title "$release_tag" \
-                --generate-notes
+                --generate-notes \
+              || gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null
             else
               gh release create "$release_tag" \
                 --repo "$GITHUB_REPOSITORY" \
                 --target "$GITHUB_SHA" \
                 --title "$release_tag" \
-                --generate-notes
+                --generate-notes \
+              || gh release view "$release_tag" --repo "$GITHUB_REPOSITORY" >/dev/null
             fi
           fi
           gh release upload "$release_tag" \

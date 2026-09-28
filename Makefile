@@ -33,20 +33,27 @@ else
 endif
 
 # ---- discover buildable languages from scripts/ ----------------------------
+# The glob also matches `build-usage-packages.sh`, whose suffix looks exactly
+# like a language name. Without the filter below, `make packages` is advertised
+# as a language target, forwards `packages` to the entry script, and fails with
+# "unknown language: packages" every single time.
 LANGS := $(notdir $(wildcard $(ROOT)/scripts/build-usage-*.sh $(ROOT)/scripts/build-usage-*.ps1))
 LANGS := $(LANGS:build-usage-%.sh=%)
 LANGS := $(LANGS:build-usage-%.ps1=%)
 LANGS := $(sort $(LANGS))
+LANGS := $(filter-out packages,$(LANGS))
 
 # ---- phony targets ---------------------------------------------------------
 .PHONY: all help clean dist
 .PHONY: $(LANGS)
 .PHONY: bench-vs-talib bench-talib
 .PHONY: install-and-test
-.PHONY: docker-build docker-run docker-bench
+.PHONY: docker-build docker-run docker-bench docker-compose-up
 .PHONY: preflight lint
 .PHONY: gen-c-header verify-ffi gen-c-binding verify-bindings verify-bindings-tier verify-all-bindings
 .PHONY: build-native-archive verify-native-archive
+.PHONY: installer installer-all check-installer
+.PHONY: $(INSTALLER_TARGETS:%=installer-%)
 .PHONY: check-rustdoc check-orphans check-script-refs check-dead-code check-ios-header
 .PHONY: check-ios-header check-talib-ffi refresh-release-manifests check-release-manifests
 
@@ -78,6 +85,13 @@ docker-run:
 
 docker-compose-up:
 	docker compose -f $(ROOT)/docker-compose.yml up --abort-on-container-exit
+
+# Previously advertised in `make help` and declared .PHONY, but never given a
+# recipe -- `make docker-bench` failed with "No rule to make target". The image
+# mounts ./dist so results survive the container.
+docker-bench:
+	docker build -t finkit/builder:latest $(ROOT)
+	docker run --rm -v $(ROOT)/dist:/work/dist finkit/builder:latest --bench-talib
 
 # ---- preflight ------------------------------------------------------------
 preflight:
@@ -193,6 +207,39 @@ check-ios-header:
 check-talib-ffi:
 	python3 $(ROOT)/scripts/check_talib_ffi_contract.py
 
+# Default underneath MSYS/Git Bash so the installer script runs even if the
+# caller's `make` was invoked from PowerShell.
+BASH := bash
+
+# The `--target` values scripts/build-installer.sh understands.
+INSTALLER_TARGETS := native msi deb rpm pkg dmg
+
+# Build the installers this host can actually produce. Not every host has the
+# tooling for every format, and that is why the list is not hardcoded: on
+# Linux it yields deb/rpm, on macOS pkg/dmg, on Windows msi. `native` is always
+# included by the script itself.
+installer: installer-native
+
+# `$*` is the part matched by `%`, so `make installer-deb` becomes
+# `--target deb`. A pattern rule rather than six copies of the same recipe.
+installer-%:
+	$(BASH) $(ROOT)/scripts/build-installer.sh --target $*
+
+# Every installer this host supports. Pass STRICT=1 to turn a missing tool from
+# a skip into a failure -- use it in release builds, where silently shipping a
+# Release without its Windows installer is worse than a red build.
+installer-all:
+	$(BASH) $(ROOT)/scripts/build-installer.sh --all $(if $(STRICT),--strict,)
+
+.PHONY: installer $(INSTALLER_TARGETS:%=installer-%) installer-all
+
+# The MSI payload and the portable archive must describe the same set of files;
+# this is the gate that keeps them from drifting apart.
+check-installer:
+	python3 $(ROOT)/scripts/check_installer_contract.py
+
+.PHONY: check-installer
+
 # ---- release records: keep the shipped digests in step with the artefacts ---
 # `dist/**/manifest.json` records a `size_bytes`/`sha256` pair per shipped
 # artefact. The linker output is not reproducible, so every rebuild changes
@@ -233,6 +280,9 @@ help:
 	@echo "  make docker-build     Build the one-click Docker image"
 	@echo "  make docker-run       Run the build inside Docker (mounts ./dist)"
 	@echo "  make docker-bench     Run only --bench-talib inside Docker"
+	@echo "  make installer        Build this host's native SDK installer package"
+	@echo "  make installer-all    Build every installer this host supports (STRICT=1 to fail on missing tools)"
+	@echo "  make check-installer  Fail if the MSI payload and the native archive disagree"
 	@echo "  make preflight        Toolchain pre-check (no build)"
 	@echo "  make clean            Wipe dist/"
 	@echo "  make gen-c-header     Regenerate ffi/c-binding/include/finkit.h from registry"
