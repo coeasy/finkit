@@ -516,9 +516,15 @@ pub fn cross_correlation_matrix(
     for i in 0..num_series {
         matrix[i * num_series + i] = 1.0; // diagonal
         for j in (i + 1)..num_series {
+            // `spearman_rank` only fails on a length mismatch or n < 2, both of
+            // which are pre-validated above (all series share `len >= 2`). A
+            // silent `.unwrap_or(0.0)` here would have masked exactly such a
+            // regression, so we fail loud instead of returning a wrong value.
             let corr = match method {
                 CorrelationMethod::Pearson => pearson_corr(series[i], series[j]),
-                CorrelationMethod::Spearman => spearman_rank(series[i], series[j]).unwrap_or(0.0),
+                CorrelationMethod::Spearman => spearman_rank(series[i], series[j]).expect(
+                    "spearman_rank cannot fail: series lengths are pre-validated by cross_correlation_matrix",
+                ),
             };
             matrix[i * num_series + j] = corr;
             matrix[j * num_series + i] = corr;
@@ -651,6 +657,45 @@ mod cross_corr_tests {
     fn test_cross_correlation_invalid() {
         let a = [1.0; 10];
         assert!(cross_correlation_matrix(&[&a[..]], CorrelationMethod::Pearson).is_err());
+    }
+
+    /// Degenerate (constant) series have an undefined correlation. Both methods
+    /// must agree on the chosen sentinel (0.0) rather than diverging, so a
+    /// caller cannot mistake a missing result for a real value.
+    #[test]
+    fn test_cross_correlation_degenerate_constant_is_consistent() {
+        let constant: Vec<f64> = vec![5.0; 20];
+        let varying: Vec<f64> = (0..20).map(|i| i as f64).collect();
+
+        let pearson =
+            cross_correlation_matrix(&[&constant, &varying], CorrelationMethod::Pearson).unwrap();
+        let spearman =
+            cross_correlation_matrix(&[&constant, &varying], CorrelationMethod::Spearman).unwrap();
+
+        // off-diagonal must match between methods and be the 0.0 sentinel
+        assert!((pearson.get(0, 1) - 0.0).abs() < 1e-12);
+        assert!((spearman.get(0, 1) - 0.0).abs() < 1e-12);
+        assert!((pearson.get(0, 1) - spearman.get(0, 1)).abs() < 1e-12);
+        // diagonal stays 1.0
+        assert!((spearman.get(0, 0) - 1.0).abs() < 1e-12);
+    }
+
+    /// Length-mismatched series must surface as an error (not a silently
+    /// zero-filled matrix). This guards `cross_correlation_matrix`'s
+    /// pre-validation: if it were removed, the `.expect` in the Spearman path
+    /// would turn into a panic instead of a masked wrong value.
+    #[test]
+    fn test_cross_correlation_mismatched_lengths_is_err() {
+        let a: Vec<f64> = (0..20).map(|i| i as f64).collect();
+        let b: Vec<f64> = (0..15).map(|i| i as f64).collect();
+        assert!(
+            cross_correlation_matrix(&[&a, &b], CorrelationMethod::Spearman).is_err(),
+            "mismatched lengths must error, not produce a 0.0 matrix"
+        );
+        assert!(
+            cross_correlation_matrix(&[&a, &b], CorrelationMethod::Pearson).is_err(),
+            "mismatched lengths must error, not produce a 0.0 matrix"
+        );
     }
 
     #[test]

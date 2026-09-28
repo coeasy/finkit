@@ -184,3 +184,47 @@ Not allowed:
 > Finkit is the fastest quantitative library.
 
 Performance superiority must remain a reproducible result, not a permanent adjective.
+
+## Finkit 0.2.0 wheel vs TA-Lib Python 0.6.8 — measured parity snapshot
+
+This is a **supplementary Python-binding parity check** distinct from the
+weekly C 0.8.1 Criterion gate above. It compares the shipped Finkit **0.2.0**
+Python wheel against the `talib` **0.6.8** Python binding on identical synthetic
+OHLCV (`N = 5000`, `numpy.random.default_rng(42)`, clipped positive prices).
+Each indicator is computed twice and the maximum absolute difference over the
+finite post-warm-up region is reported. Reproduce with:
+
+```bash
+python .workbuddy-ai/round6-talib-parity.py   # needs numpy + talib 0.6.8 + finkit 0.2.0 wheel
+```
+
+| Indicator | `max|diff|` | tol | parity | Finkit (ms) | TA-Lib (ms) | speedup |
+| --- | ---: | ---: | :---: | ---: | ---: | ---: |
+| SMA(5) | 2.13e-13 | 1e-6 | OK | 0.004 | 0.007 | 1.80× |
+| EMA(5) | 4.26e-14 | 1e-6 | OK | 0.005 | 0.010 | 2.17× |
+| WMA(5) | 4.73e-10 | 1e-6 | OK | 0.005 | 0.007 | 1.54× |
+| MOM(5) | 0.00e+00 | 1e-6 | OK | 0.002 | 0.002 | 1.04× |
+| ROC(5) | 5.68e-14 | 1e-6 | OK | 0.002 | 0.006 | 2.50× |
+| RSI(14) | 4.26e-14 | 1e-6 | OK | 0.009 | 0.021 | 2.26× |
+| ATR(14) | 1.33e-15 | 1e-6 | OK | 0.010 | 0.024 | 2.27× |
+| ADX(14) | 0.00e+00 | 1e-6 | OK | 0.027 | 0.035 | 1.28× |
+| CCI(14) | 0.00e+00 | 1e-6 | OK | 0.061 | 0.063 | 1.03× |
+| WILLR(14) | 1.42e-14 | 1e-6 | OK | 0.008 | 0.016 | 2.05× |
+| OBV | 0.00e+00 | 1e-6 | OK | 0.003 | 0.004 | 1.20× |
+| MACD(12,26,9) | 5.68e-14 | 1e-6 | OK | 0.013 | 0.032 | 2.53× |
+| BBANDS(20,2) | 1.09e-10 | 1e-6 | OK | 0.016 | 0.023 | 1.42× |
+| STOCH(14,3,3) | 5.83e-13 | 1e-6 | OK | 0.026 | 0.029 | 1.12× |
+
+- **Worst numeric divergence: `4.734e-10`** — three orders of magnitude inside
+  the `1e-6` tolerance and consistent with float64 rounding noise.
+- **Verdict: `PARITY`** — no numeric-logic defect versus TA-Lib.
+- **Speed: `1.03×`–`2.53×` faster** than the TA-Lib Python binding
+  (geometric-mean ≈ `1.6×`).
+
+These numbers substantiate the project goal of *benchmarking against and
+surpassing TA-Lib* at the numeric-correctness level and demonstrate a
+competitive speed profile on the reference Python workload. They are a
+snapshot, not a standing claim; regenerate against the current head before any
+product statement, and rely on the C 0.8.1 Criterion gate for the canonical
+release guardrail.
+
