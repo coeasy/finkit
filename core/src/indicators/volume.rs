@@ -144,9 +144,9 @@ pub fn adosc(
 /// ADOSC zero-copy variant: writes result into pre-allocated slice.
 ///
 /// Same semantics as [`adosc`] but writes directly into the caller-provided
-/// buffer. The bundle of AD recurrence and the two EMA recurrences into one
-/// pass lives in [`crate::math::volume_kernels::adosc_into`], which is the
-/// canonical stateful kernel; this wrapper only validates the public
+/// buffer. The fusion of the AD recurrence with the two EMA recurrences into a
+/// single pass lives in [`crate::math::volume_kernels::adosc_into`], which is
+/// the canonical stateful kernel; this wrapper only validates the public
 /// pre-conditions and forwards.
 ///
 /// Relative to the pre-unification implementation this variant additionally

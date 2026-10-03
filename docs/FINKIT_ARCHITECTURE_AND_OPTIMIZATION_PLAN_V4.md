@@ -2382,16 +2382,29 @@ error 确认。这正是"把 `#[expect]` 用在工具 lint 上"最容易踩的�
 
 ## 29.5 复查未发现问题的部分
 
-- **被删除但核实为正当的**：`core/src/indicators/compat.rs` 是**从未被声明的孤儿文件**
-  ——`3fb8b3b` 的 `mod.rs` 里既没有 `pub mod compat;`，也从未出现在生成态文档的模块
-  列表中，说明它不参与编译。其内容
-  （`crate::math::cci::cci(...).map(Array1::from_vec)`）与 `math/cci.rs` 早已返回
-  `Array1<f64>` 的签名不符，根本编译不过。删除是正确的清理，不构成 API 破坏。
-- **公开函数面比对**：对 `core/src/indicators` 全目录做 `3fb8b3b` → `HEAD` 的
-  `pub fn` 名称集合差分，结果只有 `compat::cci`（孤儿）与 `volume::adosc_into`
-  （已修）两项删除，无其他遗漏。
+- **全工作区公开 API 面差分（本节最强的一条证据）**：对
+  `core/src`、`visualization/src`、`factor-analysis/src`、`cli/src`、`wasm/src`、`ffi`
+  逐文件提取 `pub fn/struct/enum/trait/type/const/static` 名称集合，比对上一版
+  `3fb8b3b` → 本次发布 `87d5991`：
+  - **存活文件中被移除的公开项 = 0**（`adosc_into` 恢复后归零）；
+  - 新增公开项 119 个（全部来自本轮的 `DependencyShape` / `RuntimeContext` /
+    `ArtifactCache` 等新增面）；
+  - 整体删除的文件只有 3 个，且**全部核实为从未参与编译的孤儿**（见下）。
+- **三个被删文件逐一核实**（"文件被删"不等于"API 被删"，必须区分）：
+  - `core/src/indicators/compat.rs`：`3fb8b3b` 的 `mod.rs` 里没有 `pub mod compat;`，
+    也从未出现在生成态文档的模块列表中；其内容
+    `crate::math::cci::cci(...).map(Array1::from_vec)` 与 `math/cci.rs` 早已返回
+    `Array1<f64>` 的签名不符，**根本编译不过**。
+  - `core/src/formula/range_zero_copy.rs`：`formula/mod.rs` 里没有声明；真正的实现是
+    `formula/engine.rs:1187` 的 `eval_range_zero_copy_inputs`（被
+    `core/tests/talib_semantic_contract.rs` 与 `ffi/python-binding/src/formula_plan.rs`
+    调用），孤儿文件里那份是**重复实现**。
+  - `core/src/circuit_breaker.rs`：`check_rust_source_reachability.py` 的 docstring 里
+    已记录该案例 —— 完整、有文档、有测试，但从未进入模块图，因此从未编入任何产物。
+  - 三者的共同点：**不在 `rust_source_reachability_allowlist.json` 里**，因为该 allowlist
+    针对"已声明但不可达"，而它们是"从未被声明"——这是两个不同的类别。
 - **`cargo check --workspace --all-targets --locked`**：0 error。
-- **`cargo test -p finkit --lib -- volume`**：150 passed / 0 failed。
+- **`cargo test -p finkit --lib`**：3028 passed / 0 failed；`-- volume`：150 passed。
 - **`cargo test -p finkit --test runtime_convergence`**：17 passed / 0 failed，含
   `into_kernel_equals_allocating_kernel`（"五条边"中的 `allocating == into`）。
 - **`cargo fmt --all -- --check`**：干净。
