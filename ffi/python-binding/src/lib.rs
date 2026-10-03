@@ -4914,22 +4914,42 @@ fn compute_indicators<'py>(
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
 
-    let open_vec: Option<Vec<f64>> = open.as_ref().map(|arr| arr.as_array().to_vec());
-    let high_vec: Option<Vec<f64>> = high.as_ref().map(|arr| arr.as_array().to_vec());
-    let low_vec: Option<Vec<f64>> = low.as_ref().map(|arr| arr.as_array().to_vec());
-    let volume_vec: Option<Vec<f64>> = volume.as_ref().map(|arr| arr.as_array().to_vec());
-    let secondary_vec: Option<Vec<f64>> = secondary.as_ref().map(|arr| arr.as_array().to_vec());
+    let open_slice = open
+        .as_ref()
+        .map(|arr| arr.as_slice())
+        .transpose()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let high_slice = high
+        .as_ref()
+        .map(|arr| arr.as_slice())
+        .transpose()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let low_slice = low
+        .as_ref()
+        .map(|arr| arr.as_slice())
+        .transpose()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let volume_slice = volume
+        .as_ref()
+        .map(|arr| arr.as_slice())
+        .transpose()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let secondary_slice = secondary
+        .as_ref()
+        .map(|arr| arr.as_slice())
+        .transpose()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
 
     let indicator_requests = parse_indicator_requests(requests);
 
     let results: Vec<(String, IndicatorResult)> = py.detach(|| {
         compute_all_indicators(
-            open_vec.as_deref(),
-            high_vec.as_deref(),
-            low_vec.as_deref(),
+            open_slice,
+            high_slice,
+            low_slice,
             close_slice,
-            volume_vec.as_deref(),
-            secondary_vec.as_deref(),
+            volume_slice,
+            secondary_slice,
             &indicator_requests,
             talib_compat,
         )
@@ -4939,22 +4959,22 @@ fn compute_indicators<'py>(
     for (key, value) in results {
         match value {
             IndicatorResult::Single(arr) => {
-                dict.set_item(key, arr)?;
+                dict.set_item(key, PyArray1::from_vec(py, arr))?;
             }
             IndicatorResult::Double(a, b) => {
-                dict.set_item(format!("{}_0", key), a)?;
-                dict.set_item(format!("{}_1", key), b)?;
+                dict.set_item(format!("{}_0", key), PyArray1::from_vec(py, a))?;
+                dict.set_item(format!("{}_1", key), PyArray1::from_vec(py, b))?;
             }
             IndicatorResult::Triple(a, b, c) => {
-                dict.set_item(format!("{}_0", key), a)?;
-                dict.set_item(format!("{}_1", key), b)?;
-                dict.set_item(format!("{}_2", key), c)?;
+                dict.set_item(format!("{}_0", key), PyArray1::from_vec(py, a))?;
+                dict.set_item(format!("{}_1", key), PyArray1::from_vec(py, b))?;
+                dict.set_item(format!("{}_2", key), PyArray1::from_vec(py, c))?;
             }
             IndicatorResult::Quad(a, b, c, d) => {
-                dict.set_item(format!("{}_0", key), a)?;
-                dict.set_item(format!("{}_1", key), b)?;
-                dict.set_item(format!("{}_2", key), c)?;
-                dict.set_item(format!("{}_3", key), d)?;
+                dict.set_item(format!("{}_0", key), PyArray1::from_vec(py, a))?;
+                dict.set_item(format!("{}_1", key), PyArray1::from_vec(py, b))?;
+                dict.set_item(format!("{}_2", key), PyArray1::from_vec(py, c))?;
+                dict.set_item(format!("{}_3", key), PyArray1::from_vec(py, d))?;
             }
             IndicatorResult::Error(msg) => {
                 dict.set_item(format!("{}_error", key), msg)?;
@@ -5146,6 +5166,8 @@ fn talib_macdfix(input: &[f64], params: &[f64]) -> IndicatorResult {
     }
 
     let mut index = lookback_total;
+    // SAFETY-TERMINATION: `today` strictly increases each pass and the loop
+    // breaks once it reaches `input.len()`.
     loop {
         macd[index] = macd_value;
         signal[index] = signal_value;

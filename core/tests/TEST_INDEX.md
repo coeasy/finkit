@@ -75,6 +75,30 @@
 - `formula_partial_eval.rs` - 公式部分求值（R-2）
 - `formula_terminal_contract.rs` - 终端适配器数值语义契约
 - `formula_terminal_golden.rs` - 终端 golden
+- `formula_dialect_coverage.rs` - 方言覆盖矩阵
+- `formula_registry_signature.rs` - 注册表函数签名契约
+- `formula_talib_081_surface.rs` - TA-Lib 0.8.1 公式面覆盖
+
+### 收敛门禁 (Convergence Gates)
+§18 的「五条边」每条都必须被钉住：`batch == streaming`、`full == range`、
+`allocating == into`、`tree == plan`、`Rust == FFI`。**门禁必须能腐烂检测** ——
+allowlist 型条目要双向断言（stale + undeclared），否则清理后的陈旧条目会永远
+「绿」着撒谎。
+
+- `runtime_convergence.rs` - **跨执行形态收敛门禁**（batch/streaming、full/range、
+  allocating/into）+ 五条边的 artifact 清单 + CSE 数值等价门禁。本文档暴露过 6 个
+  真实的流式内核与批量内核不一致（ADX / DX / +DI / −DI / TRANGE / ATR），全部按
+  批量语义修正而非加入 allowlist
+- `test_index_contract.rs` - **本索引自身的双向门禁**：每个 `core/tests/*.rs`
+  必须被本文档列出（新 target 不能悄悄不可发现），本文档列出的每个路径也必须真实
+  存在（删除/改名 target 会在这里失败，而不是留下死指针）
+
+### 因子库 / 多周期 (Factor Library & Multi-period)
+
+- `alpha158_parity.rs` - Alpha158 因子库一致性
+- `worldquant101_library.rs` - WorldQuant 101 因子库
+- `multi_period_resonance_smoke.rs` - 多周期共振冒烟
+- `rolling_volatility_consistency.rs` - 滚动波动率一致性
 
 ### 声明式前端契约 (Declarative Front-end)
 `factor_provider` / `factor_graph` / `operation` 三层的外部契约。
@@ -97,8 +121,8 @@
 
 `tests/common/` 目录包含测试共享工具：
 
-- `mod.rs` - 模块导出
-- `golden_loader.rs` - 黄金测试数据加载
+- `common/mod.rs` - 模块导出
+- `common/golden_loader.rs` - 黄金测试数据加载
 
 ## 运行测试
 

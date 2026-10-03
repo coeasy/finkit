@@ -58,14 +58,17 @@ The key metadata is:
 - `LookbackRequirement`: no history, period-based, fixed, or dynamic history.
 - `ComputeEffect`: pure computation, variable write, named output, drawing, or
   an opaque stateful operation.
-- `ComputeCapabilities`: deterministic, streaming, stateful, lookback, and
-  effect flags.
+- `ComputeCapabilities`: deterministic, streaming, stateful, lookback, typed
+  `dependency` shape, and effect flags.
+- `DependencyShape`: `FixedLookback(rows)`, `Expanding`, `Dynamic`,
+  `CrossSectional`, or `Global`. Only a proven `FixedLookback` permits dirty-range
+  execution; every other shape falls back to a full recompute.
 - `ExecutionPolicy`: shared NaN and warm-up policy.
 - `ComputeInput`: validated borrowed `MarketFrame` plus execution policy.
 
 ```rust
 use finkit::compute::{
-    ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan,
+    ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, DependencyShape,
     LookbackRequirement,
 };
 
@@ -74,6 +77,7 @@ let pure = ComputeCapabilities {
     streaming: true,
     stateful: false,
     lookback: LookbackRequirement::None,
+    dependency: DependencyShape::FixedLookback(0),
     effect: ComputeEffect::Pure,
 };
 let plan = ComputePlan::compile([
@@ -90,6 +94,146 @@ topological sorting.
 This is intentionally an execution-neutral IR foundation. Batch, streaming,
 SIMD, bytecode, factor, and future JIT backends can consume the same semantic
 metadata without changing user-facing numerical APIs.
+
+## Semantic Graph
+
+`finkit::semantic_graph` is the one graph model every frontend lowers into:
+
+```text
+Frontend AST  ->  SemanticGraph  ->  ComputePlan
+```
+
+`Formula`, `Factor`, `Feature`, and `Composite` are `NodeKind` labels on a node,
+not four graph types. That matters beyond tidiness: every graph-level concern —
+dependency folding, CSE, level scheduling, artifact identity — then has exactly
+one implementation site instead of one per concept.
+
+```rust
+use finkit::semantic_graph::{NodeKind, SemanticGraph};
+
+let mut builder = SemanticGraph::builder();
+let close = builder.push_leaf(NodeKind::Input, "VARIABLE:CLOSE");
+let first = builder.push(NodeKind::Factor, "MA", vec![close], pure.clone());
+let second = builder.push(NodeKind::Factor, "MA", vec![close], pure.clone());
+let sum = builder.push(NodeKind::Factor, "ADD", vec![first, second], pure);
+builder.target(sum);
+let graph = builder.build()?;
+
+let outcome = graph.eliminate_common_subexpressions();
+assert_eq!(outcome.report.merged, 1); // the two identical `MA` nodes folded
+let plan = outcome.graph.lower()?;
+```
+
+Contracts worth knowing:
+
+- **`inputs` is an ordered operand list**, not a set. `A - B` and `B - A`, and
+  `X + X` versus `X`, are different graphs. Every transformation preserves
+  operand order and multiplicity.
+- **`NodeKind` is provenance, not semantics.** `content_hash()` deliberately
+  excludes it, so a formula and a factor computing the same series share one
+  artifact identity and one cached result.
+- **Validation is `ComputePlan::compile`.** Unknown operands, duplicate ids,
+  empty operations, and cycles are reported with the plan's own error type, so
+  there is one DAG validator in the crate rather than two.
+- **`dependency_shape(id)` folds the whole upward cone**, not just the node's own
+  shape, using the single rule `DependencyShape::combine`. One `Dynamic`,
+  `Expanding`, `CrossSectional`, or `Global` node anywhere upstream makes the
+  chain — and therefore `can_execute_range()` — refuse range execution.
+- **`eliminate_common_subexpressions()` merges only pure, stateless,
+  deterministic nodes.** Impure nodes are observable; stateful nodes have their
+  state slots keyed by node identity, so merging would renumber them for a
+  marginal win. Each refusal is counted in `CseReport`.
+- **`levels()` groups; it never reorders.** Flattening the levels keeps the
+  graph's topological order within each level, so observable effects stay in
+  their declared relative order.
+
+### The production route: `UnifiedRuntime::compile_semantic_graph`
+
+A graph type only the test suite can reach is not part of the product, so the
+runtime exposes the whole route — optimize, lower, hot-compile — as one call:
+
+```rust
+use finkit::unified_runtime::{GraphOptimization, UnifiedRuntime};
+
+let mut compiled = UnifiedRuntime::compile_semantic_graph(
+    &graph,
+    dispatcher,
+    GraphOptimization::CommonSubexpressions,
+)?;
+if let Some(report) = compiled.cse() {
+    println!("folded {} node(s)", report.merged);
+}
+let output = compiled.executor_mut().execute(&[&close])?;
+```
+
+- **`GraphOptimization::None` is the default.** Optimization is opted into rather
+  than silently applied to a caller's plan, so a caller who has not thought about
+  it gets exactly what the frontend declared.
+- **`cse()` returns `Option<CseReport>`.** `None` means "no pass ran"; a report
+  with `merged == 0` means "a pass ran and found nothing to fold". Collapsing the
+  two would hide the difference between a frontend that emits clean DAGs and one
+  that was never optimized.
+- **The graph is not mutated.** The pass returns a rewritten graph and that copy
+  is what lowers, so a caller can hold declaration and optimization side by side —
+  which is what the numerical-equivalence gate does.
+- **The executor keeps its arena and persistent state** across calls, so a scan
+  reuses its working set per symbol instead of re-allocating. Drive it through
+  `executor_mut()`, or take ownership with `into_executor()`.
+- **`dependency()` carries the folded contract.** Folding a duplicate must not
+  turn a range-eligible graph into a `Dynamic` one, and the pass must actually
+  reduce work rather than only report that it did; both are asserted by
+  `the_production_graph_entry_point_matches_the_direct_route`.
+
+**Adoption status.** this section documents the supported route and its contract;
+it is not a claim that every frontend already takes it. The formula and factor
+frontends still lower their own plans directly (`FormulaComputePlan::compile`,
+`FactorPlan::execute_borrowed`) and do not yet route through `SemanticGraph`.
+
+### Derive once: `UnifiedRuntime::compile_semantic_graph_cached`
+
+§20 ranks "stop re-deriving what has already been derived" above every
+micro-optimization, and the factor scan is the case it was written for: one
+declaration compiled, then run for every symbol in the universe. The cached
+entry point shares the compiled plan through a `RuntimeContext` so the
+lower-and-compile cost is paid per declaration rather than per symbol:
+
+```rust
+use finkit::runtime_context::RuntimeContext;
+use finkit::unified_runtime::{GraphOptimization, UnifiedRuntime};
+
+let mut runtime = RuntimeContext::new();
+let mut compiled = UnifiedRuntime::compile_semantic_graph_cached(
+    &graph,
+    dispatcher,
+    GraphOptimization::CommonSubexpressions,
+    &mut runtime,
+)?;
+// Every later call with the same declaration is a cache hit.
+assert_eq!(runtime.cache().stats().hits, 1);
+```
+
+- **What is cached is the plan, not the executor.** `CompiledPlanArtifact` holds
+  the primitive plan plus its CSE report and dependency shape — all plain data.
+  The executor is built per call because it owns a buffer arena and persistent
+  kernel state; sharing one across symbols would let the second symbol overwrite
+  the first one's working set.
+- **The cache is keyed on the declaration, not on the optimized graph.** Running
+  CSE merely to decide whether to run CSE would defeat the purpose, so the
+  optimization setting selects a namespace instead
+  (`FINPLAN0` as-declared / `FINPLAN1` common-subexpressions). As-declared and
+  optimized plans therefore never answer each other's requests.
+- **`ArtifactCache` is the one cache the runtime context owns.** Formula, factor,
+  composite and research planners had each grown their own key type and eviction
+  rule, so "is this already compiled?" had a different answer in every layer.
+  This is the shared answer, bounded and LRU.
+- **A failed build is not cached**, so a graph corrected after a
+  `GraphPlanError` is not poisoned by the earlier failure.
+- **Reachability is asserted, not assumed.** `check_orphan_modules.py` reported
+  the whole semantic layer as test-only before a production entry point existed;
+  `recompiling_the_same_declaration_is_served_from_the_artifact_cache` now fails
+  if nothing writes to the cache, and
+  `the_plan_cache_separates_optimization_settings` fails if the two namespaces
+  ever collapse into one.
 
 ## Formula AST to Compute IR
 
@@ -273,6 +417,41 @@ reuse unavoidable intermediate memory across Formula/Factor/Batch planners
 without letting idle retained memory grow without bound. Backend-wide arena
 integration remains incremental; the presence of the shared type is not a claim
 that every existing indicator/formula implementation already uses it.
+
+### Persistent output: `execute_into`
+
+`UnifiedExecutor::execute` moves the retained result buffers *out* of the arena,
+because the caller owns the results. That leaves a zero-length `Vec` in each
+output slot, and `BufferArena::recycle` deliberately refuses those, so the next
+execution has to allocate a replacement for every retained output — one
+allocation per output per execution, which in a scan loop is one per symbol.
+
+`UnifiedExecutor::execute_into` closes that gap: it runs the same plan, copies
+each retained output into storage the caller already owns, and hands the arena
+buffers straight back.
+
+```rust
+use finkit::unified_executor::UnifiedExecutor;
+
+let mut destination = vec![0.0; rows];
+let mut destinations: [&mut [f64]; 1] = [destination.as_mut_slice()];
+executor.execute_into(&[&close], &mut destinations)?;
+// Every buffer, outputs included, is now back in the arena: a scan loop that
+// keeps this destination performs zero arena allocations after the first run.
+```
+
+The trade is one `memcpy` of `rows` `f64` per output per execution against an
+allocation of the same size — and unlike the allocation, the copy is flat in the
+number of symbols scanned.
+
+Both the destination count and the destination length are validated **before the
+plan runs**, so a rejected call has no side effects at all. That ordering is the
+contract, not an implementation detail: `execute` drives persistent kernel state,
+so a length check placed after the run would leave a rejected executor one step
+ahead of its caller, and a retry with a corrected destination would compute the
+second sample's value and return it as the first.
+`a_rejected_execute_into_leaves_the_executor_untouched` asserts it through
+`RuntimeMetrics`, whose counters only advance on the success path.
 
 ## Formula optimizer equivalence contract
 

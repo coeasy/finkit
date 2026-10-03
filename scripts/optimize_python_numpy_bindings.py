@@ -1,80 +1,48 @@
-"""Rewrite generated float64 Python indicators to return NumPy arrays directly."""
+#!/usr/bin/env python3
+"""Verify generated float64 Python bindings return NumPy arrays directly.
 
+Returning a Python `list` from a numeric binding costs a full element-wise
+conversion on every call; the shipping contract is that `generated.rs` and
+`lib.rs` expose `Py<PyArray1<f64>>` (and tuples of them) and keep the original
+`Vec`-returning body as a `vec_<name>_impl` helper.
+
+This module used to rewrite the two files in place. V4 plan Batch 2 retired that:
+`scripts/optimize_python_bindings.py` owns the transformation and exposes
+`--check`, the generator applies it while emitting `generated.rs`, and this
+module is the focused verifier that neither surface regressed.
+
+Exit codes
+----------
+0  both surfaces are NumPy-direct
+1  a numeric binding still returns Python lists
+"""
+
+from __future__ import annotations
+
+import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-PATH = Path(__file__).resolve().parents[1] / "ffi/python-binding/src/generated.rs"
+import binding_spec  # noqa: E402  (path setup must precede the import)
 
 
-def main() -> None:
-    source = PATH.read_text(encoding="utf-8")
-    source = source.replace(
-        "-> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)>",
-        "-> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)>"
+def main() -> int:
+    violations = binding_spec.verify_numpy_direct()
+    if violations:
+        for item in violations:
+            print(f"::error title=NumPy-direct contract::{item}")
+        return 1
+
+    print(
+        "NumPy-direct contract verified: "
+        + ", ".join(
+            str(path.relative_to(binding_spec.ROOT))
+            for path in (binding_spec.GENERATED, binding_spec.LIB)
+        )
     )
-    source = source.replace(
-        "-> PyResult<(Vec<f64>, Vec<f64>)>",
-        "-> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)>"
-    )
-    source = source.replace(
-        "-> PyResult<Vec<f64>>",
-        "-> PyResult<Py<PyArray1<f64>>>"
-    )
-    source = source.replace(
-        "-> PyResult<(Bound<'_, PyArray1<f64>>, Bound<'_, PyArray1<f64>>, Bound<'_, PyArray1<f64>>)> ",
-        "-> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)> "
-    )
-    source = source.replace(
-        "-> PyResult<(Bound<'_, PyArray1<f64>>, Bound<'_, PyArray1<f64>>)> ",
-        "-> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> "
-    )
-    source = source.replace(
-        "-> PyResult<Bound<'_, PyArray1<f64>>> ",
-        "-> PyResult<Py<PyArray1<f64>>> "
-    )
-
-    needle = "py.detach(||"
-    positions = []
-    cursor = 0
-    while True:
-        index = source.find(needle, cursor)
-        if index < 0:
-            break
-        positions.append(index)
-        cursor = index + len(needle)
-
-    for index in reversed(positions):
-        function_start = source.rfind("fn ", 0, index)
-        signature = source[function_start:index]
-        if "PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)>" in signature:
-            replacement = "py_arrays3_f64(py, ||"
-        elif "PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)>" in signature:
-            replacement = "py_arrays2_f64(py, ||"
-        elif "PyResult<Py<PyArray1<f64>>>" in signature:
-            replacement = "py_array_f64(py, ||"
-        else:
-            replacement = needle
-        source = source[:index] + source[index:].replace(needle, replacement, 1)
-
-    # Candlestick bindings return integer arrays and must retain their normal
-    # Vec conversion path.
-    cursor = 0
-    while True:
-        start = source.find("fn cdl_", cursor)
-        if start < 0:
-            break
-        end = source.find("\n#[pyfunction]", start + 1)
-        if end < 0:
-            end = len(source)
-        block = source[start:end]
-        block = block.replace("py_array_f64(py, ||", "py.detach(||")
-        block = block.replace("py_arrays2_f64(py, ||", "py.detach(||")
-        block = block.replace("py_arrays3_f64(py, ||", "py.detach(||")
-        source = source[:start] + block + source[end:]
-        cursor = start + len(block)
-
-    PATH.write_text(source, encoding="utf-8")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

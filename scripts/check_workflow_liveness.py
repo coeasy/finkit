@@ -22,7 +22,25 @@ carries a *dormant* branch filter (one matching no existing branch) is reported
 as information, not as a failure — the check is about "can this ever run", not
 "is every branch filter still meaningful".
 
-Exit codes: 0 clean, 1 at least one unreachable workflow.
+Dangling `workflow_run` dependencies
+------------------------------------
+"Can this ever run" has a second, less obvious form. `on.workflow_run.workflows`
+lists workflows **by display name**, and a name that does not match any
+workflow's `name:` in this tree makes the trigger dead — the workflow waits for
+something that never reports. That defect is invisible to the reachability
+analysis above, because such a workflow usually still carries
+`workflow_dispatch` and therefore looks alive.
+
+`.github/workflows/release-readiness.yml` is the case that matters: it is the
+release licence ("same SHA, every required workflow green"). A typo in its eight
+names would leave release readiness permanently un-triggered while CI stayed
+green, which is precisely the silent-gate failure this repository's gates exist
+to prevent. So every `workflow_run` target is resolved against the set of
+declared names, and the aggregator's independent list is checked against the
+same names in both directions — one declaration, one gate, no drift.
+
+Exit codes: 0 clean, 1 at least one unreachable/dangling workflow or a
+release-readiness list that has drifted.
 """
 from __future__ import annotations
 
@@ -33,6 +51,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 WORKFLOWS = ROOT / '.github' / 'workflows'
+AGGREGATOR = ROOT / 'scripts' / 'release_readiness_aggregate.py'
+RELEASE_READINESS = WORKFLOWS / 'release-readiness.yml'
 
 # Triggers that fire without depending on which branch is pushed.
 #
@@ -44,8 +64,18 @@ WORKFLOWS = ROOT / '.github' / 'workflows'
 # branch deleted months ago still reported "every workflow has a trigger that
 # can fire". Manual triggers are honoured as a *fallback* below, not as a
 # blanket excuse to stop looking.
+#
+# `workflow_run` *is* automatic: it fires when a named workflow completes,
+# independently of branches. Leaving it out caused two opposite errors on
+# `.github/workflows/release-readiness.yml`, whose only automatic trigger is
+# `workflow_run`: it was reported as "no automatic trigger; fires only via
+# workflow_dispatch" (misleading), and a workflow relying on `workflow_run`
+# *alone* would have been failed as unreachable (false positive). Its
+# reachability is conditional on the named targets existing, which is exactly
+# what `workflow_run_targets` below now verifies — the two halves belong
+# together.
 UNCONDITIONAL = {
-    'schedule', 'release', 'workflow_call',
+    'schedule', 'release', 'workflow_call', 'workflow_run',
     'merge_group', 'repository_dispatch',
 }
 MANUAL_ONLY = {'workflow_dispatch'}
@@ -59,6 +89,123 @@ def workflow_files() -> list[Path]:
     if not WORKFLOWS.is_dir():
         return []
     return sorted([*WORKFLOWS.glob('*.yml'), *WORKFLOWS.glob('*.yaml')])
+
+
+def declared_names(texts: dict[str, str]) -> dict[str, str]:
+    """Map each workflow's display `name:` to the file that declares it.
+
+    `name:` must start at column 0 — a nested `name:` (a job name, a step name)
+    is not the workflow's identity and must not shadow one.
+    """
+    names: dict[str, str] = {}
+    for filename, text in texts.items():
+        match = re.search(r'^name\s*:\s*(.+)$', text, re.MULTILINE)
+        if match:
+            names[match.group(1).strip().strip('\'"')] = filename
+    return names
+
+
+def workflow_run_targets(text: str) -> list[str]:
+    """Workflow names this file waits on via `on.workflow_run.workflows`.
+
+    Hand-rolled for the same reason `parse_on` is: no YAML dependency. Handles
+    both the block sequence and the inline list, and stops at the end of the
+    `workflow_run:` mapping so a later `branches:`/`types:` list is not mistaken
+    for workflow names.
+    """
+    targets: list[str] = []
+    in_on = False
+    in_workflow_run = False
+    workflows_indent: int | None = None
+
+    for line in text.splitlines():
+        if not line.strip() or line.lstrip().startswith('#'):
+            continue
+        indent = len(line) - len(line.lstrip())
+        stripped = line.strip()
+
+        if re.match(r'^on\s*:', line):
+            in_on = True
+            in_workflow_run = False
+            workflows_indent = None
+            continue
+        if not in_on:
+            continue
+        if indent == 0:
+            break  # left the `on:` block
+
+        if re.match(r'^workflow_run\s*:', stripped):
+            in_workflow_run = True
+            workflows_indent = None
+            continue
+        if not in_workflow_run:
+            continue
+
+        match = re.match(r'^workflows\s*:\s*(.*)$', stripped)
+        if match:
+            inline = match.group(1).strip()
+            if inline.startswith('['):
+                targets.extend(
+                    t.strip().strip('\'"') for t in inline.strip('[]').split(',') if t.strip()
+                )
+                workflows_indent = None
+            else:
+                workflows_indent = indent
+            continue
+
+        if workflows_indent is None:
+            # A sibling key (`types:`) resets the sequence scan.
+            if re.match(r'^[A-Za-z_][\w-]*\s*:', stripped) and indent <= 4:
+                in_workflow_run = False
+            continue
+
+        if stripped.startswith('- ') and indent > workflows_indent:
+            targets.append(stripped[2:].strip().strip('\'"'))
+        elif indent <= workflows_indent:
+            workflows_indent = None
+
+    return targets
+
+
+def release_readiness_consistency() -> list[str]:
+    """The aggregator's list and the workflow's list must say the same thing.
+
+    `release-readiness.yml` declares which workflows it waits on (by display
+    name); `release_readiness_aggregate.py` declares which workflows it verifies
+    (by file name). They are two halves of one contract, and nothing else
+    compares them — so a rename on one side silently narrows the release
+    licence. Checked in both directions: a name verified but not waited on means
+    the aggregate runs before that workflow finished, and a name waited on but
+    not verified means it is never actually judged.
+    """
+    if not RELEASE_READINESS.exists() or not AGGREGATOR.exists():
+        return []
+
+    waited_on = set(workflow_run_targets(RELEASE_READINESS.read_text(encoding='utf-8')))
+    required = re.findall(
+        r'\(\s*"([\w.-]+\.ya?ml)"\s*,\s*"([^"]+)"\s*\)',
+        AGGREGATOR.read_text(encoding='utf-8'),
+    )
+    verified = {label for _, label in required}
+
+    problems = []
+    for label in sorted(waited_on - verified):
+        problems.append(
+            f'release-readiness.yml waits on `{label}`, but '
+            f'release_readiness_aggregate.py never verifies it'
+        )
+    for label in sorted(verified - waited_on):
+        problems.append(
+            f'release_readiness_aggregate.py verifies `{label}`, but '
+            f'release-readiness.yml never waits on it'
+        )
+    for filename, label in required:
+        if not (WORKFLOWS / filename).exists():
+            problems.append(
+                f'release_readiness_aggregate.py lists `{label}` as '
+                f'.github/workflows/{filename}, which does not exist'
+            )
+    return problems
 
 
 def parse_on(text: str) -> dict[str, dict[str, list[str]]] | None:
@@ -265,33 +412,41 @@ def main() -> int:
     if warning:
         print(f'note: {warning}')
 
+    texts = {path.name: path.read_text(encoding='utf-8') for path in files}
+    names = declared_names(texts)
+
     unreachable: list[tuple[str, list[str]]] = []
     dormant: list[tuple[str, list[str]]] = []
     unparsed: list[str] = []
+    dangling: list[tuple[str, list[str]]] = []
 
     for path in files:
-        text = path.read_text(encoding='utf-8')
+        text = texts[path.name]
         triggers = parse_on(text)
         if triggers is None:
             unparsed.append(path.name)
-            continue
-        ok, reasons, notes = evaluate(triggers, branches, branches_known)
-        if not ok:
-            unreachable.append((path.name, reasons))
-        if notes:
-            dormant.append((path.name, notes))
+        else:
+            ok, reasons, notes = evaluate(triggers, branches, branches_known)
+            if not ok:
+                unreachable.append((path.name, reasons))
+            if notes:
+                dormant.append((path.name, notes))
+
+        missing = [target for target in workflow_run_targets(text) if target not in names]
+        if missing:
+            dangling.append((path.name, missing))
 
     print(f'scanned {len(files)} workflow(s) against {len(branches)} known branch(es)')
     for name, notes in dormant:
         for note in notes:
             print(f'  info: {name}: {note}')
 
+    drifted = release_readiness_consistency()
+
     if unparsed:
         print('FAIL: no `on:` block found:')
         for name in unparsed:
             print(f'  - .github/workflows/{name}')
-        print('FAIL: 1 problem(s)')
-        return 1
 
     if unreachable:
         print('FAIL: workflow(s) that can never be triggered:')
@@ -299,7 +454,25 @@ def main() -> int:
             for reason in reasons:
                 print(f'  - .github/workflows/{name}: {reason}')
         print('  Add `workflow_dispatch`, or fix/remove the stale branch filter.')
-        print(f'FAIL: {len(unreachable)} problem(s)')
+
+    if dangling:
+        print('FAIL: `workflow_run` waiting on a workflow name that does not exist:')
+        for name, missing in dangling:
+            for target in missing:
+                print(f'  - .github/workflows/{name}: waits on `{target}`')
+        print(
+            "  GitHub matches `on.workflow_run.workflows` against the target "
+            "workflow's `name:`; a typo makes the trigger dead."
+        )
+
+    if drifted:
+        print('FAIL: release-readiness contract drift:')
+        for problem in drifted:
+            print(f'  - {problem}')
+
+    total = len(unparsed) + len(unreachable) + len(dangling) + len(drifted)
+    if total:
+        print(f'FAIL: {total} problem(s)')
         return 1
 
     print('OK: every workflow has a trigger that can fire')

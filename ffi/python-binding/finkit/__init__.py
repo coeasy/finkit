@@ -172,9 +172,12 @@ if hasattr(_native, "_fast_sma"):
             else:
                 _native._fast_sma_into(close, out, timeperiod)
             return out
-        if close.dtype == np.float32 and hasattr(_native, "_fast_sma_f32"):
-            return _native._fast_sma_f32(close, timeperiod)
-        return _native._fast_sma(close, timeperiod)
+        result = np.empty_like(close)
+        if close.dtype == np.float32 and hasattr(_native, "_fast_sma_f32_into"):
+            _native._fast_sma_f32_into(close, result, timeperiod)
+        else:
+            _native._fast_sma_into(close, result, timeperiod)
+        return result
 
     sma = _translate_native_errors("sma", sma)
 
@@ -218,9 +221,12 @@ if hasattr(_native, "_fast_ema"):
             else:
                 _native._fast_ema_into(close, out, timeperiod)
             return out
-        if close.dtype == np.float32 and hasattr(_native, "_fast_ema_f32"):
-            return _native._fast_ema_f32(close, timeperiod)
-        return _native._fast_ema(close, timeperiod)
+        result = np.empty_like(close)
+        if close.dtype == np.float32 and hasattr(_native, "_fast_ema_f32_into"):
+            _native._fast_ema_f32_into(close, result, timeperiod)
+        else:
+            _native._fast_ema_into(close, result, timeperiod)
+        return result
 
     ema = _translate_native_errors("ema", ema)
 
@@ -232,7 +238,9 @@ if hasattr(_native, "_fast_wma"):
             out = _validate_out(out, close)
             _native._fast_wma_into(close, out, timeperiod)
             return out
-        return _native._fast_wma(close, timeperiod)
+        result = np.empty_like(close)
+        _native._fast_wma_into(close, result, timeperiod)
+        return result
 
     wma = _translate_native_errors("wma", wma)
 
@@ -245,7 +253,9 @@ if hasattr(_native, "_fast_obv"):
             out = _validate_out(out, close, volume)
             _native._fast_obv_into(close, volume, out)
             return out
-        return _native._fast_obv(close, volume)
+        result = np.empty_like(close)
+        _native._fast_obv_into(close, volume, result)
+        return result
 
     _obv_normalized = _translate_native_errors("obv", _obv_normalized)
 
@@ -283,25 +293,25 @@ if hasattr(_native, "_fast_unary_period"):
         return _native._fast_unary_period(operation, values, timeperiod)
 
     def dema(close, timeperiod=14):
-        return _unary_period("dema", close, timeperiod)
+        return _unary_period(3, close, timeperiod)
 
     def tema(close, timeperiod=14):
-        return _unary_period("tema", close, timeperiod)
+        return _unary_period(4, close, timeperiod)
 
     def midpoint(close, timeperiod=14):
-        return _unary_period("midpoint", close, timeperiod)
+        return _unary_period(1, close, timeperiod)
 
     def rsi(close, timeperiod=14):
-        return _unary_period("rsi", close, timeperiod)
+        return _unary_period(5, close, timeperiod)
 
     def mom(close, timeperiod=10):
-        return _unary_period("mom", close, timeperiod)
+        return _unary_period(2, close, timeperiod)
 
     def roc(close, timeperiod=10):
-        return _unary_period("roc", close, timeperiod)
+        return _unary_period(6, close, timeperiod)
 
     def cmo(close, timeperiod=14):
-        return _unary_period("cmo", close, timeperiod)
+        return _unary_period(7, close, timeperiod)
 
     for _fast_name in ("dema", "tema", "midpoint", "rsi", "mom", "roc", "cmo"):
         globals()[_fast_name] = _translate_native_errors(
@@ -379,14 +389,14 @@ if hasattr(_native, "_fast_unary_period_scale"):
             return _unary_period_scale_native("stddev", close, timeperiod, nbdev)
         except (TypeError, ValueError, OverflowError):
             close = _as_contiguous_float64(close)
-            return _native._fast_unary_period_scale("stddev", close, timeperiod, nbdev)
+            return _native._fast_unary_period_scale(1, close, timeperiod, nbdev)
 
     def var(close, timeperiod=5, nbdev=1.0):
         try:
             return _unary_period_scale_native("var", close, timeperiod, nbdev)
         except (TypeError, ValueError, OverflowError):
             close = _as_contiguous_float64(close)
-            return _native._fast_unary_period_scale("var", close, timeperiod, nbdev)
+            return _native._fast_unary_period_scale(2, close, timeperiod, nbdev)
 
     stddev = _translate_native_errors("stddev", stddev)
     var = _translate_native_errors("var", var)
@@ -411,7 +421,7 @@ if hasattr(_native, "_fast_binary_period"):
         except (TypeError, ValueError, OverflowError):
             high = _as_contiguous_float64(high)
             low = _as_contiguous_float64(low)
-            return _native._fast_binary_period("midprice", high, low, timeperiod)
+            return _native._fast_binary_period(1, high, low, timeperiod)
 
     def correlation(input_a, input_b, timeperiod=14):
         try:
@@ -419,7 +429,7 @@ if hasattr(_native, "_fast_binary_period"):
         except (TypeError, ValueError, OverflowError):
             input_a = _as_contiguous_float64(input_a)
             input_b = _as_contiguous_float64(input_b)
-            return _native._fast_binary_period("correl", input_a, input_b, timeperiod)
+            return _native._fast_binary_period(2, input_a, input_b, timeperiod)
 
     def correl(input_a, input_b, timeperiod=30):
         return correlation(input_a, input_b, timeperiod=timeperiod)
@@ -440,28 +450,28 @@ if hasattr(_native, "_fast_hlc_period"):
             return _native._fast_hlc_period(operation, high, low, close, timeperiod)
 
     def adx(high, low, close, timeperiod=14):
-        return _hlc_period("adx", high, low, close, timeperiod)
+        return _hlc_period(2, high, low, close, timeperiod)
 
     def cci(high, low, close, timeperiod=14):
-        return _hlc_period("cci", high, low, close, timeperiod)
+        return _hlc_period(3, high, low, close, timeperiod)
 
     def willr(high, low, close, timeperiod=14):
-        return _hlc_period("willr", high, low, close, timeperiod)
+        return _hlc_period(1, high, low, close, timeperiod)
 
     def plus_di(high, low, close, timeperiod=14):
-        return _hlc_period("plus_di", high, low, close, timeperiod)
+        return _hlc_period(4, high, low, close, timeperiod)
 
     def minus_di(high, low, close, timeperiod=14):
-        return _hlc_period("minus_di", high, low, close, timeperiod)
+        return _hlc_period(5, high, low, close, timeperiod)
 
     def atr(high, low, close, timeperiod=14):
-        return _hlc_period("atr", high, low, close, timeperiod)
+        return _hlc_period(6, high, low, close, timeperiod)
 
     def natr(high, low, close, timeperiod=14):
-        return _hlc_period("natr", high, low, close, timeperiod)
+        return _hlc_period(7, high, low, close, timeperiod)
 
     def adxr(high, low, close, timeperiod=14):
-        return _hlc_period("adxr", high, low, close, timeperiod)
+        return _hlc_period(8, high, low, close, timeperiod)
 
     for _fast_name in (
         "adx",

@@ -182,10 +182,14 @@ def main() -> None:
         enriched += 1
 
     ordered = sorted(sidecar_inds.values(), key=lambda item: item.get("ffi", {}).get("order", 0))
+    # `newline="\n"` is required: the default translates a newline to
+    # os.linesep, so on Windows every run rewrote the tracked FFI SSOT as CRLF
+    # and produced a whole-file diff that the build-state gate reads as drift.
     FFI_REGISTRY.write_text(
         json.dumps({"version": reg.get("version"), "indicators": ordered}, indent=2, ensure_ascii=False)
         + "\n",
         encoding="utf-8",
+        newline="\n",
     )
     print(f"[enrich] parsed {len(parsed)} indicator fns from header")
     print(f"[enrich] enriched {enriched} registry entries (added {added} missing ones)")

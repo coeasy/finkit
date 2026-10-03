@@ -6,6 +6,8 @@
 
 use std::collections::BTreeMap;
 
+use crate::compute::DependencyShape;
+
 /// High-level category used for discovery and documentation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FunctionCategory {
@@ -114,6 +116,35 @@ pub struct FunctionSpec {
     pub streaming: bool,
     /// Whether repeated execution with identical input is deterministic.
     pub deterministic: bool,
+}
+
+impl FunctionSpec {
+    /// The §17 dependency contract for this function.
+    ///
+    /// §15 of the V4 plan puts `dependency: DependencyShape` next to
+    /// `lookback: LookbackSpec` in the single function description, so that no
+    /// kernel gets to decide on its own whether a partial recompute is sound.
+    /// This is exposed as a derivation rather than a stored field on purpose:
+    /// a stored field can silently drift out of sync with `lookback`, and
+    /// adding it would have required editing ~200 struct literals across the
+    /// registry. A derivation has exactly one source of truth.
+    ///
+    /// The answer is conservative. Only a provably constant lookback yields
+    /// [`DependencyShape::FixedLookback`]; anything parameter-driven stays
+    /// [`DependencyShape::Dynamic`] until the planner has bound the parameters
+    /// and can call [`DependencyShape::from_proven_lookback`].
+    pub const fn dependency(&self) -> DependencyShape {
+        self.lookback.static_dependency_shape()
+    }
+
+    /// Whether this function's plan node may be recomputed over a dirty range.
+    ///
+    /// Deliberately routed through [`Self::dependency`] so that metadata
+    /// consumers and the planner cannot disagree: there is one rule, stated
+    /// once, in `DependencyShape::allows_range_execution`.
+    pub const fn allows_range_execution(&self) -> bool {
+        self.dependency().allows_range_execution()
+    }
 }
 
 /// Deterministic registry for function metadata.
@@ -2948,5 +2979,114 @@ mod tests {
         assert_eq!(registry.get("golden_cross").unwrap().name, "GOLDEN_CROSS");
         assert_eq!(registry.get("volsurge").unwrap().name, "VOLUME_SURGE");
         assert_eq!(registry.get("trend_screen").unwrap().name, "TREND_BREAKOUT");
+    }
+
+    /// §15 / §17: every function's dependency shape is derived from its
+    /// lookback contract, so the registry's metadata and the planner's range
+    /// decision cannot disagree.
+    ///
+    /// This walks the whole registry rather than a hand-picked list — a newly
+    /// registered function has to satisfy the rule, it cannot opt out.
+    #[test]
+    fn every_function_derives_its_dependency_shape_from_its_lookback() {
+        let registry = builtin_function_registry();
+        let mut range_executable = 0usize;
+        let mut refused = 0usize;
+
+        for spec in registry.iter() {
+            let expected = match spec.lookback {
+                LookbackSpec::None => DependencyShape::FixedLookback(0),
+                LookbackSpec::PeriodMinusOne | LookbackSpec::Period | LookbackSpec::Dynamic => {
+                    DependencyShape::Dynamic
+                }
+            };
+            assert_eq!(
+                spec.dependency(),
+                expected,
+                "{} derived an unexpected dependency shape from {:?}",
+                spec.name,
+                spec.lookback
+            );
+            assert_eq!(
+                spec.allows_range_execution(),
+                spec.dependency().allows_range_execution(),
+                "{} disagrees with the single range-execution rule",
+                spec.name
+            );
+
+            if spec.allows_range_execution() {
+                range_executable += 1;
+            } else {
+                refused += 1;
+            }
+        }
+
+        // The gate must not be vacuous. If a future refactor made every
+        // lookback `None`, or made every lookback parameter-driven, one of
+        // these two assertions fires instead of the test passing silently with
+        // only one branch exercised.
+        assert!(
+            range_executable > 0,
+            "no registered function is range-executable; the rule is untested on that branch"
+        );
+        assert!(
+            refused > 0,
+            "no registered function is conservatively refused; the rule is untested on that branch"
+        );
+    }
+
+    /// §15 SSOT: the registry's static answer and the capability attached to
+    /// the lowered plan node must be the same value, not two expressions of
+    /// the same rule that happen to agree today.
+    #[test]
+    fn registry_dependency_matches_the_plan_node_capability() {
+        let registry = builtin_function_registry();
+        let mut checked = 0usize;
+        for spec in registry.iter() {
+            let capabilities = crate::compute::ComputeCapabilities::from_function_spec(spec);
+            assert_eq!(
+                capabilities.dependency,
+                spec.dependency(),
+                "{} disagrees between registry metadata and plan capability",
+                spec.name
+            );
+            checked += 1;
+        }
+        assert!(
+            checked > 100,
+            "expected a populated registry, saw {checked}"
+        );
+    }
+
+    /// §17 forbids a kernel from deciding on its own that a partial recompute
+    /// is safe, so the only lookback that may unlock range execution is one
+    /// that needs no history at all.
+    #[test]
+    fn only_a_constant_lookback_unlocks_range_execution() {
+        assert_eq!(
+            LookbackSpec::None.static_dependency_shape(),
+            DependencyShape::FixedLookback(0)
+        );
+        assert!(LookbackSpec::None
+            .static_dependency_shape()
+            .allows_range_execution());
+
+        for parameterised in [
+            LookbackSpec::PeriodMinusOne,
+            LookbackSpec::Period,
+            LookbackSpec::Dynamic,
+        ] {
+            assert_eq!(
+                parameterised.static_dependency_shape(),
+                DependencyShape::Dynamic,
+                "{parameterised:?} must stay conservative until parameters are bound"
+            );
+            assert!(
+                !parameterised
+                    .static_dependency_shape()
+                    .allows_range_execution(),
+                "{parameterised:?} must not unlock range execution on its own"
+            );
+        }
     }
 }

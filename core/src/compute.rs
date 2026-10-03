@@ -45,6 +45,165 @@ impl From<LookbackSpec> for LookbackRequirement {
     }
 }
 
+/// How a node's historical dependency grows as the input extent grows.
+///
+/// Range (dirty-range) execution is only sound when a node needs a *constant*
+/// number of rows before the recomputation window. The planner has always had
+/// that fact — as `range_lookback: Option<usize>`, where `Some(n)` proves fixed
+/// lookback and `None` falls back to a full recompute — but collapsing every
+/// non-fixed case into `None` threw away information the rest of the runtime
+/// needs. An expanding window, a cross-sectional aggregate and "we could not
+/// prove it" are three different facts, and they differ for scheduling,
+/// deduplication, buffer sizing, cache keys and artifact hashes.
+///
+/// The rule table is deliberately conservative and lives here, not in a kernel:
+///
+/// ```text
+/// FixedLookback(_)                                -> range execution allowed
+/// Expanding / Dynamic / CrossSectional / Global   -> conservative full fallback
+/// ```
+///
+/// Nothing may claim `FixedLookback` on a hunch. There are exactly two
+/// producers: [`LookbackSpec::static_dependency_shape`] (the registry's static
+/// answer, which is conservative whenever the lookback depends on parameters)
+/// and [`DependencyShape::from_proven_lookback`] (the planner's answer after
+/// parameters are bound, which is the one a range decision must use).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum DependencyShape {
+    /// A constant number of preceding rows, independent of the input length.
+    FixedLookback(usize),
+    /// The dependency covers the entire history observed so far.
+    Expanding,
+    /// The dependency is only known once parameters/inputs are bound, or the
+    /// implementation cannot express it statically.
+    Dynamic,
+    /// The value depends on other instruments in the same cross-section.
+    CrossSectional,
+    /// The value depends on global/aggregate state rather than one series.
+    Global,
+}
+
+impl DependencyShape {
+    /// Whether local recomputation is sound for this shape.
+    ///
+    /// Only a proven fixed lookback qualifies. Every other shape requires a
+    /// full recompute, which is the conservative answer §17 of the V4 plan
+    /// mandates: a wrong `true` here silently returns stale values, while a
+    /// wrong `false` only costs work.
+    pub const fn allows_range_execution(self) -> bool {
+        matches!(self, Self::FixedLookback(_))
+    }
+
+    /// The fixed lookback, when this shape can express one.
+    pub const fn fixed_lookback(self) -> Option<usize> {
+        match self {
+            Self::FixedLookback(rows) => Some(rows),
+            Self::Expanding | Self::Dynamic | Self::CrossSectional | Self::Global => None,
+        }
+    }
+
+    /// Bridge from the planner's proof.
+    ///
+    /// `Some(rows)` is a proof of fixed lookback. `None` is *not* a proof of
+    /// anything, so it maps to [`Self::Dynamic`] — the honest answer for "not
+    /// established".
+    pub const fn from_proven_lookback(lookback: Option<usize>) -> Self {
+        match lookback {
+            Some(rows) => Self::FixedLookback(rows),
+            None => Self::Dynamic,
+        }
+    }
+
+    /// Bridge back to the planner's representation.
+    ///
+    /// Round trips with [`Self::from_proven_lookback`] for every shape it can
+    /// produce; the remaining shapes all denote "full recompute required".
+    pub const fn to_proven_lookback(self) -> Option<usize> {
+        self.fixed_lookback()
+    }
+
+    /// Human-readable label used by diagnostics and plan introspection.
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::FixedLookback(_) => "fixed-lookback",
+            Self::Expanding => "expanding",
+            Self::Dynamic => "dynamic",
+            Self::CrossSectional => "cross-sectional",
+            Self::Global => "global",
+        }
+    }
+
+    /// Combine two dependency shapes into the shape that covers both.
+    ///
+    /// Two fixed lookbacks combine to the wider one, because a node reading a
+    /// fixed window from each of two inputs needs the maximum of the two
+    /// windows. An identical pair is unchanged, so the fold is idempotent.
+    /// **Everything else collapses to [`Self::Dynamic`]**, including two equal
+    /// non-fixed shapes: `Expanding + Expanding` is not a fixed lookback, and
+    /// `CrossSectional + CrossSectional` is not time-series-local. Collapsing
+    /// is the conservative direction §17 mandates — the operator only ever
+    /// loses the right to range-execute, never gains it.
+    ///
+    /// This is the single home of the combination rule. The graph layer and the
+    /// runtime both call it, so a dependency can never be combined two
+    /// different ways depending on which layer did the folding.
+    pub const fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::FixedLookback(left), Self::FixedLookback(right)) => {
+                Self::FixedLookback(if left > right { left } else { right })
+            }
+            (left, right) if left.eq_shape(right) => left,
+            _ => Self::Dynamic,
+        }
+    }
+
+    /// Combine a whole dependency cone, as a node plus all of its ancestors.
+    ///
+    /// An empty cone is [`Self::FixedLookback(0)`] — a node with nothing under
+    /// it depends on no history at all.
+    pub fn combine_all(shapes: impl IntoIterator<Item = Self>) -> Self {
+        let mut shapes = shapes.into_iter();
+        let Some(first) = shapes.next() else {
+            return Self::FixedLookback(0);
+        };
+        shapes.fold(first, Self::combine)
+    }
+
+    /// Structural equality, usable in a `const` context.
+    ///
+    /// `PartialEq::eq` is not `const`, so [`Self::combine`] cannot call it.
+    const fn eq_shape(self, other: Self) -> bool {
+        match (self, other) {
+            (Self::FixedLookback(left), Self::FixedLookback(right)) => left == right,
+            (Self::Expanding, Self::Expanding)
+            | (Self::Dynamic, Self::Dynamic)
+            | (Self::CrossSectional, Self::CrossSectional)
+            | (Self::Global, Self::Global) => true,
+            _ => false,
+        }
+    }
+}
+
+impl LookbackSpec {
+    /// Static dependency classification known before parameters are bound.
+    ///
+    /// `Period`/`PeriodMinusOne` are fixed *once the period is bound*, but the
+    /// registry cannot know the period, so this reports [`DependencyShape::Dynamic`]
+    /// rather than guessing. The planner upgrades it through
+    /// [`DependencyShape::from_proven_lookback`] after binding. This is the
+    /// conservative direction on purpose: a static classification that
+    /// over-claims range eligibility would let a stale-value bug through the
+    /// registry, which no test would catch because the kernel is correct.
+    pub const fn static_dependency_shape(self) -> DependencyShape {
+        match self {
+            LookbackSpec::None => DependencyShape::FixedLookback(0),
+            LookbackSpec::PeriodMinusOne | LookbackSpec::Period | LookbackSpec::Dynamic => {
+                DependencyShape::Dynamic
+            }
+        }
+    }
+}
+
 /// Observable effect produced by a compute node.
 ///
 /// Optimizers may freely eliminate or reorder [`Self::Pure`] nodes when the
@@ -87,6 +246,15 @@ pub struct ComputeCapabilities {
     pub stateful: bool,
     /// Historical dependency requirement.
     pub lookback: LookbackRequirement,
+    /// Static historical-dependency shape (the typed form of `lookback`).
+    ///
+    /// This is the *pre-binding* classification. It is intentionally not a
+    /// range-execution verdict: a `Period`-parameterised indicator reports
+    /// [`DependencyShape::Dynamic`] here and is proven fixed by the planner
+    /// after parameters are bound. Consult
+    /// [`DependencyShape::allows_range_execution`] only on a planner-proven
+    /// shape.
+    pub dependency: DependencyShape,
     /// Observable execution effect.
     pub effect: ComputeEffect,
 }
@@ -98,12 +266,17 @@ impl ComputeCapabilities {
     /// pure and stateless by default even when a separate streaming adapter is
     /// available. Formula assignments, drawings, and explicit stateful nodes
     /// override these defaults when lowered into compute nodes.
+    ///
+    /// The dependency shape is read back through [`FunctionSpec::dependency`]
+    /// rather than re-deriving it from `spec.lookback` here, so the registry's
+    /// static answer and the plan node's capability cannot drift apart.
     pub fn from_function_spec(spec: &FunctionSpec) -> Self {
         Self {
             deterministic: spec.deterministic,
             streaming: spec.streaming,
             stateful: false,
             lookback: spec.lookback.into(),
+            dependency: spec.dependency(),
             effect: ComputeEffect::Pure,
         }
     }
@@ -585,6 +758,7 @@ mod tests {
             streaming,
             stateful: false,
             lookback: LookbackRequirement::None,
+            dependency: DependencyShape::FixedLookback(0),
             effect: ComputeEffect::Pure,
         }
     }
@@ -608,6 +782,7 @@ mod tests {
                     streaming: true,
                     stateful: false,
                     lookback: LookbackRequirement::None,
+                    dependency: DependencyShape::FixedLookback(0),
                     effect: ComputeEffect::WriteVariable("SELL".to_string()),
                 },
             ),

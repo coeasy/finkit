@@ -5,8 +5,9 @@
 //! implementations are supplied through [`KernelDispatcher`](crate::unified_executor::KernelDispatcher), keeping runtime
 //! dispatch independent from formula strings or registry hash maps.
 
-use crate::buffer_arena::{BufferArena, BufferArenaConfig, BufferArenaStats, BufferSlot};
+use crate::buffer_arena::{BufferArenaConfig, BufferArenaStats, BufferSlot};
 use crate::execution_plan::{HotExecutionPlan, KernelId, ParameterValue};
+use crate::runtime_context::{ExecutionKind, ExecutionLimits, RuntimeContext, RuntimeContextError};
 use crate::state_arena::{StateArena, StateSlot};
 use std::fmt;
 use std::ops::Range;
@@ -116,6 +117,24 @@ pub enum ExecuteError {
     MissingParameters,
     /// A retained output unexpectedly aliases another retained output slot.
     AliasedOutput(BufferSlot),
+    /// Number of caller-supplied output destinations does not match the plan.
+    OutputCount {
+        /// Retained outputs in the compiled plan.
+        expected: usize,
+        /// Slices supplied by the caller.
+        actual: usize,
+    },
+    /// A caller-supplied output destination has the wrong length.
+    OutputLength {
+        /// Position of the mismatched output.
+        index: usize,
+        /// Length the plan produces.
+        expected: usize,
+        /// Length the caller supplied.
+        actual: usize,
+    },
+    /// The runtime context refused the plan before any work was done.
+    Context(RuntimeContextError),
     /// Numeric kernel dispatch failed.
     Kernel(KernelDispatchError),
 }
@@ -123,6 +142,12 @@ pub enum ExecuteError {
 impl From<KernelDispatchError> for ExecuteError {
     fn from(value: KernelDispatchError) -> Self {
         Self::Kernel(value)
+    }
+}
+
+impl From<RuntimeContextError> for ExecuteError {
+    fn from(value: RuntimeContextError) -> Self {
+        Self::Context(value)
     }
 }
 
@@ -151,6 +176,21 @@ impl fmt::Display for ExecuteError {
             Self::AliasedOutput(slot) => {
                 write!(f, "retained outputs alias physical buffer slot {}", slot.0)
             }
+            Self::OutputCount { expected, actual } => {
+                write!(
+                    f,
+                    "plan retains {expected} output(s), caller supplied {actual} destination(s)"
+                )
+            }
+            Self::OutputLength {
+                index,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "output {index} has length {expected}, destination has length {actual}"
+            ),
+            Self::Context(error) => error.fmt(f),
             Self::Kernel(error) => error.fmt(f),
         }
     }
@@ -182,14 +222,14 @@ impl ExecutionOutput {
 
 /// Reusable Architecture v3 numeric executor.
 ///
-/// The object owns persistent state and a bounded buffer arena across calls.
-/// `execute_last` intentionally keeps state for streaming use. Call [`Self::reset`]
-/// when starting a logically independent series.
+/// The object owns a [`RuntimeContext`] — scratch arena, persistent state,
+/// limits, counters and diagnostics — across calls. `execute_last` intentionally
+/// keeps state for streaming use. Call [`Self::reset`] when starting a logically
+/// independent series.
 pub struct UnifiedExecutor<D> {
     plan: HotExecutionPlan,
     dispatcher: D,
-    buffers: BufferArena,
-    states: StateArena,
+    context: RuntimeContext,
 }
 
 impl<D: KernelDispatcher> UnifiedExecutor<D> {
@@ -204,13 +244,27 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
         dispatcher: D,
         buffer_config: BufferArenaConfig,
     ) -> Self {
-        let mut states = StateArena::new();
-        plan.state_layout().prepare(&mut states);
+        Self::with_context(
+            plan,
+            dispatcher,
+            RuntimeContext::with_limits_and_arena(ExecutionLimits::default(), buffer_config),
+        )
+    }
+
+    /// Construct an executor over a caller-supplied context.
+    ///
+    /// This is the entry point a backend uses to impose its own budgets or to
+    /// share one context's accounting across several executors.
+    pub fn with_context(
+        plan: HotExecutionPlan,
+        dispatcher: D,
+        mut context: RuntimeContext,
+    ) -> Self {
+        plan.state_layout().prepare(context.states_mut());
         Self {
             plan,
             dispatcher,
-            buffers: BufferArena::new(buffer_config),
-            states,
+            context,
         }
     }
 
@@ -250,7 +304,12 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
                 });
             }
         }
-        self.run(inputs, range)
+        let kind = if range.start == 0 && common_len == Some(range.end) {
+            ExecutionKind::Full
+        } else {
+            ExecutionKind::Range
+        };
+        self.run(inputs, range, kind)
     }
 
     /// Execute only the final bound sample while preserving persistent state.
@@ -275,69 +334,190 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
                 len: 0,
             });
         }
-        self.run(inputs, common_len - 1..common_len)
+        self.run(inputs, common_len - 1..common_len, ExecutionKind::Last)
     }
 
     fn run(
         &mut self,
         inputs: &[&[f64]],
         range: Range<usize>,
+        kind: ExecutionKind,
     ) -> Result<ExecutionOutput, ExecuteError> {
         let logical_len = range.end - range.start;
         if let Some(slot) = self.plan.output_layout().duplicate_slot() {
             return Err(ExecuteError::AliasedOutput(slot));
         }
-        let mut buffers = self
-            .plan
-            .buffer_layout()
-            .take_buffers(&mut self.buffers, logical_len);
+        // Budgets are checked before a single byte is reserved, so an oversized
+        // plan costs one comparison instead of a partially materialised arena.
+        self.context.enforce_plan(&self.plan)?;
+        let node_count = self.plan.nodes().len();
 
-        let result = (|| {
-            for node in self.plan.nodes() {
-                if let Some(input_slot) = self.plan.input_layout().slot(node.node) {
-                    let source = &inputs[input_slot.0][range.clone()];
-                    buffers[node.output.0].copy_from_slice(source);
-                    continue;
-                }
+        let layout = self.plan.buffer_layout();
+        let mut buffers = layout.take_buffers(self.context.buffers_mut(), logical_len);
+        let buffers_taken = buffers.len();
 
-                let parameters = self
-                    .plan
-                    .parameter_arena()
-                    .range(node.parameters)
-                    .ok_or(ExecuteError::MissingParameters)?;
-                self.dispatcher
-                    .dispatch(
-                        KernelCall {
-                            kernel: node.kernel,
-                            inputs: &node.inputs,
-                            output: node.output,
-                            parameters,
-                            state: node.state,
-                        },
-                        &mut buffers,
-                        &mut self.states,
-                    )
-                    .map_err(|error| error.with_kernel(node.kernel))?;
+        let outcome = Self::dispatch_nodes(
+            &self.plan,
+            &mut self.dispatcher,
+            inputs,
+            &range,
+            &mut buffers,
+            self.context.states_mut(),
+        );
+        layout.recycle_buffers(self.context.buffers_mut(), buffers);
+
+        let (output, kernel_calls) = outcome?;
+        self.context.record_execution(kind, node_count);
+        self.context.record_kernel_calls(kernel_calls);
+        self.context.record_buffers_taken(buffers_taken);
+        self.context.record_buffers_recycled(buffers_taken);
+        Ok(output)
+    }
+
+    /// Execute every plan node into `buffers`.
+    ///
+    /// Split out of [`Self::run`] so the scratch-buffer recycle happens on both
+    /// the success and the failure path while the arenas stay borrowed once.
+    fn dispatch_nodes(
+        plan: &HotExecutionPlan,
+        dispatcher: &mut D,
+        inputs: &[&[f64]],
+        range: &Range<usize>,
+        buffers: &mut [Vec<f64>],
+        states: &mut StateArena,
+    ) -> Result<(ExecutionOutput, usize), ExecuteError> {
+        let mut kernel_calls = 0usize;
+        for node in plan.nodes() {
+            if let Some(input_slot) = plan.input_layout().slot(node.node) {
+                let source = &inputs[input_slot.0][range.clone()];
+                buffers[node.output.0].copy_from_slice(source);
+                continue;
             }
 
-            let mut values = Vec::with_capacity(self.plan.output_layout().len());
-            for &(_, slot) in self.plan.output_layout().outputs() {
-                values.push(std::mem::take(&mut buffers[slot.0]));
-            }
-            Ok(ExecutionOutput { values })
-        })();
+            let parameters = plan
+                .parameter_arena()
+                .range(node.parameters)
+                .ok_or(ExecuteError::MissingParameters)?;
+            dispatcher
+                .dispatch(
+                    KernelCall {
+                        kernel: node.kernel,
+                        inputs: &node.inputs,
+                        output: node.output,
+                        parameters,
+                        state: node.state,
+                    },
+                    buffers,
+                    states,
+                )
+                .map_err(|error| error.with_kernel(node.kernel))?;
+            kernel_calls += 1;
+        }
 
-        self.plan
-            .buffer_layout()
-            .recycle_buffers(&mut self.buffers, buffers);
-        result
+        let mut values = Vec::with_capacity(plan.output_layout().len());
+        for &(_, slot) in plan.output_layout().outputs() {
+            values.push(std::mem::take(&mut buffers[slot.0]));
+        }
+        Ok((ExecutionOutput { values }, kernel_calls))
+    }
+
+    /// Execute and copy the retained outputs into caller-owned storage.
+    ///
+    /// [`Self::execute`] must move the retained buffers *out* of the arena,
+    /// because the caller owns the results. That leaves an empty `Vec` behind
+    /// in each output slot, and `BufferArena::recycle` deliberately refuses
+    /// zero-length buffers, so the next execution has to allocate a replacement
+    /// for every retained output. For a scan that runs one plan over thousands
+    /// of symbols, that is one allocation per output per symbol — the exact
+    /// "duplicate allocation" §20, priority 2 is about, and the reason the plan
+    /// lists *persistent output* alongside `_into` and `BufferArena`.
+    ///
+    /// This entry point closes that gap. It runs the same plan, copies each
+    /// retained output into the slice the caller supplies, and then hands the
+    /// arena buffers straight back. A caller that keeps one destination per
+    /// output across a scan loop therefore performs **zero arena allocations
+    /// after the first execution**, at the cost of one `memcpy` per output per
+    /// execution.
+    ///
+    /// The trade is deliberate: the copy is `logical_len` `f64` against an
+    /// allocation of the same size, and unlike the allocation it is flat in the
+    /// number of symbols scanned.
+    ///
+    /// Every destination is validated — both its count and its length — before
+    /// the plan runs. A rejected call therefore has *no* side effects, which
+    /// matters because a stateful kernel advances its arena slots during a run:
+    /// validating the length afterwards would leave the executor one step ahead
+    /// of its caller, and a retry with a corrected destination would silently
+    /// compute a different series.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ExecuteError::NoInputs`] when `inputs` is empty,
+    /// [`ExecuteError::OutputCount`] when `outputs` does not have one entry per
+    /// plan output, and [`ExecuteError::OutputLength`] when a destination is not
+    /// the logical length of the execution. Errors raised by the run itself are
+    /// propagated unchanged.
+    pub fn execute_into(
+        &mut self,
+        inputs: &[&[f64]],
+        outputs: &mut [&mut [f64]],
+    ) -> Result<(), ExecuteError> {
+        let expected = self.plan.output_layout().len();
+        if outputs.len() != expected {
+            return Err(ExecuteError::OutputCount {
+                expected,
+                actual: outputs.len(),
+            });
+        }
+
+        // The logical length of this execution is known before it starts:
+        // `execute` takes it from the first input, and `run` applies that same
+        // extent to every buffer it draws from the arena.
+        let logical_len = inputs
+            .first()
+            .map(|input| input.len())
+            .ok_or(ExecuteError::NoInputs)?;
+        if let Some((index, actual)) = outputs
+            .iter()
+            .enumerate()
+            .find(|(_, destination)| destination.len() != logical_len)
+            .map(|(index, destination)| (index, destination.len()))
+        {
+            return Err(ExecuteError::OutputLength {
+                index,
+                expected: logical_len,
+                actual,
+            });
+        }
+
+        let produced = self.execute(inputs)?;
+
+        for (value, destination) in produced.values.iter().zip(outputs.iter_mut()) {
+            debug_assert_eq!(
+                value.len(),
+                destination.len(),
+                "a successful run produces one buffer per output, each of the logical length"
+            );
+            destination.copy_from_slice(value);
+        }
+
+        Self::recycle_produced(&mut self.context, produced.values);
+        Ok(())
+    }
+
+    /// Return result buffers to the arena instead of dropping them.
+    fn recycle_produced(context: &mut RuntimeContext, values: Vec<Vec<f64>>) {
+        let arena = context.buffers_mut();
+        for buffer in values {
+            arena.recycle(buffer);
+        }
     }
 
     /// Drop persistent kernel state while retaining allocated slot capacity and
     /// reusable scratch buffers.
     pub fn reset(&mut self) {
-        self.states.clear();
-        self.plan.state_layout().prepare(&mut self.states);
+        self.context.reset();
+        self.plan.state_layout().prepare(self.context.states_mut());
     }
 
     /// Replace the precompiled plan and reset persistent state.
@@ -358,14 +538,24 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
         &mut self.dispatcher
     }
 
+    /// The runtime context this executor runs against.
+    pub const fn context(&self) -> &RuntimeContext {
+        &self.context
+    }
+
+    /// Mutable runtime context (limits, diagnostics, metrics).
+    pub const fn context_mut(&mut self) -> &mut RuntimeContext {
+        &mut self.context
+    }
+
     /// Persistent state arena used by streaming/stateful kernels.
     pub const fn states(&self) -> &StateArena {
-        &self.states
+        self.context.states()
     }
 
     /// Current buffer allocation/reuse counters.
     pub fn buffer_stats(&self) -> BufferArenaStats {
-        self.buffers.stats()
+        self.context.buffer_stats()
     }
 }
 
@@ -406,7 +596,7 @@ mod tests {
     use super::*;
     use crate::compute::{
         ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan,
-        LookbackRequirement,
+        DependencyShape, LookbackRequirement,
     };
     use crate::execution_plan::HotExecutionPlan;
 
@@ -419,6 +609,7 @@ mod tests {
             stateful: false,
             lookback: LookbackRequirement::None,
             effect: ComputeEffect::Pure,
+            dependency: DependencyShape::FixedLookback(0),
         }
     }
 
@@ -501,5 +692,45 @@ mod tests {
                 actual: 0
             }
         );
+    }
+
+    #[test]
+    fn context_classifies_every_entry_point_and_counts_kernels() {
+        let mut executor = UnifiedExecutor::new(plan(), TestDispatcher);
+        let close = [1.0, 2.0, 3.0, 4.0];
+
+        executor.execute(&[&close]).unwrap();
+        executor.execute_range(&[&close], 1..3).unwrap();
+        executor.execute_last(&[&close]).unwrap();
+
+        let metrics = executor.context().metrics();
+        assert_eq!(metrics.full_executions, 1);
+        assert_eq!(metrics.range_executions, 1);
+        assert_eq!(metrics.last_executions, 1);
+        assert_eq!(metrics.executions(), 3);
+        // One dispatchable node (COPY_PLUS_ONE) per execution; the input binding
+        // is a copy, not a kernel.
+        assert_eq!(metrics.kernel_calls, 3);
+        // Two plan nodes counted per execution, including the input binding.
+        assert_eq!(metrics.node_visits, 6);
+        // Two scratch buffers per execution round-tripped through the arena.
+        assert_eq!(metrics.buffers_taken, 6);
+        assert_eq!(metrics.buffers_recycled, 6);
+    }
+
+    #[test]
+    fn context_budget_rejects_plan_before_allocating() {
+        let context = RuntimeContext::with_limits(ExecutionLimits::new(1, 1 << 20, 16, 8));
+        let mut executor = UnifiedExecutor::with_context(plan(), TestDispatcher, context);
+        let close = [1.0, 2.0];
+
+        assert_eq!(
+            executor.execute(&[&close]).unwrap_err(),
+            ExecuteError::Context(RuntimeContextError::PlanTooLarge { nodes: 2, limit: 1 })
+        );
+        // The rejection happened before checkout, so nothing was allocated and
+        // no execution was accounted.
+        assert_eq!(executor.context().metrics().executions(), 0);
+        assert_eq!(executor.context().buffer_stats().cache_misses, 0);
     }
 }

@@ -9,7 +9,7 @@ use super::ast::{AstNode, BinaryOperator, OutputModifier, UnaryOperator};
 use super::params::expand_implicit_price_args;
 use crate::compute::{
     ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError,
-    LookbackRequirement,
+    DependencyShape, LookbackRequirement,
 };
 use crate::registry::{builtin_function_registry, FunctionRegistry};
 use std::collections::BTreeMap;
@@ -230,6 +230,7 @@ impl<'a> FormulaLowerer<'a> {
                     stateful: true,
                     lookback: LookbackRequirement::None,
                     // The executor appends literals to FormulaContext::string_table.
+                    dependency: DependencyShape::FixedLookback(0),
                     effect: ComputeEffect::Stateful,
                 },
             ),
@@ -284,6 +285,7 @@ impl<'a> FormulaLowerer<'a> {
                         stateful: false,
                         lookback: LookbackRequirement::None,
                         effect: ComputeEffect::WriteVariable(name.clone()),
+                        dependency: DependencyShape::FixedLookback(0),
                     },
                 );
                 self.last_write.insert(canonical_name(name), id);
@@ -301,6 +303,7 @@ impl<'a> FormulaLowerer<'a> {
                         stateful: false,
                         lookback: LookbackRequirement::None,
                         effect: ComputeEffect::WriteVariable(name.clone()),
+                        dependency: DependencyShape::FixedLookback(0),
                     },
                 );
                 self.last_write.insert(canonical_name(name), id);
@@ -333,6 +336,7 @@ impl<'a> FormulaLowerer<'a> {
                         stateful: false,
                         lookback: LookbackRequirement::None,
                         effect,
+                        dependency: DependencyShape::FixedLookback(0),
                     },
                 );
                 // FormulaExecutor stores outputs in FormulaContext::variables, so
@@ -364,6 +368,7 @@ impl<'a> FormulaLowerer<'a> {
                     stateful: false,
                     lookback: LookbackRequirement::None,
                     effect: ComputeEffect::Pure,
+                    dependency: DependencyShape::FixedLookback(0),
                 },
             ),
             AstNode::DrawText { cond, price, .. } => {
@@ -485,6 +490,7 @@ impl<'a> FormulaLowerer<'a> {
                         stateful: true,
                         lookback: LookbackRequirement::Dynamic,
                         effect: ComputeEffect::Stateful,
+                        dependency: DependencyShape::Dynamic,
                     },
                 )
             },
@@ -681,6 +687,7 @@ impl<'a> FormulaLowerer<'a> {
                 stateful: false,
                 lookback: LookbackRequirement::None,
                 effect: ComputeEffect::Pure,
+                dependency: DependencyShape::FixedLookback(0),
             },
         )
     }
@@ -699,6 +706,7 @@ impl<'a> FormulaLowerer<'a> {
                 stateful: false,
                 lookback: LookbackRequirement::None,
                 effect: ComputeEffect::Draw,
+                dependency: DependencyShape::FixedLookback(0),
             },
         )
     }
@@ -748,6 +756,7 @@ fn opaque_control_flow_capabilities() -> ComputeCapabilities {
         stateful: true,
         lookback: LookbackRequirement::Dynamic,
         effect: ComputeEffect::Stateful,
+        dependency: DependencyShape::Dynamic,
     }
 }
 

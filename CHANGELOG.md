@@ -7,6 +7,81 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Fixed - 2026-10-03
+
+A pre-release audit that stopped looking for missing features and started
+looking for **green that lies**: gates blind to files they never scan, modules
+with no caller, and loops whose termination was asserted by a comment rather
+than by construction. Seven defects, all fixed, none allowlisted.
+
+- **The orphan gates could not see untracked files.** `check_orphan_docs.py`
+  and `check_orphan_scripts.py` read `git ls-files`, which is exactly right in
+  CI and exactly wrong locally: a new document no one had `git add`ed was
+  invisible, so the gates stayed green and CI went red on the first push.
+  Running them with the tree staged surfaced **8 unreachable documents**
+  (`docs/new.md`, the plan itself, and six archived AlphaTA-era reports). The
+  misnamed `docs/new.md` is now
+  `docs/archive/finkit-architecture-v3.1-implementation-plan.md`, and the
+  archive index explains that the *deleted* V4 architecture documents are not
+  the same thing as the current V4 plan.
+- **`workflow_run` was a completely ungated dead-link risk.**
+  `release-readiness.yml` — the release licence — waits on eight workflows *by
+  display name*; one wrong letter and the trigger never fires, while
+  `check_workflow_liveness.py` still reported "every workflow has a trigger that
+  can fire" because the file kept its `workflow_dispatch`. The same required
+  list is maintained a second time, by file name, in
+  `release_readiness_aggregate.py`, with nothing comparing the two.
+  `check_workflow_liveness.py` now resolves every `workflow_run` target against
+  the declared `name:`s and checks the two lists in both directions. It also
+  stops mis-reporting `workflow_run` as a non-automatic trigger — a workflow
+  relying on `workflow_run` alone would have been failed as unreachable.
+- **7.3 MB of build output was committed, and the no-build-artifacts gate said
+  there was none.** `ci.yml` generates `gpu_large_chart.html` (7 MB) by running
+  `cargo run --example gpu_large_chart` and consumes it in the next step; five
+  sibling files come from `--example improved_chart`. All six were tracked, and
+  none matched the gate's `target/`/`dist/`/binary-extension rules, so it
+  reported "none look like build output" over 7.3 MB of it. The files are
+  untracked (working copies kept), `.gitignore` covers them, and the gate grew a
+  repository-root rule for renderable output.
+- **`RuntimeContext::ArtifactCache` had no production caller.** Its own
+  documentation says it is "the one cache the runtime context owns", replacing
+  the per-layer caches that made "is this already compiled?" have a different
+  answer in every layer — and nothing ever wrote to it. The plan states
+  `content_hash` exists so that "formulas and factors computing the same series
+  can share a cache"; both halves existed and were never connected. New
+  `UnifiedRuntime::compile_semantic_graph_cached` stores a
+  `CompiledPlanArtifact` (plan + CSE report + dependency shape — plain data) in a
+  caller-supplied `RuntimeContext`, so a scan compiles one declaration instead of
+  one per symbol. The executor is deliberately **not** cached: it owns an arena
+  and persistent kernel state, and sharing it would let the second symbol
+  overwrite the first one's working set.
+- **`execute_into` could advance persistent kernel state on a rejected call.**
+  Its documentation promised a "clean rejection rather than a half-updated
+  result", but the length check ran *after* `execute()`: a stateful kernel had
+  already advanced its arena slot, so a retry with a corrected destination
+  computed the *second* value and returned it as the first. The logical length is
+  known before the run, so both the count and the length are now validated up
+  front and a rejected call has no side effects at all.
+- **Cohen–Sutherland clipping terminated only by comment.**
+  `visualization::geometry::ClipRect::clip_line` argued that "each pass either
+  returns or clips away one outside region, and there are only four" — true in
+  exact arithmetic, false in floating point, where rounding can leave the new
+  coordinate a hair outside the boundary so the outcode bit survives and an
+  unbounded `loop` re-clips the same endpoint forever. It is now `for _ in 0..4`,
+  with a residual treated as unclippable: refusing to draw is strictly safer than
+  emitting a point that is still outside the rect.
+- **`parse_pine` could be made to overflow the stack by its input.** Pine source
+  is user input (CLI, Python binding, HTTP), and the entry point had no size or
+  depth limit in front of a recursive-descent pest grammar plus a recursive pair
+  walk — twenty thousand `(` would abort the process instead of returning a
+  `PineError`. A budget check now runs first: iterative and lexical (it must not
+  recurse, or it would carry the very failure it prevents), 128 levels of bracket
+  nesting and 1 MiB of source, skipping string literals and `//` comments.
+
+Every fix ships with a gate that can fail, and the new gates were verified by
+injection rather than by observing green — a gate that cannot go red is worse
+than no gate at all.
+
 ### Fixed - 2026-09-29
 
 This maintenance pass connects the release pipelines end-to-end and removes the

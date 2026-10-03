@@ -77,6 +77,8 @@ impl FrameBuffer {
         let mut err = dx + dy;
         let mut cx = x0;
         let mut cy = y0;
+        // SAFETY-TERMINATION: Bresenham line walk — `cx`/`cy` move monotonically
+        // toward `x1`/`y1` and both axes break at their target.
         loop {
             self.set_pixel(cx as u32, cy as u32, r, g, b, 255);
             let e2 = 2 * err;

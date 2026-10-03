@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
-"""Populate Python FFI SSOT before the performance migration.
+"""Populate the transient Python FFI SSOT overlay before binding generation.
 
 The canonical docs registry is also validated by the Rust streaming registry,
-so migration-only Python body recovery must not mutate it in-place. This helper
-builds an ephemeral enriched registry overlay under ``target/`` and hardens the
+so migration-only Python body recovery must not mutate it in place. This helper
+builds an ephemeral enriched registry overlay under ``target/`` and requires the
 binding synchronizer to consume that overlay when it exists.
+
+The synchronizer hooks used to be *installed* by this script, which meant a build
+step edited another build step. V4 plan Batch 2 moved those hooks into
+``scripts/binding_spec.py`` as invariants, so this script verifies them and never
+rewrites `sync_bindings.py`.
 """
 
 from __future__ import annotations
@@ -15,7 +20,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-import sync_bindings as sb
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import binding_spec  # noqa: E402  (path setup must precede the import)
+import sync_bindings as sb  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_REGISTRY = ROOT / "docs" / "indicator_registry.json"
@@ -27,36 +35,26 @@ def norm(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.lower())
 
 
-def harden_sync_bindings() -> None:
-    """Remove hidden FFI assumptions and teach generation about the overlay."""
+def verify_sync_bindings_hooks() -> None:
+    """Require the generator's overlay/merge contract without editing it.
 
-    path = ROOT / "scripts/sync_bindings.py"
-    text = path.read_text(encoding="utf-8")
-    old = '    core = ff["core_call"].split("::")[-1]\n'
-    new = '    core = ff.get("core_call", pub).split("::")[-1]\n'
-    if old in text:
-        text = text.replace(old, new, 1)
-    elif new not in text:
-        raise RuntimeError("sync_bindings candidate_names core_call lookup changed unexpectedly")
+    The hooks matter in both directions: without the overlay lookup the generator
+    reads the checked-in registry and loses the recovered Python bodies; without
+    the core+FFI merge `--discover` can overwrite the rich core registry with a
+    name-only stub.
+    """
 
-    old_android = '        core = ind["ffi"]["core_call"].split("::")[-1]\n'
-    new_android = (
-        '        ff = ind["ffi"]\n'
-        '        c_name = ff["c_name"]\n'
-        '        pub = c_name[3:] if c_name.startswith("ta_") else c_name\n'
-        '        core = ff.get("core_call", pub).split("::")[-1]\n'
-    )
-    if old_android in text:
-        text = text.replace(old_android, new_android, 1)
-
-    old_loader = '''def load_registry() -> dict:\n    return json.loads(REG.read_text(encoding="utf-8"))\n'''
-    new_loader = '''PYTHON_REGISTRY_OVERLAY = ROOT / "target" / "python_registry_ssot.json"\n\n\ndef load_registry() -> dict:\n    registry_path = PYTHON_REGISTRY_OVERLAY if PYTHON_REGISTRY_OVERLAY.exists() else REG\n    return json.loads(registry_path.read_text(encoding="utf-8"))\n'''
-    if old_loader in text:
-        text = text.replace(old_loader, new_loader, 1)
-    elif "PYTHON_REGISTRY_OVERLAY = ROOT / \"target\" / \"python_registry_ssot.json\"" not in text:
-        raise RuntimeError("sync_bindings registry loader changed unexpectedly")
-
-    path.write_text(text, encoding="utf-8")
+    generator = binding_spec.SYNC_BINDINGS.read_text(encoding="utf-8")
+    missing = [
+        needle
+        for needle in binding_spec.SYNC_BINDINGS_RULESET.required
+        if needle not in generator
+    ]
+    if missing:
+        raise RuntimeError(
+            "sync_bindings.py lost part of the Python generation contract: "
+            + ", ".join(repr(needle) for needle in missing)
+        )
 
 
 def python_match(ind: dict, extracted: dict[str, dict]) -> str | None:
@@ -86,8 +84,8 @@ def python_match(ind: dict, extracted: dict[str, dict]) -> str | None:
 
 
 def main() -> int:
-    canonical = CANONICAL_REGISTRY.read_text(encoding="utf-8")
-    harden_sync_bindings()
+    canonical = CANONICAL_REGISTRY.read_bytes()
+    verify_sync_bindings_hooks()
 
     try:
         subprocess.run(
@@ -153,7 +151,7 @@ def main() -> int:
     finally:
         # Core registry parity is against this canonical file. Enrichment is a
         # migration input, never a persistent mutation of docs/indicator_registry.json.
-        CANONICAL_REGISTRY.write_text(canonical, encoding="utf-8")
+        CANONICAL_REGISTRY.write_bytes(canonical)
 
     print(
         f"[prepare/python] stored {matched} Python binding bodies in transient overlay; "

@@ -49,17 +49,15 @@ pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Ar
     }
     validate_input(high.len(), 1)?;
 
-    let len = high.len();
-    // The SIMD kernel writes every row; avoid zero-initializing a second full
-    // million-element buffer before handing ownership to ndarray.
-    let mut output = Vec::with_capacity(len);
-    unsafe { output.set_len(len) };
-    // SIMD-accelerated money-flow vectorisation + cumulative sum.
-    // Replaces the per-bar scalar loop with an AVX2 block-wise kernel
-    // (typically 1.5-2x speedup on 10K+ bars).
-    crate::math::simd_ops::simd_ad_line(high, low, close, volume, &mut output);
-
-    Ok(Array1::from_vec(output))
+    let mut output = Array1::<f64>::zeros(high.len());
+    crate::math::volume_kernels::ad_into(
+        high,
+        low,
+        close,
+        volume,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    )?;
+    Ok(output)
 }
 
 /// AD zero-copy variant: writes result into pre-allocated slice.
@@ -85,8 +83,7 @@ pub fn ad_into(
             constraint: "must have the same length as high".to_string(),
         });
     }
-    crate::math::simd_ops::simd_ad_line(high, low, close, volume, output);
-    Ok(())
+    crate::math::volume_kernels::ad_into(high, low, close, volume, output)
 }
 
 /// Chaikin A/D Oscillator (ADOSC)
@@ -132,110 +129,17 @@ pub fn adosc(
     }
     validate_input(high.len(), slow_period)?;
 
-    let len = high.len();
-    let mut output = Array1::<f64>::zeros(len);
-    let fast_k = 2.0 / (fast_period as f64 + 1.0);
-    let fast_one_k = 1.0 - fast_k;
-    let slow_k = 2.0 / (slow_period as f64 + 1.0);
-    let slow_one_k = 1.0 - slow_k;
-
-    // Build the full AD line in a scratch buffer via the SIMD-accelerated
-    // helper, then run the EMA pass on top. This is faster than the per-bar
-    // scalar loop because the AVX2 money-flow + prefix-sum kernels replace
-    // the inner division and accumulate with block-level parallelism.
-    let mut cumulative = vec![0.0f64; len];
-    crate::math::simd_ops::simd_ad_line(high, low, close, volume, &mut cumulative);
-
-    let output_slice = output.as_slice_mut().unwrap();
-    let mut fast_ema = 0.0;
-    let mut slow_ema = 0.0;
-    for i in 0..len {
-        let c = cumulative[i];
-        if i == 0 {
-            fast_ema = c;
-            slow_ema = c;
-        } else {
-            fast_ema = fast_ema.mul_add(fast_one_k, c * fast_k);
-            slow_ema = slow_ema.mul_add(slow_one_k, c * slow_k);
-        }
-        if i >= slow_period - 1 {
-            output_slice[i] = fast_ema - slow_ema;
-        }
-    }
-
+    let mut output = Array1::<f64>::zeros(high.len());
+    crate::math::volume_kernels::adosc_into(
+        high,
+        low,
+        close,
+        volume,
+        fast_period,
+        slow_period,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    )?;
     Ok(output)
-}
-
-/// ADOSC caller-owned hot path.
-///
-/// The public allocating implementation keeps a complete AD scratch series so
-/// it can reuse the generic SIMD helper.  The FFI path only needs the final
-/// oscillator, so fuse the AD recurrence and the two EMA recurrences into one
-/// pass and write directly into the caller's buffer.
-pub fn adosc_into(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    volume: &[f64],
-    fast_period: usize,
-    slow_period: usize,
-    output: &mut [f64],
-) -> Result<()> {
-    if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len() {
-        return Err(crate::error::TaError::InvalidParameter {
-            name: "high, low, close, volume".to_string(),
-            constraint: "must have the same length".to_string(),
-        });
-    }
-    validate_input(high.len(), slow_period)?;
-    if output.len() != high.len() {
-        return Err(crate::error::TaError::InvalidParameter {
-            name: "output".to_string(),
-            constraint: "must have the same length as high".to_string(),
-        });
-    }
-
-    let len = high.len();
-    let fast_k = 2.0 / (fast_period as f64 + 1.0);
-    let fast_one_k = 1.0 - fast_k;
-    let slow_k = 2.0 / (slow_period as f64 + 1.0);
-    let slow_one_k = 1.0 - slow_k;
-    output[..slow_period.saturating_sub(1).min(len)].fill(0.0);
-
-    unsafe {
-        let high_ptr = high.as_ptr();
-        let low_ptr = low.as_ptr();
-        let close_ptr = close.as_ptr();
-        let volume_ptr = volume.as_ptr();
-        let output_ptr = output.as_mut_ptr();
-        let mut cumulative = 0.0;
-        let mut fast_ema = 0.0;
-        let mut slow_ema = 0.0;
-
-        for i in 0..len {
-            let h = *high_ptr.add(i);
-            let l = *low_ptr.add(i);
-            let c = *close_ptr.add(i);
-            let range = h - l;
-            if range > 0.0 {
-                cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(i);
-            }
-
-            if i == 0 {
-                fast_ema = cumulative;
-                slow_ema = cumulative;
-            } else {
-                // Match TA-Lib's fused EMA recurrence while avoiding the
-                // second multiply in the common scalar form.
-                fast_ema = fast_ema.mul_add(fast_one_k, cumulative * fast_k);
-                slow_ema = slow_ema.mul_add(slow_one_k, cumulative * slow_k);
-            }
-            if i >= slow_period - 1 {
-                *output_ptr.add(i) = fast_ema - slow_ema;
-            }
-        }
-    }
-    Ok(())
 }
 
 /// On Balance Volume (OBV)
@@ -269,15 +173,9 @@ pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     }
     validate_input(close.len(), 1)?;
 
-    let len = close.len();
-    let mut out = Vec::with_capacity(len);
-    unsafe { out.set_len(len) };
-    // SIMD-accelerated OBV: the AVX2 kernel vectorises the diff / sign-mask /
-    // multiply chain (flat diff contributes nothing, matching TA-Lib). The
-    // scalar fallback (`obv_core_scalar`) is identical to the legacy contract.
-    crate::math::simd_ops::simd_obv(close, volume, &mut out);
-
-    Ok(Array1::from(out))
+    let mut output = vec![0.0_f64; close.len()];
+    crate::math::volume_kernels::obv_into(close, volume, &mut output)?;
+    Ok(Array1::from_vec(output))
 }
 
 /// Volume Profile 结果结构体
@@ -759,9 +657,19 @@ mod tests {
         ];
         let expected = adosc(&high, &low, &close, &volume, 3, 5).unwrap();
         let mut actual = vec![0.0; close.len()];
-        adosc_into(&high, &low, &close, &volume, 3, 5, &mut actual).unwrap();
-        for (lhs, rhs) in actual.iter().zip(expected.iter()) {
-            assert!((lhs - rhs).abs() <= 1e-12, "{lhs} != {rhs}");
+        crate::math::volume_kernels::adosc_into(&high, &low, &close, &volume, 3, 5, &mut actual)
+            .unwrap();
+        // ADOSC has a warm-up region where "no value yet" is reported as NaN.
+        // Both paths must agree there as well, and a tolerance comparison cannot
+        // express that: `NaN - NaN` is NaN, so every tolerance test on NaN fails
+        // no matter how wide. Agreeing on NaN *is* agreement — but only when both
+        // sides are NaN, which is why the conjunction is spelled out rather than
+        // relaxed to `lhs.is_nan() || rhs.is_nan()`.
+        for (index, (lhs, rhs)) in actual.iter().zip(expected.iter()).enumerate() {
+            assert!(
+                (lhs.is_nan() && rhs.is_nan()) || (lhs - rhs).abs() <= 1e-12,
+                "bar {index}: {lhs} != {rhs}"
+            );
         }
     }
 

@@ -1,18 +1,28 @@
 use crate::impl_standard_methods;
-use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::utils::true_range;
 
 /// Streaming Directional Movement Index (DX).
 ///
-/// DX = |+DI - -DI| / (+DI + -DI) * 100
-/// Unlike ADX, DX is not smoothed.
+/// `DX = |+DI - -DI| / (+DI + -DI) * 100`, with all three smoothed inputs
+/// produced by **Wilder's** smoothing (`s - s/p + x`, seeded by a plain sum).
+///
+/// # Convergence
+///
+/// This mirrors `indicators::momentum::dx_into` step for step. Wilder's
+/// smoothing is *not* an exponential moving average: an `EMA(period)` seed does
+/// not reproduce TA-Lib's DX, so an EMA-based incremental path is a different
+/// indicator that happens to share a name. The `streaming == batch` gate in
+/// `core/tests/runtime_convergence.rs` pins the two together.
+///
+/// Warm-up: `period - 1` bars to seed the smoothed sums, then the Wilder update
+/// on bar `period`, which is the first row `dx_into` writes.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingDx {
     period: usize,
-    plus_dm_ema: StreamingEma,
-    minus_dm_ema: StreamingEma,
-    tr_ema: StreamingEma,
+    smooth_plus_dm: f64,
+    smooth_minus_dm: f64,
+    smooth_tr: f64,
     prev_high: f64,
     prev_low: f64,
     prev_close: f64,
@@ -24,9 +34,9 @@ impl StreamingDx {
     pub fn new(period: usize) -> Self {
         Self {
             period,
-            plus_dm_ema: StreamingEma::new(period),
-            minus_dm_ema: StreamingEma::new(period),
-            tr_ema: StreamingEma::new(period),
+            smooth_plus_dm: 0.0,
+            smooth_minus_dm: 0.0,
+            smooth_tr: 0.0,
             prev_high: f64::NAN,
             prev_low: f64::NAN,
             prev_close: f64::NAN,
@@ -50,59 +60,62 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingDx {
             return None;
         }
 
-        let tr = true_range(high, low, self.prev_close);
         let up_move = high - self.prev_high;
         let down_move = self.prev_low - low;
-
-        let plus_dm = if up_move > 0.0 && up_move > down_move {
+        let plus_dm = if up_move > down_move && up_move > 0.0 {
             up_move
         } else {
             0.0
         };
-        let minus_dm = if down_move > 0.0 && down_move > up_move {
+        let minus_dm = if down_move > up_move && down_move > 0.0 {
             down_move
         } else {
             0.0
         };
+        let tr = true_range(high, low, self.prev_close);
 
         self.prev_high = high;
         self.prev_low = low;
         self.prev_close = close;
 
-        let smoothed_tr = self.tr_ema.next(tr);
-        let smoothed_plus_dm = self.plus_dm_ema.next(plus_dm);
-        let smoothed_minus_dm = self.minus_dm_ema.next(minus_dm);
+        let p = self.period as f64;
 
-        let (Some(smoothed_tr), Some(sp), Some(sm)) =
-            (smoothed_tr, smoothed_plus_dm, smoothed_minus_dm)
-        else {
-            self.last_value = None;
-            return None;
-        };
-
-        if smoothed_tr.abs() < 1e-15 {
+        if self.count <= self.period {
+            // `dx_into` seeds by summing indices `1..period`.
+            self.smooth_plus_dm += plus_dm;
+            self.smooth_minus_dm += minus_dm;
+            self.smooth_tr += tr;
             self.last_value = None;
             return None;
         }
 
-        let plus_di = (sp / smoothed_tr) * 100.0;
-        let minus_di = (sm / smoothed_tr) * 100.0;
+        self.smooth_plus_dm = self.smooth_plus_dm - self.smooth_plus_dm / p + plus_dm;
+        self.smooth_minus_dm = self.smooth_minus_dm - self.smooth_minus_dm / p + minus_dm;
+        self.smooth_tr = self.smooth_tr - self.smooth_tr / p + tr;
 
-        let di_sum = plus_di + minus_di;
-        let dx = if di_sum.abs() > 1e-15 {
-            (plus_di - minus_di).abs() / di_sum * 100.0
+        // Degenerate window handling matches `dx_into` exactly: a flat TR yields
+        // 0.0 (not NaN, not `None`) once the smoothing has started.
+        let value = if self.smooth_tr.abs() > 1e-15 {
+            let plus_di = self.smooth_plus_dm / self.smooth_tr * 100.0;
+            let minus_di = self.smooth_minus_dm / self.smooth_tr * 100.0;
+            let sum = plus_di + minus_di;
+            if sum.abs() > 1e-15 {
+                (plus_di - minus_di).abs() / sum * 100.0
+            } else {
+                0.0
+            }
         } else {
             0.0
         };
 
-        self.last_value = Some(dx);
-        Some(dx)
+        self.last_value = Some(value);
+        Some(value)
     }
 
     fn reset(&mut self) {
-        self.plus_dm_ema.reset();
-        self.minus_dm_ema.reset();
-        self.tr_ema.reset();
+        self.smooth_plus_dm = 0.0;
+        self.smooth_minus_dm = 0.0;
+        self.smooth_tr = 0.0;
         self.prev_high = f64::NAN;
         self.prev_low = f64::NAN;
         self.prev_close = f64::NAN;
@@ -111,7 +124,7 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingDx {
     }
 
     fn is_ready(&self) -> bool {
-        self.tr_ema.is_ready()
+        self.last_value.is_some()
     }
 
     impl_standard_methods!();
@@ -127,6 +140,7 @@ impl IndicatorMeta for StreamingDx {
     fn description() -> &'static str {
         "Directional Movement Index"
     }
+    /// `period - 1` seeding bars plus the bar that gets the first Wilder update.
     fn warm_up_period(&self) -> usize {
         self.period + 1
     }
@@ -174,6 +188,24 @@ mod tests {
         let dx = StreamingDx::new(14);
         assert_eq!(StreamingDx::name(), "DX");
         assert_eq!(StreamingDx::category(), "momentum");
-        assert_eq!(dx.warm_up_period(), 15);
+        assert_eq!(
+            dx.warm_up_period(),
+            crate::streaming::registry::by_id("DX")
+                .expect("DX is registered")
+                .convergence
+        );
+    }
+
+    #[test]
+    fn first_value_lands_on_the_first_batch_row() {
+        let mut dx = StreamingDx::new(14);
+        let mut first = None;
+        for (index, &bar) in gen_data(40).iter().enumerate() {
+            if first.is_none() && dx.next(bar).is_some() {
+                first = Some(index);
+            }
+        }
+        // `dx_into` writes its first value at index `period`.
+        assert_eq!(first, Some(14));
     }
 }

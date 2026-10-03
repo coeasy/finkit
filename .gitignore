@@ -40,6 +40,9 @@ ffi/node-binding/npm/*/dist/
 ffi/node-binding/npm/*/*.node
 ffi/python-binding/dist/
 ffi/python-binding/target/
+# Criterion benchmark reports are machine/environment specific build output;
+# they must be uploaded as CI artifacts, never tracked (V4 plan §3.3).
+core/target/
 ffi/dotnet-binding/src/*/bin/
 ffi/dotnet-binding/src/*/obj/
 ffi/java-binding/natives/
@@ -145,6 +148,23 @@ packaging/usage/dotnet/tests/obj/
 .trae/
 .forge/
 .wpscomate/
+# Agent session state. Not a deliverable: it holds working memory and scratch
+# snapshots, and it changes on every session, so tracking it would put unrelated
+# churn in every diff. Never delete the directory -- only never commit it.
+.workbuddy/
 
 # Alternate cargo target dir used when the default target/ is unavailable
 /.cargo-target*/
+
+# Generated chart demos. `cargo run -p finkit-visualization --example
+# gpu_large_chart` (and `--example improved_chart`) writes these to the
+# repository root, and the very next CI step consumes them
+# (ci.yml "WebGL runtime"). They are build output, not deliverables: the
+# tracked copies added ~7.3 MB to the repository -- gpu_large_chart.html alone
+# is 7 MB -- and left `git status` dirty after every local run. Regenerate with
+# the example; `scripts/check_no_tracked_build_artifacts.py` fails if a copy is
+# tracked again.
+/gpu_large_chart.html
+/improved_chart*.html
+/improved_chart.json
+/improved_chart.svg

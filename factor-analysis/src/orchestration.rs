@@ -1,6 +1,6 @@
 use crate::error::{ResearchError, ResearchResult};
 use finkit::compute::{
-    ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan,
+    ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, DependencyShape,
     LookbackRequirement,
 };
 use serde::{Deserialize, Serialize};
@@ -115,6 +115,7 @@ impl ResearchPlan {
                     streaming: stage.kind.incremental_capability().supports_append(),
                     stateful: false,
                     lookback: LookbackRequirement::Dynamic,
+                    dependency: DependencyShape::Dynamic,
                     effect: if matches!(stage.kind, ResearchStageKind::Report) {
                         ComputeEffect::EmitOutput("factor-study-report".to_string())
                     } else {

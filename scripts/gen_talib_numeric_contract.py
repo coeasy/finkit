@@ -178,6 +178,17 @@ def cpp_raw(value: str) -> str:
     raise ValueError("could not find a safe C++ raw-string delimiter")
 
 
+def cpp_json(value: str) -> str:
+    """Render a JSON string fragment (with quotes) as a C++ raw string literal.
+
+    The generated field is a ready-to-concatenate JSON fragment, so host test
+    code never re-decides JSON quoting rules. Renaming `operation` to
+    `operation_json` makes that contract explicit at the type level.
+    """
+
+    return cpp_raw(json.dumps(value, ensure_ascii=True))
+
+
 def c_string(value: str) -> str:
     """Render an ASCII/UTF-8 JSON fragment as a portable C string literal."""
 
@@ -198,7 +209,8 @@ def render_cpp_contract(payload: dict[str, Any]) -> str:
         "namespace finkit_test_contract {",
         "",
         "struct NumericContractVector {",
-        "    const char* operation;",
+        "    // Ready-to-concatenate JSON fragments (quotes included).",
+        "    const char* operation_json;",
         "    const char* input_order_json;",
         "    const char* params_json;",
         "    const char* expected_json;",
@@ -206,7 +218,7 @@ def render_cpp_contract(payload: dict[str, Any]) -> str:
         "    double rtol;",
         "};",
         "",
-        f"inline constexpr const char* kSemanticProfile = {cpp_raw(payload['semantic_profile'])};",
+        f"inline constexpr const char* kSemanticProfileJson = {cpp_json(payload['semantic_profile'])};",
         f"inline constexpr const char* kInputsJson = {cpp_raw(inputs)};",
         "",
         "inline constexpr NumericContractVector kVectors[] = {",
@@ -217,7 +229,7 @@ def render_cpp_contract(payload: dict[str, Any]) -> str:
         expected = json.dumps(vector["expected"], separators=(",", ":"), allow_nan=False)
         lines.append(
             "    {"
-            f"{cpp_raw(vector['operation'])}, "
+            f"{cpp_json(vector['operation'])}, "
             f"{cpp_raw(input_order)}, "
             f"{cpp_raw(params)}, "
             f"{cpp_raw(expected)}, "
@@ -250,7 +262,8 @@ def render_c_contract(payload: dict[str, Any]) -> str:
         "#include <stddef.h>",
         "",
         "typedef struct FinkitNumericContractVector {",
-        "    const char* operation;",
+        "    /* Ready-to-concatenate JSON fragments (quotes included). */",
+        "    const char* operation_json;",
         "    const char* input_order_json;",
         "    const char* params_json;",
         "    const char* expected_json;",
@@ -258,7 +271,7 @@ def render_c_contract(payload: dict[str, Any]) -> str:
         "    double rtol;",
         "} FinkitNumericContractVector;",
         "",
-        f"static const char finkit_test_contract_semantic_profile[] = {c_string(payload['semantic_profile'])};",
+        f"static const char finkit_test_contract_semantic_profile_json[] = {c_string(payload['semantic_profile'])};",
         f"static const char finkit_test_contract_inputs_json[] = {c_string(inputs)};",
         "",
         "static const FinkitNumericContractVector finkit_test_contract_vectors[] = {",
@@ -339,9 +352,9 @@ def main() -> None:
         print(f"checked {CPP_OUTPUT_PATH}")
         print(f"checked {C_OUTPUT_PATH}")
     else:
-        OUTPUT_PATH.write_text(generated, encoding="utf-8")
-        CPP_OUTPUT_PATH.write_text(generated_cpp, encoding="utf-8")
-        C_OUTPUT_PATH.write_text(generated_c, encoding="utf-8")
+        OUTPUT_PATH.write_text(generated, encoding="utf-8", newline="\n")
+        CPP_OUTPUT_PATH.write_text(generated_cpp, encoding="utf-8", newline="\n")
+        C_OUTPUT_PATH.write_text(generated_c, encoding="utf-8", newline="\n")
         print(f"wrote {OUTPUT_PATH}")
         print(f"wrote {CPP_OUTPUT_PATH}")
         print(f"wrote {C_OUTPUT_PATH}")

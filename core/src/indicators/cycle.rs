@@ -2224,8 +2224,19 @@ mod tests {
             "ht_sine (whole fn) throughput: {:.2} ns/bar over {} bars x {} iters",
             ns_per_bar, n, iters
         );
+        // The bound is deliberately loose, and the doc comment above says why:
+        // this runs inside a 3000-test parallel suite, so the measurement
+        // carries scheduler contention it cannot control. Measured in isolation
+        // on the development machine it sits at ~170 ns/bar, which means the
+        // previous bound of 200 left about 15% of headroom and failed
+        // intermittently under load. A gate that fails on contention is worse
+        // than no gate: it trains the reader to re-run rather than to
+        // investigate. 1000 ns/bar keeps the "gross regression" meaning — about
+        // six times the measured value, which still trips on losing the SIMD
+        // Hilbert path or on an accidental per-bar allocation — without firing
+        // on noise.
         assert!(
-            ns_per_bar < 200.0,
+            ns_per_bar < 1000.0,
             "ht_sine too slow: {:.2} ns/bar",
             ns_per_bar
         );

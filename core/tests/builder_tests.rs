@@ -28,7 +28,19 @@ fn test_rsi_builder_ok() {
 #[test]
 fn test_atr_builder_ok() {
     let atr = StreamingAtr::builder().period(14).build().unwrap();
-    assert_eq!(atr.warm_up_period(), 14);
+    // ATR needs one bar to establish a previous close — the TA-Lib row-zero
+    // convention — so its first value lands on index `period` and the warm-up
+    // window is `period + 1`. That is exactly the registry's convergence figure,
+    // so the registry is asserted alongside the literal: the literal catches a
+    // registry edit, the registry catches a kernel that drifts back to emitting
+    // `high - low` on bar zero (which is what the old literal 14 was pinning).
+    assert_eq!(
+        atr.warm_up_period(),
+        finkit::streaming::registry::by_id("ATR")
+            .expect("ATR is registered")
+            .convergence
+    );
+    assert_eq!(atr.warm_up_period(), 15);
 }
 
 #[test]

@@ -106,7 +106,10 @@ const FORMULA_PARAM_SUBSET: &[(&str, &str)] = &[
         "STDDEV",
         "formula takes (close, period): the deviation is fixed at 1.0",
     ),
-    ("VAR", "formula takes (close, period): the deviation is fixed at 1.0"),
+    (
+        "VAR",
+        "formula takes (close, period): the deviation is fixed at 1.0",
+    ),
 ];
 
 /// The series arguments [`InputKind`] promises, as formula expressions.
@@ -142,7 +145,9 @@ fn plan_values(ast: &AstNode, ctx: &FormulaContext) -> Result<Array1<f64>, Strin
         inputs.push(slot.ok_or_else(|| format!("input slot {index} was never bound"))?);
     }
     let mut executor = unified_formula_executor(&plan);
-    let result = executor.execute(&inputs).map_err(|error| format!("execute: {error}"))?;
+    let result = executor
+        .execute(&inputs)
+        .map_err(|error| format!("execute: {error}"))?;
     result
         .values
         .into_iter()
@@ -206,6 +211,8 @@ fn declared_signatures_run_on_both_execution_paths() {
             .any(|(name, _)| *name == spec.name);
         let mut kept = params.len();
         let mut last_error = String::new();
+        // SAFETY-TERMINATION: every retry strictly decreases `kept`, which
+        // cannot go below zero; the loop breaks on success or on exhaustion.
         loop {
             let mut args = series_args.clone();
             args.extend_from_slice(&params[..kept]);

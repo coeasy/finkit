@@ -31,6 +31,11 @@ keeping them would have preserved a description of something that no longer exis
 | `V4_MIGRATION_EXECUTION_STATUS.md` | Execution status for that same removed migration. |
 | `finkit-architecture-review-refactor-plan-v4.md` | Same V4 target architecture. |
 
+**The names are not related.** Those three were *architecture* V4 plans aimed at
+`runtime_engine.rs`, which no longer exists. `docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md`
+is the *current* plan and is deliberately **not** archived: it is indexed under "Current refactor
+baseline" in `docs/README.md`. Reach for that one when you want current guidance.
+
 ## Index
 
 | Document | Round | Status |
@@ -47,6 +52,13 @@ keeping them would have preserved a description of something that no longer exis
 | `factor-research-expansion-plan-v2.md` | v2 | Explicitly superseded by `docs/factor-research-architecture.md` |
 | `FINKIT_QUANT_FACTOR_ENGINE_ARCHITECTURE_V2.md` | V2 | Superseded by later architecture rounds |
 | `release-v0.1.5.md` | v0.1.5 | Release checklist for a published version; superseded by `docs/release-checklist.md` |
+| `finkit-architecture-v3.1-implementation-plan.md` | v3.1 | Superseded by `docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md`; was misnamed `docs/new.md` |
+| `IMPROVEMENT_PLAN.md` | 2026-05-24 (AlphaTA era) | Industrial-grade improvement plan written under the repository's pre-rename name; superseded by later rounds |
+| `benchmark-baseline.md` | 2026-05-27 (AlphaTA era) | AlphaTA-vs-TA-Lib baseline; superseded by `docs/BENCHMARK_VS_TALIB.md` and `docs/benchmark-baseline.json` |
+| `benchmark-results.md` | 2026-05-27 (AlphaTA era) | AlphaTA optimization report, single machine; superseded by `docs/benchmark-results.md` |
+| `ALPHATA_VS_TALIB.md` | 2026-07-08 (AlphaTA era) | Early single-machine comparison; superseded by `docs/BENCHMARK_VS_TALIB.md` |
+| `ALPHATA_VS_TALIB_REPORT.md` | 2026-07-11 (AlphaTA era) | Same class of report, later run |
+| `ALPHATA_VS_TALIB_COMPARISON_REPORT.md` | 2026-07-12 (AlphaTA era) | Same class of report, last run under the old name |
 
 ## Deliberately not archived
 

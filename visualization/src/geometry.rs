@@ -379,7 +379,18 @@ impl ClipRect {
         let mut outcode0 = Self::outcode(&Point::new(x0, y0), rect);
         let mut outcode1 = Self::outcode(&Point::new(x1, y1), rect);
 
-        loop {
+        // Cohen–Sutherland with an explicit pass budget. Each pass either
+        // returns (accept/reject) or moves one endpoint onto a boundary, which
+        // clears at least one of that endpoint's four outcode bits — so four
+        // passes suffice for exact arithmetic. The budget is explicit rather
+        // than implied by an unbounded `loop`, because the boundary
+        // intersection is computed in floating point: rounding can leave the
+        // new coordinate a hair *outside* the boundary it was clipped to, the
+        // outcode bit then survives, and an unbounded loop would re-clip the
+        // same endpoint forever. A residual after four passes is therefore
+        // treated as unclippable — refusing to draw is strictly safer than
+        // emitting a point that is still outside the rect.
+        for _ in 0..4 {
             if outcode0 | outcode1 == 0 {
                 return Some((Point::new(x0, y0), Point::new(x1, y1)));
             }
@@ -415,6 +426,7 @@ impl ClipRect {
                 outcode1 = Self::outcode(&Point::new(x1, y1), rect);
             }
         }
+        None
     }
 }
 

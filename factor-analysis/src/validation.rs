@@ -336,6 +336,10 @@ pub fn deflated_sharpe_ratio(
         / (trials.len() - 1) as f64;
     let trial_std = variance.sqrt();
     let n = trials.len() as f64;
+    // This is the Euler–Mascheroni constant at full f64 precision. The Rust
+    // standard library does not expose it (and did not at our MSRV), so the
+    // project-owned constant is required for MSRV compatibility.
+    #[allow(clippy::approx_constant)]
     const EULER_GAMMA: f64 = 0.5772156649015329;
     let expected_max = trial_std
         * ((1.0 - EULER_GAMMA) * inverse_standard_normal(1.0 - 1.0 / n)

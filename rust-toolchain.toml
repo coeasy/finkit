@@ -1,0 +1,13 @@
+# Canonical toolchain (V4 plan §5.5 / P0-06).
+#
+# Three different Rust semantics (MSRV 1.85, fmt pinned 1.98, clippy on
+# moving `@stable`) previously meant a green tree could turn red with no code
+# change at all. The canonical channel below is what CI format/clippy/test
+# jobs pin; the MSRV job overrides it explicitly, and a separate
+# future-compatibility job tracks `stable`/`beta` without blocking.
+#
+# Bumping this file is a deliberate act: run `cargo fmt --all` with the new
+# toolchain and re-review the new clippy lints in the same change.
+[toolchain]
+channel = "1.98"
+components = ["rustfmt", "clippy"]

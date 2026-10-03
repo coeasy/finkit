@@ -354,7 +354,9 @@ const fn allocation_bytes(capacity: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compute::{ComputeCapabilities, ComputeEffect, ComputeNode, LookbackRequirement};
+    use crate::compute::{
+        ComputeCapabilities, ComputeEffect, ComputeNode, DependencyShape, LookbackRequirement,
+    };
 
     fn pure_capabilities() -> ComputeCapabilities {
         ComputeCapabilities {
@@ -362,6 +364,7 @@ mod tests {
             streaming: true,
             stateful: false,
             lookback: LookbackRequirement::None,
+            dependency: DependencyShape::FixedLookback(0),
             effect: ComputeEffect::Pure,
         }
     }

@@ -54,7 +54,7 @@ LANGS := $(filter-out packages,$(LANGS))
 .PHONY: build-native-archive verify-native-archive
 .PHONY: installer installer-all check-installer
 .PHONY: $(INSTALLER_TARGETS:%=installer-%)
-.PHONY: check-rustdoc check-orphans check-script-refs check-dead-code check-nan-safety check-ios-header
+.PHONY: check-rustdoc check-orphans check-script-refs check-dead-code check-nan-safety check-ios-header check-source-reachability check-no-build-artifacts check-loop-termination verify-python-bindings
 .PHONY: check-ios-header check-talib-ffi refresh-release-manifests check-release-manifests
 
 # ---- default ----------------------------------------------------------------
@@ -204,6 +204,35 @@ check-nan-safety:
 check-ios-header:
 	python3 $(ROOT)/scripts/check_ios_header_contract.py
 
+# ---- repository hygiene: V4-plan gates --------------------------------------
+# V4 plan P1-02: a tracked `.rs` file that no module declaration references is
+# invisible to `check_orphan_modules.py` (which can only see declared modules).
+# `core/src/circuit_breaker.rs` rotted exactly this way: a complete, tested
+# implementation that never entered the module graph and never shipped.
+check-source-reachability:
+	python3 $(ROOT)/scripts/check_rust_source_reachability.py
+
+# V4 plan P1-03: 273 Criterion report files under `core/target/criterion` were
+# tracked despite `.gitignore` (tracked-before-ignored stays tracked). Build
+# output belongs in CI artifacts, not the source tree or release archives.
+check-no-build-artifacts:
+	python3 $(ROOT)/scripts/check_no_tracked_build_artifacts.py
+
+# V4 plan P1-07: termination of `loop {` / `while true {` sites was previously
+# re-verified by hand every audit cycle. Every unbounded loop now needs a
+# `// SAFETY-TERMINATION:` argument, a break + iteration-budget signal, or a
+# recorded allowlist entry.
+check-loop-termination:
+	python3 $(ROOT)/scripts/check_unbounded_loops.py
+
+# V4 plan section 24, Batch 2: the Python binding surface (numeric hot-path ABI,
+# canonical kernel bodies, single-write outputs, batch zero-copy contract,
+# FormulaPlan convergence, CFO/TMF ownership, NumPy-direct returns) is described
+# once in `scripts/binding_spec.py`. The wheel build verifies it and generates
+# `generated.rs`; it never rewrites hand-written tracked source.
+verify-python-bindings:
+	python3 $(ROOT)/scripts/verify_python_bindings.py
+
 # ---- repository hygiene: the TA-Lib transcription matches TA-Lib ------------
 # `core/src/talib_ffi.rs` is a hand-written transcription of TA-Lib's
 # `ta_func.h`, compiled only under `talib-c` and used by the head-to-head
@@ -305,6 +334,10 @@ help:
 	@echo "  make check-script-refs  Fail if a caller references a script that is missing"
 	@echo "  make check-dead-code    Fail on an unexplained `#[allow(dead_code)]`"
 	@echo "  make check-nan-safety   Fail on `partial_cmp(..).unwrap()` (panics on NaN)"
+	@echo "  make check-source-reachability  Fail on a tracked .rs file outside the module graph"
+	@echo "  make check-no-build-artifacts   Fail on tracked target/dist/bin or binary artifacts"
+	@echo "  make check-loop-termination  Fail on `loop{}` without a termination argument"
+	@echo "  make verify-python-bindings  Fail when the Python binding source drifts from binding_spec.py"
 	@echo "  make check-ios-header   Fail if ffi/ios-binding/include/finkit.h drifts from the iOS exports"
 	@echo "  make refresh-release-manifests  Recompute dist/**/manifest.json digests"
 	@echo "  make check-release-manifests    Fail if those digests are stale"

@@ -683,9 +683,9 @@ def do_generate(langs: list[str], rewrite: bool) -> int:
                 cursor = e  # skip the dropped span itself
             result.append(src[cursor:])  # keep tail after last span
             new_lib = "".join(result)
-            lib_path.write_text(new_lib, encoding="utf-8")
+            lib_path.write_text(new_lib, encoding="utf-8", newline="\n")
             print(f"[gen/{lang}] rewrote {cfg['lib']} (dropped {len(spans)} indicator fns)")
-        gen_path.write_text(text, encoding="utf-8")
+        gen_path.write_text(text, encoding="utf-8", newline="\n")
         print(f"[gen/{lang}] wrote {cfg['gen']} ({len(inds)} indicators)")
     return 0
 

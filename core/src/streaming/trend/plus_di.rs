@@ -1,16 +1,27 @@
 use crate::impl_standard_methods;
-use crate::streaming::overlap::ema::StreamingEma;
 use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 use crate::utils::true_range;
 
 /// Streaming Plus Directional Indicator (+DI).
 ///
-/// +DI = EMA(+DM) / EMA(TR) * 100
+/// `+DI = smoothed(+DM) / smoothed(TR) * 100`, where *smoothed* is **Wilder's**
+/// smoothing (`s - s/p + x`, seeded by a plain sum).
+///
+/// # Convergence
+///
+/// This mirrors `indicators::momentum::compute_single_di::<true>`, which backs
+/// the batch `plus_di`. Wilder's smoothing is not an exponential moving
+/// average, and the difference is visible from the first emitted bar onward, so
+/// the `streaming == batch` gate in `core/tests/runtime_convergence.rs` pins
+/// this kernel to the batch one.
+///
+/// Warm-up: `period - 1` seeding bars, then the first Wilder update on bar
+/// `period` — the first row the batch kernel writes.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingPlusDi {
     period: usize,
-    plus_dm_ema: StreamingEma,
-    tr_ema: StreamingEma,
+    smooth_dm: f64,
+    smooth_tr: f64,
     prev_high: f64,
     prev_low: f64,
     prev_close: f64,
@@ -22,8 +33,8 @@ impl StreamingPlusDi {
     pub fn new(period: usize) -> Self {
         Self {
             period,
-            plus_dm_ema: StreamingEma::new(period),
-            tr_ema: StreamingEma::new(period),
+            smooth_dm: 0.0,
+            smooth_tr: 0.0,
             prev_high: f64::NAN,
             prev_low: f64::NAN,
             prev_close: f64::NAN,
@@ -47,41 +58,43 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingPlusDi {
             return None;
         }
 
-        let tr = true_range(high, low, self.prev_close);
         let up_move = high - self.prev_high;
         let down_move = self.prev_low - low;
-
-        let plus_dm = if up_move > 0.0 && up_move > down_move {
+        let plus_dm = if up_move > down_move && up_move > 0.0 {
             up_move
         } else {
             0.0
         };
+        let tr = true_range(high, low, self.prev_close);
 
         self.prev_high = high;
         self.prev_low = low;
         self.prev_close = close;
 
-        let smoothed_tr = self.tr_ema.next(tr);
-        let smoothed_plus_dm = self.plus_dm_ema.next(plus_dm);
+        let p = self.period as f64;
 
-        let (Some(str_val), Some(sp)) = (smoothed_tr, smoothed_plus_dm) else {
+        if self.count <= self.period {
+            self.smooth_dm += plus_dm;
+            self.smooth_tr += tr;
             self.last_value = None;
             return None;
-        };
-
-        if str_val.abs() < 1e-15 {
-            self.last_value = Some(0.0);
-            return Some(0.0);
         }
 
-        let result = (sp / str_val) * 100.0;
-        self.last_value = Some(result);
-        Some(result)
+        self.smooth_dm = self.smooth_dm - self.smooth_dm / p + plus_dm;
+        self.smooth_tr = self.smooth_tr - self.smooth_tr / p + tr;
+
+        let value = if self.smooth_tr.abs() > 1e-15 {
+            self.smooth_dm / self.smooth_tr * 100.0
+        } else {
+            0.0
+        };
+        self.last_value = Some(value);
+        Some(value)
     }
 
     fn reset(&mut self) {
-        self.plus_dm_ema.reset();
-        self.tr_ema.reset();
+        self.smooth_dm = 0.0;
+        self.smooth_tr = 0.0;
         self.prev_high = f64::NAN;
         self.prev_low = f64::NAN;
         self.prev_close = f64::NAN;
@@ -90,7 +103,7 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingPlusDi {
     }
 
     fn is_ready(&self) -> bool {
-        self.tr_ema.is_ready()
+        self.last_value.is_some()
     }
 
     impl_standard_methods!();
@@ -169,6 +182,23 @@ mod tests {
     fn test_streaming_plus_di_meta() {
         let ind = StreamingPlusDi::new(14);
         assert_eq!(StreamingPlusDi::name(), "PLUS_DI");
-        assert_eq!(ind.warm_up_period(), 15);
+        assert_eq!(
+            ind.warm_up_period(),
+            crate::streaming::registry::by_id("PLUS_DI")
+                .expect("PLUS_DI is registered")
+                .convergence
+        );
+    }
+
+    #[test]
+    fn first_value_lands_on_the_first_batch_row() {
+        let mut ind = StreamingPlusDi::new(14);
+        let mut first = None;
+        for (index, &bar) in gen_data(40).iter().enumerate() {
+            if first.is_none() && ind.next(bar).is_some() {
+                first = Some(index);
+            }
+        }
+        assert_eq!(first, Some(14));
     }
 }

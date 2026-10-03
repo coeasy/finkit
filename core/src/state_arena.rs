@@ -289,7 +289,9 @@ impl StateArena {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::compute::{ComputeCapabilities, ComputeEffect, ComputeNode, LookbackRequirement};
+    use crate::compute::{
+        ComputeCapabilities, ComputeEffect, ComputeNode, DependencyShape, LookbackRequirement,
+    };
 
     #[derive(Debug, PartialEq)]
     struct RollingSum {
@@ -302,6 +304,7 @@ mod tests {
             streaming: true,
             stateful,
             lookback: LookbackRequirement::None,
+            dependency: DependencyShape::FixedLookback(0),
             effect: if stateful {
                 ComputeEffect::Stateful
             } else {

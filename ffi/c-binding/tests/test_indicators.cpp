@@ -587,47 +587,61 @@ static bool parse_json_object_arrays(
     return false;
 }
 
+// Truncate diagnostic payloads so failure logs stay readable while still
+// carrying operation, request, response, and error context.
+static std::string clip_for_log(const std::string& text, size_t limit = 512) {
+    if (text.size() <= limit) {
+        return text;
+    }
+    return text.substr(0, limit) + "...(truncated)";
+}
+
 void test_talib_numeric_contract() {
     TEST("TA-Lib numeric contract across C++ ABI")
     ASSERT_EQ(finkit_test_contract::kVectorCount, static_cast<size_t>(201),
               "Generated TA-Lib numeric contract vector count mismatch");
     for (size_t index = 0; index < finkit_test_contract::kVectorCount; ++index) {
         const auto& vector = finkit_test_contract::kVectors[index];
+        // operation_json / kSemanticProfileJson are ready-to-concatenate JSON
+        // fragments generated with quotes included; hosts must not re-decide
+        // JSON quoting rules.
         const std::string request =
-            std::string("{\"operation\":") + vector.operation +
-            ",\"semantic_profile\":" + finkit_test_contract::kSemanticProfile +
+            std::string("{\"operation\":") + vector.operation_json +
+            ",\"semantic_profile\":" + finkit_test_contract::kSemanticProfileJson +
             ",\"input_order\":" + vector.input_order_json +
             ",\"inputs\":" + finkit_test_contract::kInputsJson +
             ",\"params\":" + vector.params_json + "}";
         const std::string response = operation_execute_json(request);
         ASSERT(response.find("\"error\"") == std::string::npos,
-               std::string("TA-Lib operation returned an error: ") + vector.operation);
+               std::string("TA-Lib operation returned an error for ") + vector.operation_json +
+                   " | request: " + clip_for_log(request) +
+                   " | response: " + clip_for_log(response));
 
         const size_t values_marker = response.find("\"values\":");
         ASSERT(values_marker != std::string::npos,
-               std::string("missing values envelope: ") + vector.operation);
+               std::string("missing values envelope: ") + vector.operation_json);
         const size_t values_start = response.find('{', values_marker);
         ASSERT(values_start != std::string::npos,
-               std::string("missing values object: ") + vector.operation);
+               std::string("missing values object: ") + vector.operation_json);
         const std::string values_json = response.substr(values_start);
         std::vector<std::pair<std::string, std::vector<NumericContractValue>>> actual;
         ASSERT(parse_json_object_arrays(values_json, actual),
-               std::string("invalid values JSON: ") + vector.operation);
+               std::string("invalid values JSON: ") + vector.operation_json);
 
         std::vector<std::pair<std::string, std::vector<NumericContractValue>>> expected;
         ASSERT(parse_json_object_arrays(vector.expected_json, expected),
-               std::string("invalid generated expected JSON: ") + vector.operation);
+               std::string("invalid generated expected JSON: ") + vector.operation_json);
         ASSERT_EQ(actual.size(), expected.size(),
-                  std::string("output count mismatch: ") + vector.operation);
+                  std::string("output count mismatch: ") + vector.operation_json);
         for (const auto& expected_output : expected) {
             const auto actual_output = std::find_if(
                 actual.begin(), actual.end(), [&](const auto& candidate) {
                     return candidate.first == expected_output.first;
                 });
             ASSERT(actual_output != actual.end(),
-                   std::string("missing output ") + expected_output.first + " for " + vector.operation);
+                   std::string("missing output ") + expected_output.first + " for " + vector.operation_json);
             ASSERT_EQ(actual_output->second.size(), expected_output.second.size(),
-                      std::string("length mismatch for ") + expected_output.first + " in " + vector.operation);
+                      std::string("length mismatch for ") + expected_output.first + " in " + vector.operation_json);
             for (size_t point = 0; point < expected_output.second.size(); ++point) {
                 const auto& want = expected_output.second[point];
                 const auto& got = actual_output->second[point];
@@ -635,7 +649,7 @@ void test_talib_numeric_contract() {
                     (!want.is_null && std::abs(got.value - want.value) >
                         vector.atol + vector.rtol * std::abs(want.value))) {
                     std::cerr << "::error title=C++ numeric contract::"
-                              << vector.operation << "/" << expected_output.first
+                              << vector.operation_json << "/" << expected_output.first
                               << "[" << point << "]: expected "
                               << (want.is_null ? "null" : std::to_string(want.value))
                               << " got "
@@ -643,11 +657,11 @@ void test_talib_numeric_contract() {
                               << std::endl;
                 }
                 ASSERT(got.is_null == want.is_null,
-                       std::string("null mismatch for ") + expected_output.first + " in " + vector.operation);
+                       std::string("null mismatch for ") + expected_output.first + " in " + vector.operation_json);
                 if (!want.is_null) {
                     const double limit = vector.atol + vector.rtol * std::abs(want.value);
                     ASSERT(std::abs(got.value - want.value) <= limit,
-                           std::string("numeric mismatch for ") + expected_output.first + " in " + vector.operation);
+                           std::string("numeric mismatch for ") + expected_output.first + " in " + vector.operation_json);
                 }
             }
         }

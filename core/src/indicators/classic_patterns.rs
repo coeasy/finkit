@@ -521,10 +521,7 @@ pub fn three_line_break(close: &[f64], lines: usize) -> Result<ThreeLineBreakRes
                     *last = c.max(*last);
                 }
             } else if last_lows.len() >= lines
-                && c < *last_lows
-                    .iter()
-                    .min_by(|a, b| a.total_cmp(b))
-                    .unwrap()
+                && c < *last_lows.iter().min_by(|a, b| a.total_cmp(b)).unwrap()
             {
                 // Reverse down
                 cur_dir = -1;
@@ -551,10 +548,7 @@ pub fn three_line_break(close: &[f64], lines: usize) -> Result<ThreeLineBreakRes
                     *last = c.min(*last);
                 }
             } else if last_highs.len() >= lines
-                && c > *last_highs
-                    .iter()
-                    .max_by(|a, b| a.total_cmp(b))
-                    .unwrap()
+                && c > *last_highs.iter().max_by(|a, b| a.total_cmp(b)).unwrap()
             {
                 // Reverse up
                 cur_dir = 1;

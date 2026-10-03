@@ -1,0 +1,54 @@
+# Release readiness aggregator (V4 plan §22 / P0-07).
+#
+# A tag may only be created when every required release workflow succeeded on
+# exactly the commit being tagged. This workflow re-checks that contract after
+# each required workflow finishes and re-aggregates the full matrix for the
+# SHA. It is advisory evidence for humans AND the machine-checkable gate:
+# `scripts/release_readiness_aggregate.py` exits non-zero (NO RELEASE) unless
+# every required workflow is green on the same SHA.
+#
+# Missing runs count as failures: absence of evidence is not readiness.
+
+name: Release readiness
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Docs Check
+      - Python wheels
+      - TA-Lib installed-wheel release gate
+      - Multilang cross-platform
+      - Multilang release
+      - Competitive benchmark
+      - Release installers
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Commit SHA to evaluate (defaults to the current head)"
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-readiness-${{ github.event.workflow_run.head_sha || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  aggregate:
+    name: Same-SHA release readiness
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Resolve the commit under evaluation
+        id: sha
+        run: |
+          SHA="${{ github.event.workflow_run.head_sha || inputs.sha || github.sha }}"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+      - name: Aggregate required checks for the same SHA
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python scripts/release_readiness_aggregate.py "${{ steps.sha.outputs.sha }}"

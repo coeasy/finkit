@@ -1,6 +1,6 @@
-use crate::streaming::traits::{Ohlcv, StreamingIndicator};
+use crate::impl_standard_methods;
+use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::streaming::volatility::atr::StreamingAtr;
-use crate::{impl_indicator_meta, impl_standard_methods};
 
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingNatr {
@@ -51,12 +51,21 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingNatr {
     impl_standard_methods!();
 }
 
-impl_indicator_meta!(
-    StreamingNatr,
-    "NATR",
-    "volatility",
-    "Normalized Average True Range"
-);
+impl IndicatorMeta for StreamingNatr {
+    fn name() -> &'static str {
+        "NATR"
+    }
+    fn category() -> &'static str {
+        "volatility"
+    }
+    fn description() -> &'static str {
+        "Normalized Average True Range"
+    }
+    /// NATR is ATR rescaled by close, so it inherits ATR's warm-up exactly.
+    fn warm_up_period(&self) -> usize {
+        self.atr.warm_up_period()
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -73,16 +82,22 @@ mod tests {
             OhlcvBar::new(12.0, 14.0, 11.0, 13.0, 100.0),
             OhlcvBar::new(13.0, 15.0, 12.0, 14.0, 100.0),
         ];
-        for bar in &bars[..2] {
+        for bar in &bars[..3] {
             assert_eq!(natr.next(bar), None);
         }
-        let v = natr.next(&bars[2]).unwrap();
+        let v = natr.next(&bars[3]).unwrap();
         assert!(v > 0.0);
     }
 
     #[test]
     fn test_streaming_natr_meta() {
         assert_eq!(StreamingNatr::name(), "NATR");
+        assert_eq!(
+            StreamingNatr::new(14).warm_up_period(),
+            crate::streaming::registry::by_id("NATR")
+                .expect("NATR is registered")
+                .convergence
+        );
     }
 
     #[test]

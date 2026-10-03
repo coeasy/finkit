@@ -122,8 +122,16 @@ pub mod risk;
 /// Zero-copy aligned market-frame and warm-up/NaN runtime contracts.
 pub mod runtime;
 #[cfg(feature = "std")]
+/// The single execution context (arenas, limits, metrics, diagnostics) every
+/// numeric executor runs against.
+pub mod runtime_context;
+#[cfg(feature = "std")]
 /// Owned machine-readable API schema derived from the canonical registry.
 pub mod schema;
+#[cfg(feature = "std")]
+/// The one semantic graph every frontend lowers into, plus graph-level
+/// optimizations (CSE, dependency cones, level scheduling).
+pub mod semantic_graph;
 #[cfg(feature = "std")]
 /// Slot-addressed persistent rolling/streaming state storage for compute plans.
 pub mod state_arena;

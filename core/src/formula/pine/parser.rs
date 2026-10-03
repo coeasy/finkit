@@ -194,8 +194,108 @@ impl std::error::Error for PineError {}
 #[grammar = "formula/pine/grammar.pest"]
 struct PineGrammar;
 
+/// Maximum nesting depth of `(` / `[` / `{` accepted in a Pine source.
+///
+/// `parse_pine` runs a pest grammar — recursive descent — and then walks the
+/// resulting pair tree recursively, so C-stack usage grows with the nesting
+/// depth of the input. A source carrying tens of thousands of unclosed `(`
+/// therefore aborts the process with a stack overflow instead of returning a
+/// `PineError`: a crash, not a diagnostic, from input the caller does not
+/// control (the CLI, the Python binding and the HTTP layer all accept Pine
+/// source from users). Real Pine scripts nest a handful of levels deep, so a
+/// budget this wide only rejects input that could never have parsed.
+const MAX_NESTING_DEPTH: usize = 128;
+
+/// Maximum size of a Pine source, in bytes (1 MiB).
+///
+/// The nesting budget bounds depth but not breadth: a flat script of a million
+/// `1+1+` terms still builds a deeply nested `addition` chain during the
+/// recursive walk. Bounding the input keeps the parse bounded too, and no
+/// deliberate formula is a megabyte of text.
+const MAX_SOURCE_BYTES: usize = 1 << 20;
+
+/// Reject a Pine source whose size or bracket nesting exceeds the parser budget.
+///
+/// Deliberately iterative and lexical: it must not recurse itself, or it would
+/// carry the very failure it exists to prevent. String literals and `//`
+/// comments are skipped, so a literal such as `"((((("` is not counted, and
+/// unbalanced closing brackets cannot underflow the counter.
+fn check_source_budget(source: &str) -> Result<(), PineError> {
+    if source.len() > MAX_SOURCE_BYTES {
+        return Err(PineError {
+            message: format!(
+                "Pine source is {} bytes, which exceeds the {MAX_SOURCE_BYTES}-byte limit",
+                source.len()
+            ),
+            line: 1,
+            column: 1,
+        });
+    }
+
+    let mut depth: usize = 0;
+    let mut line: usize = 1;
+    let mut column: usize = 1;
+    let mut in_string = false;
+    let mut chars = source.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        let (here_line, here_column) = (line, column);
+        if ch == '\n' {
+            line += 1;
+            column = 1;
+            continue;
+        }
+        column += 1;
+
+        if in_string {
+            match ch {
+                '\\' => {
+                    if chars.next().is_some() {
+                        column += 1;
+                    }
+                }
+                '"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+
+        match ch {
+            '"' => in_string = true,
+            '/' if chars.peek() == Some(&'/') => {
+                chars.next();
+                column += 1;
+                while let Some(&next) = chars.peek() {
+                    if next == '\n' {
+                        break;
+                    }
+                    chars.next();
+                    column += 1;
+                }
+            }
+            '(' | '[' | '{' => {
+                depth += 1;
+                if depth > MAX_NESTING_DEPTH {
+                    return Err(PineError {
+                        message: format!(
+                            "Pine source nests brackets {depth} levels deep, which exceeds the \
+                             {MAX_NESTING_DEPTH}-level limit"
+                        ),
+                        line: here_line,
+                        column: here_column,
+                    });
+                }
+            }
+            ')' | ']' | '}' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 /// Parse Pine Script v5 source into AST.
 pub fn parse_pine(source: &str) -> Result<PineAst, PineError> {
+    check_source_budget(source)?;
     let normalized_source = normalize_indented_blocks(source);
     let program_pairs = PineGrammar::parse(Rule::program, &normalized_source).map_err(|e| {
         let (line, col) = line_col_from_pest_error(source, &e);
@@ -1194,5 +1294,73 @@ mod tests {
             Some(PineAstNode::PlotCall { .. })
         ));
         assert_eq!(ast.items.len(), 4);
+    }
+
+    // ---- parse budget: depth and size are bounded before any recursion -----
+
+    #[test]
+    fn ordinary_nesting_is_well_inside_the_budget() {
+        let src = "//@version=5\nindicator(\"T\")\nx = ((((close + 1))))\nplot(x)\n";
+        assert!(
+            parse_pine(src).is_ok(),
+            "four levels of parentheses must not trip the budget"
+        );
+    }
+
+    #[test]
+    fn deeply_nested_source_is_rejected_with_an_error_instead_of_a_stack_overflow() {
+        // 5000 levels is far past any real script and far past what the
+        // recursive descent parser can walk without exhausting the stack.
+        let depth = 5_000;
+        let src = format!(
+            "//@version=5\nx = {}1{}\n",
+            "(".repeat(depth),
+            ")".repeat(depth)
+        );
+        let error = parse_pine(&src).expect_err("5000 levels of nesting must be rejected");
+        assert!(
+            error.message.contains("nests brackets"),
+            "expected a nesting-budget error, got: {}",
+            error.message
+        );
+        assert!(
+            error.message.contains(&MAX_NESTING_DEPTH.to_string()),
+            "the error should name the limit: {}",
+            error.message
+        );
+    }
+
+    #[test]
+    fn nesting_inside_a_string_literal_or_comment_is_not_counted() {
+        let literal = "//@version=5\nindicator(\"(((((((((((\")\nplot(close)\n";
+        assert!(
+            parse_pine(literal).is_ok(),
+            "brackets inside a string literal are not nesting"
+        );
+
+        let comment = format!("//@version=5\n// {}\nplot(close)\n", "(".repeat(1_000));
+        assert!(
+            parse_pine(&comment).is_ok(),
+            "brackets inside a line comment are not nesting"
+        );
+    }
+
+    #[test]
+    fn unbalanced_closing_brackets_do_not_underflow_the_counter() {
+        let src = "//@version=5\nx = 1))))))))\n";
+        // The source is invalid Pine, but it must fail as a *parse* error rather
+        // than panicking on an underflowed depth counter.
+        assert!(parse_pine(src).is_err());
+    }
+
+    #[test]
+    fn oversized_source_is_rejected_before_parsing() {
+        let filler = "a = 1\n".repeat(MAX_SOURCE_BYTES / 6 + 1);
+        let error = parse_pine(&filler).expect_err("a source over the limit must be rejected");
+        assert!(
+            error.message.contains("exceeds the"),
+            "expected a size-budget error, got: {}",
+            error.message
+        );
     }
 }

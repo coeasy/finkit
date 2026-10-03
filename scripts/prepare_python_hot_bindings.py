@@ -1,10 +1,28 @@
 #!/usr/bin/env python3
 """Prepare the canonical NumPy-direct Python binding surface for wheel builds.
 
-This is a permanent build step, not a migration helper. It keeps the canonical
-indicator registry unchanged, builds the transient Python SSOT overlay, activates
-the unified numeric native hot paths, regenerates the PyO3 surface, and rewrites
-numeric PyO3 functions to return NumPy arrays directly instead of Python lists.
+This is a permanent build step, not a migration helper. V4 plan Batch 2 changed
+what it is allowed to do. It used to reach the shipping shape by rewriting
+tracked hand-written source in place — `native_fast_path.rs`, `lib.rs`,
+`momentum.rs`, `volume.rs`, `formula_plan.rs`, the Python facade and even
+`sync_bindings.py`. The consequence was that the shipped source existed only
+after a mutation: the four wheel platforms failed on a `u16` vs `"var"` mismatch
+while `cargo check --workspace` stayed green.
+
+The steps are now:
+
+1. **Verify** the whole binding contract against ``scripts/binding_spec.py``
+   before anything is written, so drift costs seconds instead of four platform
+   builds.
+2. **Generate** the transient registry overlay (``target/``, untracked) that
+   teaches the Python generator about the FFI bodies.
+3. **Regenerate** the registry-owned ``generated.rs`` from that overlay.
+4. **Check** the NumPy-direct return contract on both generated surfaces.
+5. **Prove** that no hand-written tracked source changed content during the run.
+
+Step 5 is the load-bearing one: it turns "the build no longer rewrites tracked
+source" from a promise into a check that fails loudly if a future contributor
+reintroduces a patcher.
 """
 
 from __future__ import annotations
@@ -14,12 +32,14 @@ import subprocess
 import sys
 from pathlib import Path
 
-from optimize_python_bindings import optimize_file
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import binding_spec  # noqa: E402  (path setup must precede the import)
+from optimize_python_bindings import optimize_file  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATED = ROOT / "ffi" / "python-binding" / "src" / "generated.rs"
 LIB = ROOT / "ffi" / "python-binding" / "src" / "lib.rs"
-INIT = ROOT / "ffi" / "python-binding" / "finkit" / "__init__.py"
 
 
 def run(*args: str) -> None:
@@ -32,226 +52,30 @@ def run(*args: str) -> None:
     subprocess.run([sys.executable, *args], cwd=ROOT, env=env, check=True)
 
 
-def replace_once_or_verify(text: str, old: str, new: str, label: str) -> str:
-    count = text.count(old)
-    if count == 1:
-        return text.replace(old, new, 1)
-    if count == 0 and new in text:
-        return text
-    raise RuntimeError(f"{label}: expected exactly one source anchor, found {count}")
-
-
-def patch_hot_output_allocations() -> None:
-    """Allocate final NumPy outputs uninitialised and write them exactly once.
-
-    The native `_fast_*` convenience wrappers allocate `vec![0.0; n]` and then
-    overwrite every element through the canonical `*_into` kernels.  For large
-    arrays that performs a full redundant memory write before useful work.  The
-    public facade already exposes the `*_into` entry points, so allocate an
-    `np.empty_like` destination and let Rust fill the final ndarray directly.
-    """
-
-    text = INIT.read_text(encoding="utf-8")
-
-    replacements = (
-        (
-            '''        if close.dtype == np.float32 and hasattr(_native, "_fast_sma_f32"):
-            return _native._fast_sma_f32(close, timeperiod)
-        return _native._fast_sma(close, timeperiod)
-''',
-            '''        result = np.empty_like(close)
-        if close.dtype == np.float32 and hasattr(_native, "_fast_sma_f32_into"):
-            _native._fast_sma_f32_into(close, result, timeperiod)
-        else:
-            _native._fast_sma_into(close, result, timeperiod)
-        return result
-''',
-            "SMA single-write output",
-        ),
-        (
-            '''        if close.dtype == np.float32 and hasattr(_native, "_fast_ema_f32"):
-            return _native._fast_ema_f32(close, timeperiod)
-        return _native._fast_ema(close, timeperiod)
-''',
-            '''        result = np.empty_like(close)
-        if close.dtype == np.float32 and hasattr(_native, "_fast_ema_f32_into"):
-            _native._fast_ema_f32_into(close, result, timeperiod)
-        else:
-            _native._fast_ema_into(close, result, timeperiod)
-        return result
-''',
-            "EMA single-write output",
-        ),
-        (
-            '''        return _native._fast_wma(close, timeperiod)
-''',
-            '''        result = np.empty_like(close)
-        _native._fast_wma_into(close, result, timeperiod)
-        return result
-''',
-            "WMA single-write output",
-        ),
-    )
-
-    for old, new, label in replacements:
-        text = replace_once_or_verify(text, old, new, label)
-
-    # The public OBV compatibility wrapper intentionally contains a second
-    # direct _fast_obv call inside its fallback path. Restrict the
-    # single-write rewrite to the normalized helper, where both inputs are
-    # already contiguous and the caller-owned output contract is valid.
-    start = text.find("    def _obv_normalized")
-    end = text.find("    _obv_normalized =", start)
-    if start < 0 or end < 0:
-        raise RuntimeError("OBV single-write output: normalized helper not found")
-    obv_helper = text[start:end]
-    obv_helper = replace_once_or_verify(
-        obv_helper,
-        "        return _native._fast_obv(close, volume)\n",
-        "        result = np.empty_like(close)\n"
-        "        _native._fast_obv_into(close, volume, result)\n"
-        "        return result\n",
-        "OBV single-write output",
-    )
-    text = text[:start] + obv_helper + text[end:]
-
-    if "result = np.empty_like(close)" not in text:
-        raise RuntimeError("hot output allocation patch did not activate")
-    INIT.write_text(text, encoding="utf-8")
-
-
-def patch_batch_numpy_contract() -> None:
-    """Keep the batch API borrowed on input and NumPy-native on output."""
-
-    text = LIB.read_text(encoding="utf-8")
-
-    old_inputs = '''    let open_vec: Option<Vec<f64>> = open.as_ref().map(|arr| arr.as_array().to_vec());
-    let high_vec: Option<Vec<f64>> = high.as_ref().map(|arr| arr.as_array().to_vec());
-    let low_vec: Option<Vec<f64>> = low.as_ref().map(|arr| arr.as_array().to_vec());
-    let volume_vec: Option<Vec<f64>> = volume.as_ref().map(|arr| arr.as_array().to_vec());
-    let secondary_vec: Option<Vec<f64>> = secondary.as_ref().map(|arr| arr.as_array().to_vec());
-'''
-    new_inputs = '''    let open_slice = open
-        .as_ref()
-        .map(|arr| arr.as_slice())
-        .transpose()
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    let high_slice = high
-        .as_ref()
-        .map(|arr| arr.as_slice())
-        .transpose()
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    let low_slice = low
-        .as_ref()
-        .map(|arr| arr.as_slice())
-        .transpose()
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    let volume_slice = volume
-        .as_ref()
-        .map(|arr| arr.as_slice())
-        .transpose()
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    let secondary_slice = secondary
-        .as_ref()
-        .map(|arr| arr.as_slice())
-        .transpose()
-        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-'''
-    text = replace_once_or_verify(text, old_inputs, new_inputs, "batch borrowed inputs")
-
-    old_call = '''            open_vec.as_deref(),
-            high_vec.as_deref(),
-            low_vec.as_deref(),
-            close_slice,
-            volume_vec.as_deref(),
-            secondary_vec.as_deref(),
-'''
-    new_call = '''            open_slice,
-            high_slice,
-            low_slice,
-            close_slice,
-            volume_slice,
-            secondary_slice,
-'''
-    text = replace_once_or_verify(text, old_call, new_call, "batch slice dispatch")
-
-    old_outputs = '''        match value {
-            IndicatorResult::Single(arr) => {
-                dict.set_item(key, arr)?;
-            }
-            IndicatorResult::Double(a, b) => {
-                dict.set_item(format!("{}_0", key), a)?;
-                dict.set_item(format!("{}_1", key), b)?;
-            }
-            IndicatorResult::Triple(a, b, c) => {
-                dict.set_item(format!("{}_0", key), a)?;
-                dict.set_item(format!("{}_1", key), b)?;
-                dict.set_item(format!("{}_2", key), c)?;
-            }
-            IndicatorResult::Quad(a, b, c, d) => {
-                dict.set_item(format!("{}_0", key), a)?;
-                dict.set_item(format!("{}_1", key), b)?;
-                dict.set_item(format!("{}_2", key), c)?;
-                dict.set_item(format!("{}_3", key), d)?;
-            }
-'''
-    new_outputs = '''        match value {
-            IndicatorResult::Single(arr) => {
-                dict.set_item(key, PyArray1::from_vec(py, arr))?;
-            }
-            IndicatorResult::Double(a, b) => {
-                dict.set_item(format!("{}_0", key), PyArray1::from_vec(py, a))?;
-                dict.set_item(format!("{}_1", key), PyArray1::from_vec(py, b))?;
-            }
-            IndicatorResult::Triple(a, b, c) => {
-                dict.set_item(format!("{}_0", key), PyArray1::from_vec(py, a))?;
-                dict.set_item(format!("{}_1", key), PyArray1::from_vec(py, b))?;
-                dict.set_item(format!("{}_2", key), PyArray1::from_vec(py, c))?;
-            }
-            IndicatorResult::Quad(a, b, c, d) => {
-                dict.set_item(format!("{}_0", key), PyArray1::from_vec(py, a))?;
-                dict.set_item(format!("{}_1", key), PyArray1::from_vec(py, b))?;
-                dict.set_item(format!("{}_2", key), PyArray1::from_vec(py, c))?;
-                dict.set_item(format!("{}_3", key), PyArray1::from_vec(py, d))?;
-            }
-'''
-    text = replace_once_or_verify(text, old_outputs, new_outputs, "batch ndarray outputs")
-
-    batch_section = text[
-        text.index("fn compute_indicators"):text.index("/// Result type for indicator computation.")
-    ]
-    if ".as_array().to_vec()" in batch_section:
-        raise RuntimeError("batch contract still copies a NumPy input column")
-    if "dict.set_item(key, PyArray1::from_vec(py, arr))?;" not in text:
-        raise RuntimeError("batch contract is missing ndarray-direct outputs")
-
-    LIB.write_text(text, encoding="utf-8")
-
-
 def main() -> int:
-    # CFO and Twiggs Money Flow are public Python APIs backed by core kernels,
-    # but they are intentionally outside the 78-entry C-ABI registry. Keep
-    # their wrappers in lib.rs before regenerating the registry-owned file.
-    run(str(ROOT / "scripts" / "repair_python_new_indicator_bindings.py"))
+    # 1. Fail before writing anything.
+    violations = binding_spec.verify()
+    if violations:
+        for item in violations:
+            print(f"::error title=Python binding spec::{item}")
+        print(
+            f"\n{len(violations)} binding violation(s); refusing to start the build. "
+            "Run `python scripts/verify_python_bindings.py` for the full report."
+        )
+        return 1
 
-    # Build an ephemeral Python-only registry overlay. The helper restores the
-    # canonical docs registry before it exits and teaches sync_bindings to read
-    # the overlay for this build workspace.
+    before = binding_spec.fingerprints()
+
+    # 2. Transient Python-only registry overlay. The helper builds
+    #    `target/python_registry_ssot.json` and restores the canonical registry
+    #    it temporarily touches, so nothing under version control is left
+    #    modified; step 5 verifies that claim.
     run(str(ROOT / "scripts" / "prepare_python_registry_ssot.py"))
 
-    # Activate the Architecture v3 native ABI before generation. This replaces
-    # runtime operation strings with numeric ids, enables the allocation-reduced
-    # extrema family path, and routes TRANGE into caller-owned output. The helper
-    # is idempotent and also upgrades the live SSOT generator to NumPy-direct.
-    run(str(ROOT / "scripts" / "apply_architecture_v3_unified_kernel.py"))
-
-    # The public Python hot facade now allocates the final ndarray with
-    # `np.empty_like` and lets the caller-owned kernels fill it exactly once.
-    # This removes a full zero-fill pass for the common SMA/EMA/WMA/OBV paths.
-    patch_hot_output_allocations()
-
-    # Regenerate after the unified-kernel transformation so the wheel contains
-    # the same canonical binding contract on every platform.
+    # 3. Regenerate the registry-owned binding file. `generated.rs` is a
+    #    generated artefact: regeneration is the only writer, and the NumPy
+    #    transformation is applied by the live SSOT generator itself
+    #    (`optimize_python_source` inside sync_bindings), not by a later pass.
     run(
         str(ROOT / "scripts" / "sync_bindings.py"),
         "--lang",
@@ -259,27 +83,32 @@ def main() -> int:
         "--generate",
     )
 
-    # Formula ROC/MOM are classified once when the compiled formula is created
-    # and then execute the same canonical indicator kernels as the public API.
-    # This removes the generic Formula executor from these common hot paths.
-    run(str(ROOT / "scripts" / "apply_formula_v3_fast_path.py"))
-
-    # Batch input arrays remain borrowed while Rust owns the GIL-free compute
-    # interval; results cross back into Python as ndarrays, never Python lists.
-    patch_batch_numpy_contract()
-
-    generated_count = optimize_file(GENERATED)
-    lib_count = optimize_file(LIB)
-
-    # Idempotence is part of the build contract: a second optimization pass must
-    # find nothing left to rewrite.
+    # 4. Read-only verification of the generated surfaces.
     optimize_file(GENERATED, check=True)
     optimize_file(LIB, check=True)
 
+    # 5. The build must not have edited hand-written tracked source.
+    mutated = binding_spec.mutated_sources(before, binding_spec.fingerprints())
+    if mutated:
+        for path in mutated:
+            print(
+                f"::error title=Python build-state::hand-written source was rewritten "
+                f"by the build: {path}"
+            )
+        print(
+            "\nThe preparation step is read-only for hand-written source. Move the "
+            "transformation into scripts/binding_spec.py, land the canonical state in "
+            "the tree, and let this step verify it instead."
+        )
+        return 1
+
     print(
         "[prepare/python-hot] NumPy-direct binding surface ready: "
-        f"generated={generated_count}, lib={lib_count}, batch=zero-copy, "
-        "formula=canonical, native=v3, output=single-write"
+        f"hot-paths={len(binding_spec.HOT_PATHS)}, "
+        f"contracts={len(binding_spec.RULE_SETS)}, "
+        f"canonical-bodies={len(binding_spec.CANONICAL_FUNCTIONS)}, "
+        "batch=zero-copy, formula=canonical, native=v3, output=single-write, "
+        "handwritten-source=unmodified"
     )
     return 0
 

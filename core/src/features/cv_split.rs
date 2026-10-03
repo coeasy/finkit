@@ -39,6 +39,9 @@ fn combinations(n: usize, k: usize) -> Vec<Vec<usize>> {
     }
     let mut result = Vec::new();
     let mut combo: Vec<usize> = (0..k).collect();
+    // SAFETY-TERMINATION: `combo` is the next lexicographic combination; the
+    // scan returns the accumulated result once the leftmost position is
+    // exhausted, so the loop visits C(n, k) states at most.
     loop {
         result.push(combo.clone());
         let mut i = k;

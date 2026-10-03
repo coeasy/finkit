@@ -1000,15 +1000,14 @@ mod x86_dispatch {
     }
 }
 
-#[cfg(feature = "std")]
+/// Runtime AVX2+FMA detection. The cfg must exactly mirror `x86_dispatch`
+/// above: on non-x86_64 targets no caller exists, so compiling this helper
+/// would turn it into dead code and fail `-D warnings` builds (macOS /
+/// AArch64 warning contract). Keep this boundary in sync with every caller.
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 #[inline]
 pub(crate) fn avx2_fma_available() -> bool {
-    #[cfg(all(feature = "std", target_arch = "x86_64"))]
-    {
-        return x86_dispatch::has_avx2() && x86_dispatch::has_fma();
-    }
-    #[allow(unreachable_code)]
-    false
+    x86_dispatch::has_avx2() && x86_dispatch::has_fma()
 }
 
 pub fn sma_simd_into(data: &[f64], period: usize, out: &mut [f64]) {

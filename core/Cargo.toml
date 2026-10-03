@@ -225,3 +225,7 @@ unchecked-indexing = []
 # Use with: cargo bench --bench memory_profile --features memory-profile
 memory-profile = ["std"]
 # D-3: enable strict missing_docs lint at the crate level.
+
+[[bench]]
+name = "workload_bench"
+harness = false

@@ -91,6 +91,8 @@ fn find_pivots(high: &[f64], low: &[f64], start: usize, end: usize, order: usize
     // Merge alternating sequence by index order
     let mut hi = 0;
     let mut lo = 0;
+    // SAFETY-TERMINATION: every iteration consumes exactly one pivot (hi or lo
+    // strictly increases) and the head breaks once both cursors are exhausted.
     loop {
         if hi >= highs.len() && lo >= lows.len() {
             break;

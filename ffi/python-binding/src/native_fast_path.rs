@@ -583,7 +583,7 @@ fn fast_mom_public(
 #[pyfunction(name = "_fast_unary_period")]
 fn fast_unary_period<'py>(
     py: Python<'py>,
-    operation: &str,
+    operation: u16,
     close: PyReadonlyArray1<'py, f64>,
     timeperiod: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
@@ -594,7 +594,7 @@ fn fast_unary_period<'py>(
     // support writing into a slice, so avoid the intermediate Array1 -> Vec ->
     // NumPy materialisation used by the compatibility path.
     match operation {
-        "midpoint" => {
+        1 => {
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
             let compute = || unsafe {
@@ -608,7 +608,7 @@ fn fast_unary_period<'py>(
             py.detach(compute).map_err(value_error)?;
             return Ok(output);
         }
-        "dema" => {
+        3 => {
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
             py.detach(|| unsafe {
@@ -621,7 +621,7 @@ fn fast_unary_period<'py>(
             .map_err(value_error)?;
             return Ok(output);
         }
-        "tema" => {
+        4 => {
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
             py.detach(|| unsafe {
@@ -634,7 +634,7 @@ fn fast_unary_period<'py>(
             .map_err(value_error)?;
             return Ok(output);
         }
-        "rsi" => {
+        5 => {
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
             py.detach(|| unsafe {
@@ -647,7 +647,7 @@ fn fast_unary_period<'py>(
             .map_err(value_error)?;
             return Ok(output);
         }
-        "roc" => {
+        6 => {
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
             py.detach(|| unsafe {
@@ -660,7 +660,7 @@ fn fast_unary_period<'py>(
             .map_err(value_error)?;
             return Ok(output);
         }
-        "cmo" => {
+        7 => {
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
             py.detach(|| unsafe {
@@ -677,13 +677,13 @@ fn fast_unary_period<'py>(
     }
 
     let output = match operation {
-        "mom" => {
+        2 => {
             validate_period(close.len(), timeperiod)?;
             py.detach(|| mom_vec(close, timeperiod))
         }
         _ => {
             return Err(value_error(format!(
-                "invalid parameter: unsupported fast operation {operation}"
+                "invalid parameter: unsupported fast operation id {operation}"
             )))
         }
     };
@@ -693,13 +693,13 @@ fn fast_unary_period<'py>(
 #[pyfunction(name = "_fast_unary_period_scale")]
 fn fast_unary_period_scale<'py>(
     py: Python<'py>,
-    operation: &str,
+    operation: u16,
     close: PyReadonlyArray1<'py, f64>,
     timeperiod: usize,
     scale: f64,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    if operation == "var" && timeperiod == 20 {
+    if operation == 2 && timeperiod == 20 {
         let output = unsafe { PyArray1::new(py, [close.len()], false) };
         let output_addr = output.data() as usize;
         py.detach(|| unsafe {
@@ -712,7 +712,7 @@ fn fast_unary_period_scale<'py>(
         return Ok(output);
     }
     let output = match operation {
-        "stddev" => {
+        1 => {
             validate_period(close.len(), timeperiod)?;
             let output = unsafe { PyArray1::new(py, [close.len()], false) };
             let output_addr = output.data() as usize;
@@ -728,12 +728,12 @@ fn fast_unary_period_scale<'py>(
             .map_err(value_error)?;
             return Ok(output);
         }
-        "var" => py
+        2 => py
             .detach(|| rolling_stats::variance(close, timeperiod))
             .map_err(value_error)?,
         _ => {
             return Err(value_error(format!(
-                "invalid parameter: unsupported fast operation {operation}"
+                "invalid parameter: unsupported fast operation id {operation}"
             )))
         }
     };
@@ -782,7 +782,7 @@ fn fast_kama<'py>(
 #[pyfunction(name = "_fast_binary_period")]
 fn fast_binary_period<'py>(
     py: Python<'py>,
-    operation: &str,
+    operation: u16,
     input_a: PyReadonlyArray1<'py, f64>,
     input_b: PyReadonlyArray1<'py, f64>,
     timeperiod: usize,
@@ -791,7 +791,7 @@ fn fast_binary_period<'py>(
     let input_b = input_b.as_slice().map_err(value_error)?;
     validate_same_len(input_a.len(), input_b.len())?;
     let output = match operation {
-        "midprice" => {
+        1 => {
             let len = input_a.len();
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
@@ -821,12 +821,12 @@ fn fast_binary_period<'py>(
             }
             return Ok(output);
         }
-        "correl" => py
+        2 => py
             .detach(|| rolling_stats::correlation(input_a, input_b, timeperiod))
             .map_err(value_error)?,
         _ => {
             return Err(value_error(format!(
-                "invalid parameter: unsupported fast operation {operation}"
+                "invalid parameter: unsupported fast operation id {operation}"
             )))
         }
     };
@@ -836,7 +836,7 @@ fn fast_binary_period<'py>(
 #[pyfunction(name = "_fast_hlc_period")]
 fn fast_hlc_period<'py>(
     py: Python<'py>,
-    operation: &str,
+    operation: u16,
     high: PyReadonlyArray1<'py, f64>,
     low: PyReadonlyArray1<'py, f64>,
     close: PyReadonlyArray1<'py, f64>,
@@ -848,7 +848,7 @@ fn fast_hlc_period<'py>(
     validate_same_len(high.len(), low.len())?;
     validate_same_len(high.len(), close.len())?;
     let output = match operation {
-        "willr" => {
+        1 => {
             let output = unsafe { PyArray1::new(py, [high.len()], false) };
             let output_addr = output.data() as usize;
             let compute = || unsafe {
@@ -862,7 +862,7 @@ fn fast_hlc_period<'py>(
             py.detach(compute).map_err(value_error)?;
             return Ok(output);
         }
-        "adx" => py
+        2 => py
             .detach(|| {
                 let len = high.len();
                 let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
@@ -877,7 +877,7 @@ fn fast_hlc_period<'py>(
                 Ok::<Vec<f64>, crate::PyErr>(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
             })
             .map_err(value_error)?,
-        "adxr" => py
+        8 => py
             .detach(|| {
                 let len = high.len();
                 let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
@@ -892,7 +892,7 @@ fn fast_hlc_period<'py>(
                 Ok::<Vec<f64>, crate::PyErr>(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
             })
             .map_err(value_error)?,
-        "cci" => {
+        3 => {
             let len = high.len();
             let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
             unsafe { raw_output.set_len(len) };
@@ -906,7 +906,7 @@ fn fast_hlc_period<'py>(
             std::mem::forget(raw_output);
             unsafe { Vec::from_raw_parts(ptr, len, capacity) }
         }
-        "plus_di" => py
+        4 => py
             .detach(|| {
                 let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(high.len());
                 unsafe { raw_output.set_len(high.len()) };
@@ -926,7 +926,7 @@ fn fast_hlc_period<'py>(
                 })
             })
             .map_err(value_error)?,
-        "minus_di" => py
+        5 => py
             .detach(|| {
                 let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(high.len());
                 unsafe { raw_output.set_len(high.len()) };
@@ -946,17 +946,17 @@ fn fast_hlc_period<'py>(
                 })
             })
             .map_err(value_error)?,
-        "atr" => py
+        6 => py
             .detach(|| indicators::atr(high, low, close, timeperiod))
             .map_err(value_error)?
             .into_raw_vec(),
-        "natr" => py
+        7 => py
             .detach(|| indicators::natr(high, low, close, timeperiod))
             .map_err(value_error)?
             .into_raw_vec(),
         _ => {
             return Err(value_error(format!(
-                "invalid parameter: unsupported fast operation {operation}"
+                "invalid parameter: unsupported fast operation id {operation}"
             )))
         }
     };

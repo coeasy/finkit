@@ -11,7 +11,7 @@ use super::functions::get_builtin_functions;
 use crate::buffer_arena::BufferSlot;
 use crate::compute::{
     ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError,
-    LookbackRequirement,
+    DependencyShape, LookbackRequirement,
 };
 use crate::execution_plan::{
     HotExecutionPlan, HotPlanError, InputSlot, ParameterArena, ParameterRange, ParameterValue,
@@ -764,6 +764,7 @@ fn lower_compound(
             stateful: false,
             lookback: LookbackRequirement::None,
             effect: ComputeEffect::Pure,
+            dependency: DependencyShape::FixedLookback(0),
         },
     ));
     Ok(synthetic)

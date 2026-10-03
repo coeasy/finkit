@@ -185,21 +185,52 @@ static const NumericOutput *find_output(const NumericOutput *outputs, size_t cou
 }
 
 static char *make_request(const FinkitNumericContractVector *vector) {
-    const size_t required = strlen(vector->operation) +
-        strlen(finkit_test_contract_semantic_profile) +
+    const size_t required = strlen(vector->operation_json) +
+        strlen(finkit_test_contract_semantic_profile_json) +
         strlen(vector->input_order_json) + strlen(finkit_test_contract_inputs_json) +
         strlen(vector->params_json) + 96;
     char *request = (char *)malloc(required);
     if (request == NULL) {
         return NULL;
     }
+    /* operation_json / semantic_profile_json are ready-to-concatenate JSON
+     * fragments generated with quotes included; hosts must not re-decide JSON
+     * quoting rules. */
     snprintf(request, required,
              "{\"operation\":%s,\"semantic_profile\":%s,"
              "\"input_order\":%s,\"inputs\":%s,\"params\":%s}",
-             vector->operation, finkit_test_contract_semantic_profile,
+             vector->operation_json, finkit_test_contract_semantic_profile_json,
              vector->input_order_json, finkit_test_contract_inputs_json,
              vector->params_json);
     return request;
+}
+
+/* Failure diagnostics must carry operation, request, response (which embeds
+ * the error code), not just the operation name. */
+static void log_contract_failure(const FinkitNumericContractVector *vector,
+                                 const char *request, const char *response,
+                                 const char *message) {
+    char request_head[257];
+    char response_head[257];
+    size_t request_len = request != NULL ? strlen(request) : 0;
+    size_t response_len = response != NULL ? strlen(response) : 0;
+    if (request_len > 256) {
+        request_len = 256;
+    }
+    if (response_len > 256) {
+        response_len = 256;
+    }
+    if (request != NULL) {
+        memcpy(request_head, request, request_len);
+    }
+    request_head[request_len] = '\0';
+    if (response != NULL) {
+        memcpy(response_head, response, response_len);
+    }
+    response_head[response_len] = '\0';
+    fprintf(stderr,
+            "::error title=C numeric contract::%s: %s | request: %s | response: %s\n",
+            vector->operation_json, message, request_head, response_head);
 }
 
 static int check_vector(const FinkitNumericContractVector *vector) {
@@ -215,27 +246,25 @@ static int check_vector(const FinkitNumericContractVector *vector) {
     int ok = 0;
 
     if (request == NULL) {
-        fprintf(stderr, "::error title=C numeric contract::%s: failed to allocate request\n",
-                vector->operation);
+        log_contract_failure(vector, NULL, NULL, "failed to allocate request");
         return 0;
     }
     response = ta_operation_execute_json(request);
-    free(request);
     if (response == NULL) {
-        fprintf(stderr, "::error title=C numeric contract::%s: null response\n",
-                vector->operation);
+        log_contract_failure(vector, request, NULL, "null response");
+        free(request);
         return 0;
     }
     if (strstr(response, "\"error\"") != NULL) {
-        fprintf(stderr, "::error title=C numeric contract::%s: operation returned an error\n",
-                vector->operation);
+        log_contract_failure(vector, request, response, "operation returned an error");
+        free(request);
         finkit_free_string(response);
         return 0;
     }
     values_marker = strstr(response, "\"values\":");
     if (values_marker == NULL) {
-        fprintf(stderr, "::error title=C numeric contract::%s: missing values envelope\n",
-                vector->operation);
+        log_contract_failure(vector, request, response, "missing values envelope");
+        free(request);
         finkit_free_string(response);
         return 0;
     }
@@ -244,8 +273,9 @@ static int check_vector(const FinkitNumericContractVector *vector) {
         !parse_object_arrays(values_json, &actual, &actual_count) ||
         !parse_object_arrays(vector->expected_json, &expected, &expected_count) ||
         actual_count != expected_count) {
-        fprintf(stderr, "::error title=C numeric contract::%s: invalid output JSON or output count mismatch\n",
-                vector->operation);
+        log_contract_failure(vector, request, response,
+                             "invalid output JSON or output count mismatch");
+        free(request);
         free_outputs(actual, actual_count);
         free_outputs(expected, expected_count);
         finkit_free_string(response);
@@ -259,8 +289,9 @@ static int check_vector(const FinkitNumericContractVector *vector) {
         size_t point;
         if (got == NULL || got->length != expected[output_index].length) {
             fprintf(stderr,
-                    "::error title=C numeric contract::%s: missing or length-mismatched output %s\n",
-                    vector->operation, expected[output_index].name);
+                    "::error title=C numeric contract::%s: missing or length-mismatched output %s | request: %.256s | response: %.256s\n",
+                    vector->operation_json, expected[output_index].name, request,
+                    response);
             ok = 0;
             break;
         }
@@ -271,15 +302,16 @@ static int check_vector(const FinkitNumericContractVector *vector) {
             if (want.is_null != value.is_null ||
                 (!want.is_null && fabs(value.value - want.value) > limit)) {
                 fprintf(stderr,
-                        "::error title=C numeric contract::%s/%s[%zu]: expected %s%.17g got %s%.17g\n",
-                        vector->operation, expected[output_index].name, point,
+                        "::error title=C numeric contract::%s/%s[%zu]: expected %s%.17g got %s%.17g | request: %.256s | response: %.256s\n",
+                        vector->operation_json, expected[output_index].name, point,
                         want.is_null ? "null" : "", want.value,
-                        value.is_null ? "null" : "", value.value);
+                        value.is_null ? "null" : "", value.value, request, response);
                 ok = 0;
                 break;
             }
         }
     }
+    free(request);
     free_outputs(actual, actual_count);
     free_outputs(expected, expected_count);
     finkit_free_string(response);
@@ -295,7 +327,7 @@ int main(void) {
     for (index = 0; index < finkit_test_contract_vector_count; ++index) {
         if (!check_vector(&finkit_test_contract_vectors[index])) {
             fprintf(stderr, "TA-Lib C numeric contract failed at vector %zu (%s)\n",
-                    index, finkit_test_contract_vectors[index].operation);
+                    index, finkit_test_contract_vectors[index].operation_json);
             return 1;
         }
     }

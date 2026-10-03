@@ -200,6 +200,7 @@ the archive and why.
 
 | Document | Purpose |
 | --- | --- |
+| [FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) | **本轮架构与性能收敛计划** —— 执行引擎唯一化、生成系统收敛、Runtime 收敛、性能优先级、§16–§21 落地状态表 |
 | [refactor-plan-2026-09-21.md](refactor-plan-2026-09-21.md) | **唯一执行基线** —— 架构去重主轴、Phase 状态与待决事项 |
 | [runtime-carrier-adoption-plan-2026-09-20.md](runtime-carrier-adoption-plan-2026-09-20.md) | R2/R3/R4 声明式载体落地规格（进行中） |
 | [archive/README.md](archive/README.md) | 历史计划归档索引（audit trail，**非**当前指导） |
