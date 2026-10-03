@@ -161,6 +161,26 @@ publishable state.
 
 ### Fixed
 
+- **45 float-ordering comparisons panicked on a NaN input.** Each
+  `partial_cmp(..).unwrap()` aborts the whole evaluation as soon as a window
+  holds a `NaN`, because `f64::partial_cmp` returns `None` for `NaN` and the
+  `unwrap` then panics. That is the opposite of this codebase's
+  `null_policy: "nan"` convention, where a gap value should propagate as `NaN`
+  rather than crash. 34 of the sites were in `patterns/chart.rs` (every chart
+  detector: `double_top` / `double_bottom`, `head_and_shoulders_top` /
+  `_bottom`, `triple_top` / `_bottom`, the ascending/descending/symmetrical
+  triangles, the rising/falling wedges, `pennant`, `flag` and `rectangle`), and
+  the rest in `indicators/talib_ext.rs` (`percentile`),
+  `indicators/volume_profile.rs`, `indicators/classic_patterns.rs`,
+  `patterns/astock_kline.rs`, `patterns/classic_ext.rs` and
+  `patterns/streaming.rs`. All now use `f64::total_cmp` — a total order that
+  never returns `None`, and already the house style in `math/quantile.rs`,
+  `math/rank.rs`, `math/regression.rs` and `factors.rs` — so a `NaN` propagates
+  instead of aborting the process. Guarded by a new
+  `scripts/check_nan_unsafe_ordering.py` (`make check-nan-safety`) that fails on
+  any `partial_cmp(..).unwrap()` in the scanned Rust sources, and by regression
+  tests that feed `NaN` to `percentile` and to the chart detectors.
+
 - **Eleven functions were unusable from the compiled-plan path, and 28 names
   were affected.** `BARSLAST`, `BREAKDOWN`, `BREAKOUT`, `COUNT`, `DEAD_CROSS`,
   `GAP_SIGNAL`, `GOLDEN_CROSS`, `MA_ALIGN`, `RELATIVE_STRENGTH`,

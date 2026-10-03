@@ -815,7 +815,7 @@ mod tests {
             .profile
             .iter()
             .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+            .max_by(|(_, a), (_, b)| a.total_cmp(b))
             .unwrap()
             .0;
         assert_relative_eq!(result.poc, result.bin_prices[poc_idx], epsilon = 1e-10);

@@ -524,11 +524,11 @@ pub fn plum_twice(
         // j1 is in [j2 - neckline_lookback, j2 - 3]
         let search_recent = i.saturating_sub(2 * neckline_lookback).max(3);
         let j2 = (search_recent..i.saturating_sub(2))
-            .min_by(|&a, &b| low[a].partial_cmp(&low[b]).unwrap())
+            .min_by(|&a, &b| low[a].total_cmp(&low[b]))
             .unwrap_or(0);
         let search_old_start = j2.saturating_sub(neckline_lookback);
         let j1 = (search_old_start..j2.saturating_sub(2))
-            .min_by(|&a, &b| low[a].partial_cmp(&low[b]).unwrap())
+            .min_by(|&a, &b| low[a].total_cmp(&low[b]))
             .unwrap_or(0);
 
         let l1 = low[j1];

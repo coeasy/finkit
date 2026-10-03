@@ -144,7 +144,7 @@ pub fn double_top(high: &[f64], lookback: usize, tolerance_pct: f64) -> Result<C
         let max_idx = window
             .iter()
             .enumerate()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .max_by(|a, b| a.1.total_cmp(b.1))
             .map(|(idx, _)| idx)
             .unwrap_or(0);
 
@@ -155,12 +155,12 @@ pub fn double_top(high: &[f64], lookback: usize, tolerance_pct: f64) -> Result<C
         let first_peak = window[max_idx];
         let left_max = window[..max_idx]
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
         let right_max = window[max_idx + 1..]
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
 
@@ -168,7 +168,7 @@ pub fn double_top(high: &[f64], lookback: usize, tolerance_pct: f64) -> Result<C
         if (left_max - first_peak).abs() < tolerance || (right_max - first_peak).abs() < tolerance {
             let valley = window[max_idx..]
                 .iter()
-                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .min_by(|a, b| a.total_cmp(b))
                 .copied()
                 .unwrap_or(first_peak);
 
@@ -204,7 +204,7 @@ pub fn double_bottom(
         let min_idx = window
             .iter()
             .enumerate()
-            .min_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .min_by(|a, b| a.1.total_cmp(b.1))
             .map(|(idx, _)| idx)
             .unwrap_or(0);
 
@@ -215,12 +215,12 @@ pub fn double_bottom(
         let first_trough = window[min_idx];
         let left_min = window[..min_idx]
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(f64::MAX);
         let right_min = window[min_idx + 1..]
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(f64::MAX);
 
@@ -230,7 +230,7 @@ pub fn double_bottom(
         {
             let peak = window[min_idx..]
                 .iter()
-                .max_by(|a, b| a.partial_cmp(b).unwrap())
+                .max_by(|a, b| a.total_cmp(b))
                 .copied()
                 .unwrap_or(first_trough);
 
@@ -342,7 +342,7 @@ pub fn ascending_triangle(
 
         let resistance = high_window
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
 
@@ -353,12 +353,12 @@ pub fn ascending_triangle(
 
         let first_half_low = low_window[..lookback / 2]
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(f64::MAX);
         let second_half_low = low_window[lookback / 2..]
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(f64::MAX);
 
@@ -395,7 +395,7 @@ pub fn descending_triangle(
 
         let support = low_window
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
 
@@ -406,12 +406,12 @@ pub fn descending_triangle(
 
         let first_half_high = high_window[..lookback / 2]
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
         let second_half_high = high_window[lookback / 2..]
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
 
@@ -447,33 +447,33 @@ pub fn symmetrical_triangle(
 
         let first_high = high_window[..lookback / 3]
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
         let second_high = high_window[lookback / 3..2 * lookback / 3]
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
         let third_high = high_window[2 * lookback / 3..]
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
 
         let first_low = low_window[..lookback / 3]
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(f64::MAX);
         let second_low = low_window[lookback / 3..2 * lookback / 3]
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(f64::MAX);
         let third_low = low_window[2 * lookback / 3..]
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(f64::MAX);
 
@@ -512,23 +512,23 @@ pub fn rising_wedge(high: &[f64], low: &[f64], lookback: usize) -> Result<ChartP
 
         let first_high = high_window[..lookback / 2]
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
         let second_high = high_window[lookback / 2..]
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
 
         let first_low = low_window[..lookback / 2]
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(f64::MAX);
         let second_low = low_window[lookback / 2..]
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(f64::MAX);
 
@@ -564,23 +564,23 @@ pub fn falling_wedge(high: &[f64], low: &[f64], lookback: usize) -> Result<Chart
 
         let first_high = high_window[..lookback / 2]
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
         let second_high = high_window[lookback / 2..]
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
 
         let first_low = low_window[..lookback / 2]
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(f64::MAX);
         let second_low = low_window[lookback / 2..]
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(f64::MAX);
 
@@ -636,12 +636,12 @@ pub fn pennant(
 
         let pennant_range = pennant_highs
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0)
             - pennant_lows
                 .iter()
-                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .min_by(|a, b| a.total_cmp(b))
                 .copied()
                 .unwrap_or(0.0);
 
@@ -693,12 +693,12 @@ pub fn flag(
 
         let flag_range = flag_highs
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0)
             - flag_lows
                 .iter()
-                .min_by(|a, b| a.partial_cmp(b).unwrap())
+                .min_by(|a, b| a.total_cmp(b))
                 .copied()
                 .unwrap_or(0.0);
 
@@ -743,12 +743,12 @@ pub fn rectangle(
 
         let resistance = high_window
             .iter()
-            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .max_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
         let support = low_window
             .iter()
-            .min_by(|a, b| a.partial_cmp(b).unwrap())
+            .min_by(|a, b| a.total_cmp(b))
             .copied()
             .unwrap_or(0.0);
 
@@ -796,6 +796,25 @@ mod tests {
         high[15] = 11.9;
         let result = double_top(&high, 18, 0.05).unwrap();
         assert_eq!(result.len(), 20);
+    }
+
+    #[test]
+    fn chart_detectors_do_not_panic_on_nan_input() {
+        // Regression: window min/max used `partial_cmp(...).unwrap()`, which
+        // panics when a window contains NaN (`partial_cmp` returns None).
+        // Switched to `total_cmp`, a total order that never returns None.
+        let mut high = vec![10.0; 30];
+        high[5] = 12.0;
+        high[15] = 11.9;
+        high[20] = f64::NAN;
+        let mut low = vec![10.0; 30];
+        low[7] = f64::NAN;
+
+        assert!(double_top(&high, 18, 0.05).is_ok());
+        assert!(double_bottom(&low, 18, 0.05).is_ok());
+        assert!(head_and_shoulders_top(&high, 3, 1.1).is_ok());
+        assert!(triple_top(&high, 25, 0.05).is_ok());
+        assert!(symmetrical_triangle(&high, &low, 25).is_ok());
     }
 
     #[test]

@@ -35,6 +35,17 @@ assert_eq!(borrowed.as_ref(), &close);
 with `NaN`; `WarmupPolicy::Trim` returns only stable rows. `NanPolicy::Error`
 rejects non-finite numeric fields before execution.
 
+## NaN is a value, never a panic
+
+A missing value arrives as `NaN` and must propagate as `NaN`; it must never
+abort an evaluation. Indicator and pattern kernels therefore order floats with
+`f64::total_cmp` — a total order that never returns `None` — or with
+`PartialOrd::partial_cmp(...).unwrap_or(Ordering::Equal)`. They must **not** use
+`partial_cmp(...).unwrap()`: `f64::partial_cmp` returns `None` whenever either
+operand is `NaN`, so the `unwrap` panics on a gap value. This is enforced by
+`scripts/check_nan_unsafe_ordering.py` (`make check-nan-safety`), which scans
+`core/`, `factor-analysis/`, `visualization/`, `cli/`, `ffi/` and `wasm/`.
+
 ## Unified Compute Plan
 
 `finkit::compute` separates semantic planning from numerical execution. A

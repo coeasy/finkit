@@ -54,7 +54,7 @@ LANGS := $(filter-out packages,$(LANGS))
 .PHONY: build-native-archive verify-native-archive
 .PHONY: installer installer-all check-installer
 .PHONY: $(INSTALLER_TARGETS:%=installer-%)
-.PHONY: check-rustdoc check-orphans check-script-refs check-dead-code check-ios-header
+.PHONY: check-rustdoc check-orphans check-script-refs check-dead-code check-nan-safety check-ios-header
 .PHONY: check-ios-header check-talib-ffi refresh-release-manifests check-release-manifests
 
 # ---- default ----------------------------------------------------------------
@@ -186,6 +186,15 @@ check-script-refs:
 check-dead-code:
 	python3 $(ROOT)/scripts/check_dead_code_allows.py
 
+# ---- repository hygiene: float ordering must be NaN-safe --------------------
+# `f64::partial_cmp` returns `None` on NaN, so `partial_cmp(..).unwrap()` panics
+# on a gap value instead of propagating NaN -- the opposite of this codebase's
+# `null_policy: "nan"` convention. 45 such sites existed in the pattern and
+# percentile paths (34 in `patterns/chart.rs` alone). `total_cmp` is the
+# NaN-safe house style; this gate keeps the outliers from returning.
+check-nan-safety:
+	python3 $(ROOT)/scripts/check_nan_unsafe_ordering.py
+
 # ---- repository hygiene: the iOS header matches the iOS exports -------------
 # `gen_c_header.py --check` guards the C binding's header. The iOS binding has
 # a header of its own and no gate, so it drifted: three shipped entry points
@@ -295,6 +304,7 @@ help:
 	@echo "  make check-orphans    Fail on orphan scripts, unreachable workflows or unreachable docs"
 	@echo "  make check-script-refs  Fail if a caller references a script that is missing"
 	@echo "  make check-dead-code    Fail on an unexplained `#[allow(dead_code)]`"
+	@echo "  make check-nan-safety   Fail on `partial_cmp(..).unwrap()` (panics on NaN)"
 	@echo "  make check-ios-header   Fail if ffi/ios-binding/include/finkit.h drifts from the iOS exports"
 	@echo "  make refresh-release-manifests  Recompute dist/**/manifest.json digests"
 	@echo "  make check-release-manifests    Fail if those digests are stale"

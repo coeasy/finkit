@@ -428,7 +428,7 @@ pub fn percentile(input: &[f64], p: usize, pct: f64) -> Result<Array1<f64>> {
     let rank = ((pct * p as f64 / 100.0).ceil() as usize).clamp(1, p);
     for i in p - 1..input.len() {
         let mut w = input[i + 1 - p..=i].to_vec();
-        w.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        w.sort_by(|a, b| a.total_cmp(b));
         out[i] = w[rank - 1];
     }
     Ok(out)
@@ -599,4 +599,18 @@ pub fn wad(high: &[f64], low: &[f64], close: &[f64]) -> Result<Array1<f64>> {
         out[i] = sum;
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod nan_safety_tests {
+    use super::*;
+
+    #[test]
+    fn percentile_does_not_panic_on_nan_input() {
+        // Regression: the window sort used `partial_cmp(...).unwrap()`, which
+        // panics when the input contains NaN. It now uses `total_cmp`.
+        let input = [1.0, 2.0, f64::NAN, 4.0, 5.0, 6.0, 7.0];
+        let out = percentile(&input, 3, 50.0).expect("percentile must not panic on NaN");
+        assert_eq!(out.len(), input.len());
+    }
 }

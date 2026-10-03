@@ -189,7 +189,7 @@ pub fn rounding_bottom(low: &[f64], curvature_threshold: f64) -> Result<PatternR
         let cup_start = i.saturating_sub(15);
         let cup_end = i.saturating_sub(5);
         let min_idx = (cup_start..cup_end)
-            .min_by(|&a, &b| low[a].partial_cmp(&low[b]).unwrap())
+            .min_by(|&a, &b| low[a].total_cmp(&low[b]))
             .unwrap();
         let min_val = low[min_idx];
         let left_peak = low[cup_start..min_idx]
@@ -231,7 +231,7 @@ pub fn rounding_top(high: &[f64], curvature_threshold: f64) -> Result<PatternRes
         let top_start = i.saturating_sub(15);
         let top_end = i.saturating_sub(5);
         let max_idx = (top_start..top_end)
-            .max_by(|&a, &b| high[a].partial_cmp(&high[b]).unwrap())
+            .max_by(|&a, &b| high[a].total_cmp(&high[b]))
             .unwrap();
         let max_val = high[max_idx];
         let left_valley = high[top_start..max_idx]

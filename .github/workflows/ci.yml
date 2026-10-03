@@ -154,6 +154,14 @@ jobs:
       # cheaply, and too easy to wave through to hit a date.
       - name: Check the MSI payload matches the native archive
         run: python scripts/check_installer_contract.py
+      # `f64::partial_cmp` returns `None` on NaN, so `partial_cmp(..).unwrap()`
+      # panics on a gap value instead of propagating NaN -- the opposite of this
+      # codebase's `null_policy: "nan"` convention. 45 such sites had
+      # accumulated in the chart-pattern and percentile paths. `total_cmp` is
+      # the NaN-safe house style; this gate keeps the outliers from returning.
+      # Also `make check-nan-safety`.
+      - name: Check float ordering is NaN-safe
+        run: python scripts/check_nan_unsafe_ordering.py
 
   fmt:
     name: Format

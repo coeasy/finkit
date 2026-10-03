@@ -523,7 +523,7 @@ pub fn three_line_break(close: &[f64], lines: usize) -> Result<ThreeLineBreakRes
             } else if last_lows.len() >= lines
                 && c < *last_lows
                     .iter()
-                    .min_by(|a, b| a.partial_cmp(b).unwrap())
+                    .min_by(|a, b| a.total_cmp(b))
                     .unwrap()
             {
                 // Reverse down
@@ -553,7 +553,7 @@ pub fn three_line_break(close: &[f64], lines: usize) -> Result<ThreeLineBreakRes
             } else if last_highs.len() >= lines
                 && c > *last_highs
                     .iter()
-                    .max_by(|a, b| a.partial_cmp(b).unwrap())
+                    .max_by(|a, b| a.total_cmp(b))
                     .unwrap()
             {
                 // Reverse up
