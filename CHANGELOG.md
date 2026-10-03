@@ -7,6 +7,55 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Fixed - 2026-10-04
+
+A fifth audit pass that re-asked the previous rounds' own questions against what
+they had already shipped, plus two dimensions those rounds never opened: the
+wasm frontend's CI coverage and the consumer-facing API reference.
+
+- **Frontend build-coverage gap in `multilang-release.yml` and
+  `multilang-cross-platform.yml`.** Both workflows narrow `pull_request.paths`
+  to a hand-maintained list but omitted `visualization/**` and
+  `factor-analysis/**` — directories that six crates depend on, including the
+  `wasm` browser frontend (which depends on `visualization`). The `wasm32`
+  build only runs in `multilang-release.yml`, so a breaking change to
+  `visualization` or `factor-analysis` passed CI on the PR and only failed at
+  release time. `cli/**` was likewise missing from `multilang-release.yml` and
+  `python-wheels.yml`. Added the missing directories to all three path filters.
+- **New gate `scripts/check_workflow_path_coverage.py`.** For every
+  `pull_request.paths`-filtered workflow it extracts the crates actually built
+  (`cargo ... -p <crate>`), computes the transitive local `path = "..."`
+  dependency closure, and fails if any member directory is absent from the paths
+  filter. Wired into `ci.yml`. Verified by injection: dropping `visualization/**`
+  from a fixed workflow flips it to failure, then restores to green — it cannot
+  stay green while a gap exists.
+- **API reference named bindings that do not exist.** `docs/api-reference.md`
+  listed `C++: finkit::operation_execute_json` as one of eight language
+  surfaces, but the repository ships no C++ binding — `ffi/` contains eight
+  language bindings (c, python, node, go, dotnet, ios, java, android) and no
+  C++. iOS and Android instead expose per-indicator FFI (`alpha_ta_*` and
+  `Java_com_finkit_indicators_Finkit_*Native`) and do not participate in the
+  unified JSON control plane. Removed the C++ entry and documented the iOS /
+  Android surfaces. Also corrected `FormulaEvalContractJSON` (a casing that
+  exists nowhere in the tree) to `formulaEvalContractJson`. Both verified
+  against the source.
+- **Stray 205 KB log at the repository root** (`CargoLock_test_tail.log`, dated
+  2026-08-30, referenced by nothing) removed.
+
+Termination review (the "no infinite loops" requirement): all nine `loop { }`
+sites carry a `SAFETY-TERMINATION` argument or an `iterations >=
+MAX_LOOP_ITERATIONS` backstop; the formula executor's WHILE/FOR loops bail at
+`MAX_LOOP_ITERATIONS = 10_000`, so a malicious or accidental formula cannot hang
+the engine. `scripts/check_unbounded_loops.py` passes (9/9).
+
+Verified: 22/22 script gates pass (including the new one); SSOT `--check` passes;
+all four edited workflows parse as YAML; the cargo build of every non-pyo3 crate
+finishes cleanly. (Full `cargo check --workspace --all-targets` was not re-run
+here because the sandbox's pipe quota exhausts while pyo3-ffi's build script
+spawns the Python interpreter — an environment limit, not a code change; the
+fourth-round run already established the 0-error baseline and no `.rs` file
+changed this round.)
+
 ### Fixed - 2026-10-03
 
 A pre-release audit that stopped looking for missing features and started

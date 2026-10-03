@@ -17,6 +17,7 @@ on:
       - "tests/contracts/**"
       - "scripts/gen_talib_numeric_contract.py"
       - "scripts/check_versions.py"
+      - "factor-analysis/**"
       - "scripts/check_warning_contracts.py"
       - "scripts/sync_bindings.py"
       - "scripts/enrich_registry_ffi.py"

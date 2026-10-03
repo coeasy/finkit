@@ -2429,3 +2429,52 @@ error 确认。这正是"把 `#[expect]` 用在工具 lint 上"最容易踩的�
 
 补充一条判读经验：**"没有调用方"不是"不需要存在"的证据**。下游绑定与仓外使用者也是
 调用方，而它们对 `cargo check` 不可见。
+
+# 30. 第五轮发布前审计（前端 CI 覆盖 / 接口文档 / 死循环）
+
+第四轮修的是"自己这轮改动引入的孤儿"。第五轮换了提问角度：把"前端贯通"和"接口
+文档准确"这两个前四轮从未系统打开的维度，重新跑一遍三问（主体联通、无断链、无孤儿、
+无死循环、前后端贯通）。
+
+## 30.1 CI 触发路径覆盖缺口（真实断链）
+
+`multilang-release.yml` 与 `multilang-cross-platform.yml` 的 `pull_request.paths` 是手工
+维护的列表，但漏了 `visualization/**` 与 `factor-analysis/**` —— 这两个目录被 6 个 crate
+依赖（含 `wasm` 浏览器前端，它依赖 `visualization`）。`wasm32` 构建只存在于
+`multilang-release.yml`，于是"改 visualization 的 API → PR 上该 workflow 完全不触发 →
+wasm32 与三个语言绑定零验证 → 只在发版打 tag 时才炸"。`cli/**` 在 `multilang-release.yml`
+与 `python-wheels.yml` 同样缺失。
+
+修复：三个 workflow 的 paths 补齐 `cli/**`、`factor-analysis/**`、`visualization/**`。
+
+## 30.2 新门禁：check_workflow_path_coverage.py
+
+手工维护的 path 列表必然漂移，所以配套的不能是"记得加"，而是一个会失败的门禁：对每个带
+`pull_request.paths` 的 workflow，提取其实际构建的 crate（`cargo ... -p <crate>`），计算本地
+`path = "..."` 依赖的传递闭包，凡闭包内成员目录不在 paths 中即失败。注入法验证：从已修复的
+workflow 删掉 `visualization/**` 立即报缺失，还原即绿——不是永远绿的摆设。规则用"祖先目录
+匹配"避免对 `core/src/formula/simd.rs` 这种精准子路径的假阳性。
+
+## 30.3 接口文档断链
+
+`docs/api-reference.md` 把 `C++: finkit::operation_execute_json` 列为八个语言面之一，但
+仓库根本没有 C++ 绑定（`ffi/` 下只有 c/python/node/go/dotnet/ios/java/android 八个）；ios 与
+android 走 per-indicator FFI（`alpha_ta_*` 与 `Java_com_finkit_...*Native`），并不参与统一
+JSON 控制平面。同时 `FormulaEvalContractJSON` 这个 PascalCase 在全树 0 文件，真实是
+`formulaEvalContractJson`。两处都对照源码核实后修正。中文版 `api-reference-zh.md` 没有这段
+"八语言控制平面"段落，故无需同步。
+
+## 30.4 死循环复查
+
+全树 9 个 `loop { }`（另有 1 个是 WGSL 着色器字符串，已剔除）逐一核对：公式执行器的
+WHILE/FOR 有 `iterations >= MAX_LOOP_ITERATIONS`（=10000）兜底；stateful 的 For、组合生成、
+谐波合并、Bresenham 画线、MACD 回填均靠游标/索引单调推进 `break`。`check_unbounded_loops.py`
+9/9 通过。结论：用户输入公式无法令引擎挂起。
+
+## 30.5 复查未发现问题
+
+- **公开 API 面**：第四轮已做全工作区差分（存活文件 0 删除）。本轮未改 rust，不再重复。
+- **全部门禁 22/22 绿**（含新门禁），`gen_ssot_docs.py --check` 通过，四个 workflow YAML 合法。
+- **cargo 编译**：排除 pyo3 的核心 crate 全绿；完整 `--all-targets` 因沙箱管道配额在 pyo3-ffi
+  build script 调起 Python 解释器时耗尽（os error 231），属环境限制，非代码改动——本轮未改
+  任何 `.rs`，第四轮已确认 0-error 基线。

@@ -43,13 +43,18 @@ The shared names are:
 - Go: `ta.OperationExecuteJSON`;
 - Java: `Indicators.operationExecuteJson`;
 - .NET: `Indicators.OperationExecuteJson`;
-- C: `ta_operation_execute_json`;
-- C++: `finkit::operation_execute_json`;
-- Node: `operationExecuteJson`.
+      - C: `ta_operation_execute_json`;
+      - Node: `operationExecuteJson`.
+
+iOS and Android do not expose the unified control-plane entry point. They ship
+per-indicator FFI surfaces instead: iOS builds a static library of `alpha_ta_*`
+symbols, and Android exposes `Java_com_finkit_indicators_Finkit_*Native` JNI
+functions. Use those directly for on-device integration; the JSON control plane
+above is the recommended path for every other language.
 
 Formula results use the corresponding versioned contract functions:
-`formula_eval_contract_json`, `FormulaEvalContractJSON`,
-`formulaEvalContractJson`, and their language-specific casing equivalents.
+`formula_eval_contract_json` and `formulaEvalContractJson`, plus their
+language-specific casing equivalents.
 
 Timestamped and multi-timeframe Formula evaluation uses the shared
 `formula.temporal.v1` request contract. Every official binding exposes the

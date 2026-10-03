@@ -18,6 +18,9 @@ on:
       - "tests/contracts/**"
       - "scripts/gen_talib_numeric_contract.py"
       - "scripts/check_versions.py"
+      - "cli/**"
+      - "factor-analysis/**"
+      - "visualization/**"
       - ".github/workflows/multilang-release.yml"
   push:
     branches:

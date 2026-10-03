@@ -124,6 +124,11 @@ jobs:
         run: python scripts/check_orphan_scripts.py
       - name: Check every workflow can actually be triggered
         run: python scripts/check_workflow_liveness.py
+      # A `paths:` filter that omits a directory a built crate depends on lets a
+      # breaking change to that dependency pass CI on the PR and only fail at
+      # release time (e.g. wasm32 builds live only in multilang-release.yml).
+      - name: Check workflow path filters cover built crate dependencies
+        run: python scripts/check_workflow_path_coverage.py
       # Documents have the same failure mode. `docs/formula-talib-contract.md`
       # and `docs/quant-evaluation.md` were both current documents with zero
       # inbound references anywhere in the repository, so the documentation
