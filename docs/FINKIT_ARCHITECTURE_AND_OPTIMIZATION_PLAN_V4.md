@@ -2271,3 +2271,148 @@ mismatch is a clean rejection rather than a half-updated result"。但实现是
    28.6 的论证在整数域成立、在浮点域不成立，正是这类缺陷的典型。
 
 每一个修复都配一个**能失败的**门禁，并用注入法验证它真的会失败。
+
+# 29. 第四轮发布前审计（复审"修复动作本身"）
+
+前三轮把"看起来对"的东西挑了一遍。第四轮换了个提问角度：**前三轮那 81 项改动、
+2 万行删除，本身就是新的孤儿与断链来源**。一个删掉两万行的重构，和被它删掉的代码
+一样需要被审计。
+
+结论是 **3 项缺陷，外加 1 个新门禁**；其中 1 项在审计开始时**距离被当成"修复"提交
+只剩一条命令**。
+
+## 29.1 `indicators::volume::adosc_into` 被删，而唯一发现它的门禁正准备掩盖它（严重）
+
+去重本身是对的：`indicators::volume` 里那份融合式 ADOSC 与
+`math::volume_kernels::adosc_into` 是同一算法的两份实现，删掉重复、让分配式路径改调
+规范内核，都应当保留。错在**公开名字没有接回去**。
+
+于是 `finkit::indicators::adosc_into` 这个公开入口凭空消失，而所有门禁全绿：
+
+- `cargo check --workspace --all-targets` **看不见"被删除的 `pub fn`"**——它只检查
+  现有引用能否解析，而 crate 内部没有任何调用方（所有内部调用都直连 `math::` 内核）。
+  "没有调用方"被当成了"不需要存在"。
+- `core/src/indicators/volume.rs` 里那个名为
+  `test_adosc_into_matches_allocating_path` 的单元测试**被改成直接调内核**
+  （`crate::math::volume_kernels::adosc_into`）。测试名说的是公开入口，实际测的是它
+  的实现体，于是这个"看起来覆盖了公开 API"的测试成了掩盖者。
+- 唯一发出声音的是 `gen_ssot_docs.py --check`：生成态快照里 `adosc_into` 消失
+  （公开函数计数 389 → 388）。
+
+**最危险的地方在于门禁给出的修法是错的。** 它的提示是
+`Run: python scripts/gen_ssot_docs.py --generate`；照做确实会让门禁变绿，但那是把一次
+真实的 API 破坏**写成新的基线**。快照型门禁记录的是"现在是什么"，不是"应该是什么"，
+因此它有能力发现漂移，却**没有立场判断漂移的方向**。差一步就把破坏当成修复提交了。
+
+修复：把 `adosc_into` 作为**校验 + 转发**的包装补回 `volume.rs`（与 `ad_into`/
+`obv_into` 同构），委托给规范内核。附带收益是它继承了内核更严格的前置条件——零周期
+现在会被拒绝，序列长度不足时报 `TaError::InsufficientData`，而不是越过预热区继续读。
+
+## 29.2 补的是"这一类"，不只是"这一个"
+
+只修 `adosc_into` 等于赌下一次性重构不会再犯。新增 target
+`core/tests/indicator_api_surface.rs`，把公开 API 面变成**可失败的规格**：
+
+- 逐条钉住 53 个 `finkit::indicators::<模块>::<名字>_into` 路径；
+- 单独钉住 `core/src/indicators/mod.rs` 的根级重导出接缝——`pub use volume::*` 与
+  显式 `pub use math::volume_kernels::{ad, adosc, obv}` 并存处，**显式条目会遮蔽同名
+  glob 成员**，这正是 `adosc_into` 漏掉的位置（`indicators::ad`/`adosc` 解析到内核，
+  `indicators::volume::ad` 解析到模块包装，两条路径都公开、都在用，所以都要钉）；
+- 实现方式为 `let _ = <path>;`，只强制名字解析、不做函数指针强制转换，因此条目**无需
+  写签名**，参数列表变化也不会让守卫失效；
+- 方向是**单向的**：只约束删除与改名，不管新增。新增入口不需要改这个文件，守卫就不会
+  退化成"没人愿意维护的清单"而被删掉。
+
+删除/改名任一被钉住的名字 → 本 target **编译失败**，使移除成为一次刻意的、可评审的
+决定。已用注入法验证：把 `volume::adosc_into` 改成 `adosc_into_RENAMED` 得
+`error[E0425]: cannot find value adosc_into_RENAMED in module finkit::indicators::volume`，
+随后还原。
+
+同时把 `volume.rs` 里那个"名不副实"的单元测试改回调用公开包装
+（`adosc_into(...)`，即 `volume::adosc_into`），并在注释里写明为什么不能改回直调内核。
+
+## 29.3 两处 `#[allow(clippy::uninit_vec)]` 活过了它们的理由
+
+同一次去重把 `indicators::volume::ad` 与 `obv` 的实现从
+`Vec::with_capacity` + `unsafe { set_len }` 换成了 `Array1::zeros` /
+`vec![0.0; len]`，却把 `#[allow(clippy::uninit_vec)]` 留在原地。这是**安全相关**的豁免
+挂在已经不做那件事的代码上：它向读者声明"此处有意使用未初始化内存"，而事实上没有。
+更糟的是下一位作者很可能把 `ad` 当模板照抄，顺手继承这份"许可"。
+
+全工作区扫描 6 处 `uninit_vec` 豁免（其余 4 处在 `momentum.rs:1916`、
+`moving_avg.rs:450/781/1115`，均真实调用 `set_len`，保留），删掉
+`volume.rs` 的 2 处。
+
+**把这"一类"也钉住。** 保留的那 4 处由 `#[allow]` 改为
+`#[expect(clippy::uninit_vec)]`，并在 `ci.yml` 的 clippy job 上 deny
+`unfulfilled_lint_expectations`。区别是本质性的：
+
+- `#[allow]` 是**单向**的——它只能关掉检查，无法表达"我预期这里会触发该 lint"。
+  于是它的理由消失后，豁免会**永远静默地继续生效**，正是 29.3 这个缺陷的成因。
+- `#[expect]` 是**双向**的——lint 不触发时，编译器报
+  `unfulfilled_lint_expectations`（该 lint 默认 warn，本例中显式 deny 成 error）。
+  也就是说，"豁免的理由已经不存在了"这件事由**编译器**发现，不需要人再写一个
+  Python 门禁。
+
+两个方向都实测过：
+
+- 4 处合法豁免在 clippy 下**被满足**（无 `unfulfilled` 告警）；
+- 在 `RUSTFLAGS="-D unfulfilled_lint_expectations"` 下
+  `cargo clippy --workspace --all-targets --locked` 全绿（exit 0）；
+- 注入法：把该 `expect` 挂到已经不调用 `set_len` 的 `volume::obv` 上，clippy 报
+  `warning: this lint expectation is unfulfilled` 并指向该属性行，随后还原。
+
+一个必须验证而不该假设的细节：`RUSTFLAGS="-D warnings"` 的
+`workspace-check`/`test` 等 job 跑的是 `cargo check`/`cargo test`，**不加载 clippy**。
+工具 lint 在工具缺席时不被求值，因此 `#[expect(clippy::*)]` 在那些 job 下**不会**
+被误判为"未满足"——已用 `RUSTFLAGS="-D warnings" cargo check -p finkit` 实测为 0
+error 确认。这正是"把 `#[expect]` 用在工具 lint 上"最容易踩的坑。
+
+## 29.4 SSOT 生成器每次运行都用 CRLF 覆写输出
+
+`Path.write_text` 默认把 `\n` 转成平台分隔符，而 `.gitattributes` 把 `*.md` 钉为
+`eol=lf`。于是每次 `--generate` 之后，7 个生成文件的**差异为空、`git status` 却显示
+已修改**。一个永远脏的门禁目录，教出来的习惯就是不再看 `git status`。改为
+`newline="\n"` 后工作树恢复干净。
+
+补充说明（本地环境现象，非仓库缺陷）：本地 `core.autocrlf=true` 与该
+`.gitattributes` 冗余冲突时，会出现"工作树与 blob 逐字节相同、`git diff --quiet`
+退出 0，但 `git status` 报 M"的索引假阳性；`git add` 后暂存区零差异、幻影标记消失。
+`.gitattributes` 已经完整覆盖行尾规则，本地可以把 `core.autocrlf` 设为 `false`。
+
+## 29.5 复查未发现问题的部分
+
+- **被删除但核实为正当的**：`core/src/indicators/compat.rs` 是**从未被声明的孤儿文件**
+  ——`3fb8b3b` 的 `mod.rs` 里既没有 `pub mod compat;`，也从未出现在生成态文档的模块
+  列表中，说明它不参与编译。其内容
+  （`crate::math::cci::cci(...).map(Array1::from_vec)`）与 `math/cci.rs` 早已返回
+  `Array1<f64>` 的签名不符，根本编译不过。删除是正确的清理，不构成 API 破坏。
+- **公开函数面比对**：对 `core/src/indicators` 全目录做 `3fb8b3b` → `HEAD` 的
+  `pub fn` 名称集合差分，结果只有 `compat::cci`（孤儿）与 `volume::adosc_into`
+  （已修）两项删除，无其他遗漏。
+- **`cargo check --workspace --all-targets --locked`**：0 error。
+- **`cargo test -p finkit --lib -- volume`**：150 passed / 0 failed。
+- **`cargo test -p finkit --test runtime_convergence`**：17 passed / 0 failed，含
+  `into_kernel_equals_allocating_kernel`（"五条边"中的 `allocating == into`）。
+- **`cargo fmt --all -- --check`**：干净。
+- **clippy（严格）**：`RUSTFLAGS="-D unfulfilled_lint_expectations"
+  cargo clippy --workspace --all-targets --locked` → exit 0（1m34s），四处
+  `#[expect(clippy::uninit_vec)]` 全部被满足。
+- **`python scripts/gen_ssot_docs.py --check`**：通过（且
+  `git diff --numstat docs/generated/` 为空——恢复公开面后快照重新自洽，本轮**没有**
+  产生任何生成态改动）。
+
+## 29.6 第四轮的方法论
+
+第三轮的三问（谁调用它 / 门禁的输入范围是什么 / 注释里的论证成立吗）依然有效，但这一轮
+补了两条更针对"治理动作"的问法：
+
+1. **审计"修复动作本身"**。一次删掉两万行的重构，和被它删除的代码一样需要被审计。
+   孤儿不会只存在于被留下的代码里，也会存在于"被删掉的东西留下的窟窿"里。
+2. **区分"规格"与"快照"**。快照型门禁（生成态文档、覆盖率数值）能发现漂移，但**不能
+   判断漂移的方向**——它红的时候，正确反应是"去查漂移的原因"，而不是"按提示重新生成"。
+   凡是门禁提示"运行 --generate 即可"，都要先回答"为什么它变了"。
+   真正的规格必须是**独立于当前源码**的，29.2 的编译期守卫就是这样一个规格。
+
+补充一条判读经验：**"没有调用方"不是"不需要存在"的证据**。下游绑定与仓外使用者也是
+调用方，而它们对 `cargo check` 不可见。

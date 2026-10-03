@@ -82,6 +82,65 @@ Every fix ships with a gate that can fail, and the new gates were verified by
 injection rather than by observing green — a gate that cannot go red is worse
 than no gate at all.
 
+A fourth pass re-ran the same three questions over the *result* of the first
+three, on the theory that a refactor which deletes twenty thousand lines is
+itself a fresh source of orphans. It found three more defects — and one of them
+had been one command away from being committed as a "fix". The fourth item
+below is not a defect but the guard that keeps the first one from returning.
+
+- **`indicators::volume::adosc_into` was deleted by the kernel-unification
+  pass, and the gate that noticed was about to hide it.** Deduplicating the
+  fused ADOSC implementation onto `math::volume_kernels::adosc_into` was
+  correct; forgetting that the public name now had nothing to resolve to was
+  not. Nothing failed: `cargo check` cannot see a *removed* `pub fn` that no
+  in-tree caller uses, and the unit test named
+  `test_adosc_into_matches_allocating_path` had been rewritten to call the
+  kernel directly, so the test that looked like it covered the public entry
+  point was covering its implementation instead. The only artifact that
+  complained was `gen_ssot_docs.py --check`, whose snapshot no longer listed
+  `adosc_into` (389 → 388 public functions) — and the documented remedy is
+  "run `--generate`", which would have recorded the breakage as the new
+  baseline. The function is restored as a validating wrapper over the canonical
+  kernel, which also gives it the kernel's stricter pre-conditions (a zero
+  period is now rejected, and a too-short series reports
+  `TaError::InsufficientData` instead of reading past warm-up). The unit test
+  calls the public wrapper again.
+- **The class, not just the instance.** New target
+  `core/tests/indicator_api_surface.rs` pins all 53 public
+  `indicators::<module>::<name>_into` entry points plus the root re-export seam
+  in `core/src/indicators/mod.rs`, where an explicit
+  `pub use math::volume_kernels::{ad, adosc, obv}` shadows same-named glob
+  members from `pub use volume::*` — the exact place `adosc_into` fell through.
+  Removing or renaming any pinned name now fails **compilation**, verified by
+  injection (`E0425`), so the decision becomes deliberate and reviewable. The
+  guard is one-directional on purpose: it constrains removals, not additions,
+  so it cannot rot into a list nobody wants to maintain.
+- **Two `#[allow(clippy::uninit_vec)]` attributes outlived their reason.**
+  `indicators::volume::ad` and `obv` still carried the allow after the same
+  refactor replaced their `set_len` blocks with `Array1::zeros` /
+  `vec![0.0; len]`, leaving a safety-relevant waiver attached to code that no
+  longer does the thing being waived — and inviting the next reader to copy the
+  pattern as a licence to skip initialisation. Scanned all six `uninit_vec`
+  sites in the workspace; the other four genuinely still call `set_len`.
+  **Those four are now `#[expect(clippy::uninit_vec)]` instead of `#[allow]`,
+  and the clippy job denies `unfulfilled_lint_expectations`**, so a suppression
+  whose justification disappears fails the build rather than silently outliving
+  it — which `#[allow]` cannot express at all. Both directions were verified:
+  the four legitimate sites are fulfilled under clippy and produce nothing under
+  plain `cargo check` with `-D warnings` (tool lints are not evaluated without
+  the tool, so the other jobs are untouched), while an expectation planted on
+  `volume::obv` — which no longer calls `set_len` — reports *"this lint
+  expectation is unfulfilled"*.
+- **`gen_ssot_docs.py` rewrote its output with CRLF on every run.**
+  `Path.write_text` translates `\n` to the platform separator, while
+  `.gitattributes` pins `*.md` to `eol=lf`, so each `--generate` left seven
+  files whose *diff* was empty and whose `git status` entry was not. A gate
+  directory that is permanently dirty trains people to stop reading
+  `git status`. Writes now pass `newline="\n"`.
+- **`docs/generated/indicators.md` is therefore unchanged by this pass**, which
+  is the point: the restored surface makes the snapshot match again. The
+  regenerated file that this pass initially produced has been discarded.
+
 ### Fixed - 2026-09-29
 
 This maintenance pass connects the release pipelines end-to-end and removes the

@@ -39,7 +39,6 @@ pub struct VwapBandsResult {
 /// let result = indicators::ad(&high, &low, &close, &volume).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
-#[allow(clippy::uninit_vec)]
 pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len() {
         return Err(crate::error::TaError::InvalidParameter {
@@ -142,6 +141,52 @@ pub fn adosc(
     Ok(output)
 }
 
+/// ADOSC zero-copy variant: writes result into pre-allocated slice.
+///
+/// Same semantics as [`adosc`] but writes directly into the caller-provided
+/// buffer. The bundle of AD recurrence and the two EMA recurrences into one
+/// pass lives in [`crate::math::volume_kernels::adosc_into`], which is the
+/// canonical stateful kernel; this wrapper only validates the public
+/// pre-conditions and forwards.
+///
+/// Relative to the pre-unification implementation this variant additionally
+/// rejects a zero `fast_period` / `slow_period` and reports
+/// [`crate::error::TaError::InsufficientData`] when the series is not longer
+/// than `max(fast_period, slow_period) - 1`, because the kernel it now
+/// delegates to validates those cases instead of reading past warm-up.
+pub fn adosc_into(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    volume: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    if high.len() != low.len() || high.len() != close.len() || high.len() != volume.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "high, low, close, volume".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), slow_period)?;
+    if output.len() != high.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as high".to_string(),
+        });
+    }
+    crate::math::volume_kernels::adosc_into(
+        high,
+        low,
+        close,
+        volume,
+        fast_period,
+        slow_period,
+        output,
+    )
+}
+
 /// On Balance Volume (OBV)
 ///
 /// A cumulative indicator that uses volume flow to predict price changes.
@@ -163,7 +208,6 @@ pub fn adosc(
 /// let result = indicators::obv(&close, &volume).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
-#[allow(clippy::uninit_vec)]
 pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     if close.len() != volume.len() {
         return Err(crate::error::TaError::InvalidParameter {
@@ -657,8 +701,12 @@ mod tests {
         ];
         let expected = adosc(&high, &low, &close, &volume, 3, 5).unwrap();
         let mut actual = vec![0.0; close.len()];
-        crate::math::volume_kernels::adosc_into(&high, &low, &close, &volume, 3, 5, &mut actual)
-            .unwrap();
+        // Call the public wrapper, not `math::volume_kernels::adosc_into`. The
+        // kernel is what the wrapper forwards to, so exercising it directly
+        // would keep this test green even if the public name were deleted —
+        // which is exactly how the `adosc_into` break went unnoticed before
+        // `tests/indicator_api_surface.rs` was added.
+        adosc_into(&high, &low, &close, &volume, 3, 5, &mut actual).unwrap();
         // ADOSC has a warm-up region where "no value yet" is reported as NaN.
         // Both paths must agree there as well, and a tolerance comparison cannot
         // express that: `NaN - NaN` is NaN, so every tolerance test on NaN fails

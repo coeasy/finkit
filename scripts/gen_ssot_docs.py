@@ -874,7 +874,13 @@ def generate_all() -> dict[Path, str]:
 def write_outputs(outputs: dict[Path, str]) -> None:
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
     for path, content in outputs.items():
-        path.write_text(content, encoding="utf-8")
+        # `newline="\n"` is load-bearing, not cosmetic. `.gitattributes` pins
+        # `*.md eol=lf`, and the default `write_text` translates `\n` to the
+        # platform separator, so on Windows every run rewrote these files with
+        # CRLF. Git then normalised them back on read and reported the whole
+        # directory as modified with an empty diff — a permanently dirty
+        # `git status` is how people learn to stop reading `git status`.
+        path.write_text(content, encoding="utf-8", newline="\n")
         print(f"Wrote {path.relative_to(ROOT)}")
 
 

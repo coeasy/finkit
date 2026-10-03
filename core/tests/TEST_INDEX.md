@@ -93,6 +93,20 @@ allowlist 型条目要双向断言（stale + undeclared），否则清理后的�
   必须被本文档列出（新 target 不能悄悄不可发现），本文档列出的每个路径也必须真实
   存在（删除/改名 target 会在这里失败，而不是留下死指针）
 
+### 公开 API 面 (Public API Surface)
+
+「没有任何内部调用方」不等于「没有任何需要的调用方」。`_into` 零拷贝家族就是这类
+名字：crate 内部一律直接调 `math::` 规范内核，所以删掉 `indicators::` 侧的公开
+包装可以做到全绿 —— `cargo check` 看不见**被删除**的 `pub fn`，单元测试又早已改
+成直接调内核，生成态快照只会忠实记录新状态而不会提出异议。这类名字由编译期守卫钉住。
+
+- `indicator_api_surface.rs` - **零拷贝（`_into`）公开入口的编译期守卫**：逐条列出
+  53 个 `indicators::<模块>::<名字>_into` 路径，任一被删除或改名都会让本 target
+  **编译失败**（而非测试失败），使移除成为一次刻意的、可评审的决定。同时单独钉住
+  `core/src/indicators/mod.rs` 的根级重导出接缝 —— `pub use volume::*` 与显式
+  `pub use math::volume_kernels::{ad, adosc, obv}` 并存处，显式条目会遮蔽同名 glob
+  成员，这正是 `adosc_into` 当初漏掉的地方
+
 ### 因子库 / 多周期 (Factor Library & Multi-period)
 
 - `alpha158_parity.rs` - Alpha158 因子库一致性

@@ -35,6 +35,44 @@ assert_eq!(borrowed.as_ref(), &close);
 with `NaN`; `WarmupPolicy::Trim` returns only stable rows. `NanPolicy::Error`
 rejects non-finite numeric fields before execution.
 
+### The indicator `_into` family is API, and it is pinned
+
+Most allocating indicators in `finkit::indicators` have a caller-owned-buffer
+counterpart named `<name>_into`. Treat the whole family as public API:
+language bindings and out-of-tree callers bind to it, even though **nothing in
+this crate does**. Internal code reaches for the canonical kernels under
+`finkit::math::` directly, so `cargo check` cannot notice when one goes
+missing, and a snapshot gate such as `docs/generated/indicators.md` will record
+the removal as the new baseline rather than object to it. That is not
+hypothetical: `indicators::volume::adosc_into` was deleted by a refactor and
+every gate stayed green.
+
+`core/tests/indicator_api_surface.rs` therefore names all 53 `_into` paths plus
+the root re-export seam, which turns removal or renaming into a compile error.
+It is one-directional by design — it constrains deletions, not additions — so
+adding an entry point never requires editing it.
+
+Two resolution rules in `core/src/indicators/mod.rs` are easy to get wrong:
+
+* `pub use volume::*` and the explicit
+  `pub use finkit::math::volume_kernels::{ad, adosc, obv}` coexist, and **an
+  explicit re-export shadows a glob re-export of the same name**. So
+  `indicators::ad` and `indicators::adosc` resolve to the kernels, while
+  `indicators::volume::ad` and `indicators::volume::adosc` resolve to the
+  module wrappers that forward to them. Both paths are public and both are in
+  use; do not assume they name the same item.
+* Because the shadowing is silent, a name can also disappear as a side effect
+  of deleting the glob member it used to come from — which is what happened to
+  `adosc_into`. Restoring such a name means defining it in the module or adding
+  it to the explicit list, not just deleting the replacement.
+
+The `_into` entry points validate their own pre-conditions and then forward, so
+their error semantics are the kernel's. Where the two disagree, the kernel is
+the contract: for example `indicators::volume::adosc_into` rejects a zero
+`fast_period`/`slow_period` and reports `TaError::InsufficientData` for a series
+no longer than `max(fast_period, slow_period) - 1`, because the canonical kernel
+validates those cases instead of reading past warm-up.
+
 ## NaN is a value, never a panic
 
 A missing value arrives as `NaN` and must propagate as `NaN`; it must never

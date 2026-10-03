@@ -1913,7 +1913,7 @@ pub fn cci_source_into(source: &[f64], period: usize, output: &mut [f64]) -> Res
 }
 
 /// Commodity Channel Index (CCI).
-#[allow(clippy::uninit_vec)]
+#[expect(clippy::uninit_vec)]
 pub fn cci(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {

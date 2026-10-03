@@ -201,6 +201,16 @@ jobs:
     name: Clippy
     runs-on: ubuntu-22.04
     timeout-minutes: 45
+    env:
+      # Turns `#[expect(lint)]` from a comment into a gate. This job carries
+      # thousands of legacy clippy warnings on purpose and so cannot use
+      # `-D warnings`; denying exactly this one lint keeps that tolerance while
+      # making "the suppression you wrote no longer suppresses anything" fail
+      # the build. `#[allow]` cannot express that at all, which is how a stale
+      # `#[allow(clippy::uninit_vec)]` outlived the `set_len` it was granting
+      # (V4 plan §29.3). Under plain `cargo check` the expectation is not
+      # evaluated for tool lints, so this does not affect the other jobs.
+      RUSTFLAGS: "-D unfulfilled_lint_expectations"
     steps:
       - uses: actions/checkout@v7
       # Pinned, not `@stable`: clippy turns new lints on without warning, and
