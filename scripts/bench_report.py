@@ -32,20 +32,29 @@ def collect_pairs(criterion_dir: Path) -> dict[str, dict[str, Any]]:
             parts = estimate.relative_to(criterion_dir).parts
         except ValueError:
             continue
-        if len(parts) < 4 or parts[-2] != "new":
+        # Criterion layout: {group}/{bench}/{scale?}/new/estimates.json
+        # (len 5/4), or {bench}/new/estimates.json (len 3, groupless bench).
+        if len(parts) < 3 or parts[-2] != "new":
             continue
-        group, bench_name = parts[0], parts[-3]
-        scale = parts[-4] if len(parts) >= 5 else ""
+        if len(parts) >= 4:
+            group, bench_name = parts[0], parts[1]
+            scale = parts[2] if len(parts) >= 5 else ""
+        else:
+            group = bench_name = parts[0]
+            scale = ""
         point_ns = load_point(estimate)
         if point_ns is None:
             continue
-        if bench_name.startswith("Finkit_"):
+        # Criterion lowercases benchmark ids on disk, so the role prefixes
+        # must be matched case-insensitively; `FTA_…` ids show up as `fta_…`.
+        upper = bench_name.upper()
+        if upper.startswith("FINKIT_"):
             role, key = "finkit_us", bench_name[7:]
-        elif bench_name.startswith("FTA_"):
+        elif upper.startswith("FTA_"):
             # Legacy benchmark ids are still accepted so historical Criterion
             # directories remain readable while the suite migrates to Finkit_.
             role, key = "finkit_us", bench_name[4:]
-        elif bench_name.startswith("TALib_"):
+        elif upper.startswith("TALIB_"):
             role, key = "talib_us", bench_name[6:]
         else:
             continue

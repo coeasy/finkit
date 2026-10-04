@@ -7,6 +7,73 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Changed - 2026-10-04 (tenth pass — TA-Lib C head-to-head with item-by-item chase, formula-layer audit)
+
+Full bench-vs-talib snapshot in `docs/BENCHMARK_REPORT.md`; the round is
+recorded in V4 plan §35.
+
+- **TA-Lib C 0.8.1 head-to-head ran on this machine for the first time**
+  (90 paired benchmarks). First snapshot: 59 pairs faster than TA-Lib, 13 pairs
+  ❌. Fixed a real bug in the report gate on the way: `bench_report.py` matched
+  `FTA_`/`TALib_` case-sensitively while Criterion lowercases ids on disk, and
+  swapped the bench/scale path components, so pairing always found 0 rows.
+
+- **Chase list, item by item (all numbers 10K bars, before → after vs TA-Lib):**
+  - `WILLR_14` 83.5 → **32.1 µs** (0.42x ❌ → **1.07x ✅**): the Van Herk
+    block-scan kernel `willr14_into` existed but was never wired into the
+    public entry — `willr_into` now dispatches to it for `period == 14` on
+    NaN-free input.
+  - `STOCH_14_3_3` 150.4 → **84.9 µs** (0.65x ❌ → **1.11x ✅**): the fast-K
+    extrema maintenance in `stoch_monotonic_fast_into` moved from a 128-slot
+    monotonic ring to cached-index tracking (one comparison per leg per bar,
+    rescan only on expiry; tie and expiry rules preserved).
+  - `AROONOSC_14` 170.1 → **59.4 µs** (0.26x ❌ → 0.74x ⚠️): rewritten from a
+    `VecDeque` to the same cached-index structure `aroon_with_deques` uses.
+  - `MAX_30` 29.1 → 22.3 µs, `MIN_30` 37.0 → 32.1 µs: the cached kernel was
+    rewritten branch-lean — `NaN` fails every comparison so the explicit
+    missing-bar test is gone, expiry is only evaluated after the dominance
+    test failed, and the warm phase is a separate loop so the per-bar emit
+    gate disappeared. TA-Lib's contract-free loop is still ~1.5x faster;
+    root cause recorded.
+  - `ln` 75.0 µs: validation and computation fused into one pass (same
+    all-or-nothing error contract).
+
+  ⚠️ **Behaviour change:** STOCH on NaN input no longer freezes fast-K at
+  50.0 — a missing bar is now dropped by the extrema (contract B), matching
+  the rest of the extrema family.
+
+- **Formula layer: 15+ per-window rescans replaced with O(1)/bar algorithms.**
+  `HHVBARS`/`LLVBARS`/`MAXINDEX`/`MININDEX` share a new `ArgExtremeDeque`
+  (monotonic deque over indices, ties keep the earliest bar); `EVERY`/`EXIST`/
+  `COUNT` became sliding true-counts (EVERY counts predicate *failures* so a
+  missing bar still counts as true, bit-for-bit as before); `VWMA`/`MFI`/
+  `TOTALVOL` use sliding sums with in-window missing tracking; `ICHIMOKU_*`
+  and the `DONCHIAN` family route through the shared extrema kernels.
+
+- **Potential defects found and fixed by the audit:**
+  - Parser stack overflow (an abort no FFI guard catches): `parse_formula`
+    now rejects parenthesis nesting deeper than 256 before pest runs.
+  - `ICHIMOKU_TENKAN(x, y, 0)` panicked on `usize` underflow (`(n - 1)`
+    bypassed the `extract_n` guard); the kernel handles `window == 0`
+    idempotently instead.
+  - `AROONOSC` indexed an empty deque on an all-missing window (panic); it
+    now reports `NaN`.
+  - `AROONOSC` subtracted `usize` indices that could go negative; cast to
+    `f64` first.
+  - `DONCHIAN_UPPER`/`LOWER` reported `±inf` for an all-missing window;
+    now `NaN`, consistent with the family.
+
+- **Assessed and deliberately not wired (recorded, not hidden):**
+  `simd_ops::simd_linreg_slope` has zero external callers and its AVX2 variant
+  only vectorizes the initial window sum (3 chunks at period 14), so wiring it
+  buys nothing; `SimdOps::hhv/llv` (block-scan SIMD) likewise has no internal
+  callers but is public SIMD API surface.
+
+- **Loop/recursive audit:** all `loop` sites in the executor are bounded by
+  `MAX_LOOP_ITERATIONS`, the stateful FOR by a construction-time rejection
+  plus a backstop, the sandbox caps recursion depth, and the parser now caps
+  nesting — every recursive chain is bounded.
+
 ### Changed - 2026-10-04 (ninth pass — rolling extrema on the cached fast path, NaN transparency, orphan fold collapse)
 
 - **`MAX` / `MIN` and the whole extrema family now use the cached-index fast

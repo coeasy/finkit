@@ -263,6 +263,11 @@ pub fn floor(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn ln(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
+    // Single pass: validate and compute together. The error contract is
+    // unchanged — the first non-positive / non-finite bar rejects the whole
+    // call — but the old two-pass shape (validate everything, then map) paid
+    // a full extra scan plus branch on every element.
+    let mut output = Vec::with_capacity(data.len());
     for (i, &x) in data.iter().enumerate() {
         if !x.is_finite() || x <= 0.0 {
             return Err(TaError::InvalidParameter {
@@ -270,8 +275,8 @@ pub fn ln(data: &[f64]) -> Result<Array1<f64>> {
                 constraint: "value > 0".to_string(),
             });
         }
+        output.push(x.ln());
     }
-    let output = map_expensive(data, f64::ln);
     Ok(Array1::from_vec(output))
 }
 

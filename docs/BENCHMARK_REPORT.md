@@ -1,83 +1,102 @@
-# Finkit Historical Benchmark Snapshot
+# Finkit vs TA-Lib C Benchmark Report
 
-> **快照日期**: 2026-06-24  
-> **记录环境**: Windows 10, x86_64 AVX2, Rust 2021 edition  
-> **构建**: `--release` via Criterion.rs
->
-> 本文件保留一组历史实测数据，便于追溯和复现；它不是当前 head 的“权威性能承诺”。任何当前竞品结论都应使用 `scripts/bench-vs-talib.sh` 或定期 `competitive-benchmark.yml` 生成的 commit-bound 证据，并同时记录 CPU、编译器、数据规模和 TA-Lib 版本。
+> Auto-generated from Criterion JSON by scripts/bench_report.py.
+> Results are valid only for the recorded commit, CPU, compiler, build flags, dataset, and TA-Lib version.
 
----
+| Indicator | Category | Finkit (µs) | TA-Lib C (µs) | Speedup | Status |
+|---|---|---:|---:|---:|:---:|
+| acos | math_transform | 139.00 | 135.40 | 0.97x | ⚠️ |
+| ad | volume | 12.69 | 12.85 | 1.01x | ✅ |
+| add | math_operators | 3.14 | 6.00 | 1.91x | ✅ |
+| adosc_3_10 | volume | 94.88 | 104.39 | 1.10x | ✅ |
+| adx_14 | directional | 81.23 | 74.59 | 0.92x | ⚠️ |
+| adxr_14 | directional | 84.57 | 77.89 | 0.92x | ⚠️ |
+| apo_12_26 | momentum_extra | 18.11 | 42.31 | 2.34x | ✅ |
+| aroon_14 | directional | 57.18 | 50.34 | 0.88x | ⚠️ |
+| aroonosc_14 | momentum | 61.85 | 44.68 | 0.72x | ❌ |
+| atr_14 | volatility | 29.55 | 49.15 | 1.66x | ✅ |
+| avgdev_14 | statistics_extra | 98.19 | 144.84 | 1.48x | ✅ |
+| avgprice | price_transform_full | 7.67 | 8.07 | 1.05x | ✅ |
+| bbands_20 | overlap | 34.96 | 47.09 | 1.35x | ✅ |
+| bbands_20@10000 | scaled_10k | 35.05 | 47.01 | 1.34x | ✅ |
+| bbands_20@100000 | scaled_100k | 381.21 | 494.21 | 1.30x | ✅ |
+| bbands_20@1000000 | scaled_1m | 22065.74 | 13318.03 | 0.60x | ❌ |
+| bop | momentum_extra | 6.83 | 10.79 | 1.58x | ✅ |
+| cci_14 | momentum | 185.45 | 218.83 | 1.18x | ✅ |
+| ceil | math_transform | 27.42 | 25.87 | 0.94x | ⚠️ |
+| cmo_14 | momentum | 37.27 | 51.61 | 1.38x | ✅ |
+| correl_30 | statistics_extra | 60.46 | 73.77 | 1.22x | ✅ |
+| cos | math_transform | 27.25 | 24.97 | 0.92x | ⚠️ |
+| dema_20 | overlap | 30.42 | 88.06 | 2.90x | ✅ |
+| ema_12 | overlap | 19.45 | 46.69 | 2.40x | ✅ |
+| ema_12@10000 | scaled_10k | 18.14 | 45.97 | 2.53x | ✅ |
+| ema_12@100000 | scaled_100k | 178.24 | 472.68 | 2.65x | ✅ |
+| ema_12@1000000 | scaled_1m | 3795.93 | 6337.70 | 1.67x | ✅ |
+| exp | math_transform | 43.55 | 43.05 | 0.99x | ⚠️ |
+| floor | math_transform | 28.13 | 27.53 | 0.98x | ⚠️ |
+| ht_dcperiod | cycle_extra | 458.62 | 590.05 | 1.29x | ✅ |
+| ht_dcphase | cycle_extra | 1144.00 | 3186.61 | 2.79x | ✅ |
+| ht_phasor | cycle | 475.40 | 554.95 | 1.17x | ✅ |
+| ht_sine | cycle | 1319.79 | 3406.70 | 2.58x | ✅ |
+| ht_trendline | cycle_extra | 476.97 | 934.01 | 1.96x | ✅ |
+| kama_30 | overlap | 25.92 | 102.16 | 3.94x | ✅ |
+| linearreg_14 | statistics | 36.59 | 66.60 | 1.82x | ✅ |
+| linreg_angle_14 | statistics_extra | 95.32 | 89.26 | 0.94x | ⚠️ |
+| linreg_intercept_14 | statistics_extra | 34.38 | 26.33 | 0.77x | ❌ |
+| linreg_slope_14 | statistics | 35.36 | 23.83 | 0.67x | ❌ |
+| ln | math_transform | 63.71 | 48.72 | 0.76x | ❌ |
+| ma_20 | overlap_extra | 16.40 | 19.50 | 1.19x | ✅ |
+| macd@10000 | scaled_10k | 132.17 | 138.21 | 1.05x | ✅ |
+| macd@100000 | scaled_100k | 1364.13 | 1364.47 | 1.00x | ✅ |
+| macd@1000000 | scaled_1m | 18593.07 | 18079.51 | 0.97x | ⚠️ |
+| macd_12_26_9 | momentum | 138.37 | 139.89 | 1.01x | ✅ |
+| mama | momentum_extra | 523.46 | 882.94 | 1.69x | ✅ |
+| max_30 | math_operators | 21.85 | 14.66 | 0.67x | ❌ |
+| medprice | price_transform_full | 4.61 | 6.21 | 1.35x | ✅ |
+| mfi_14 | momentum | 43.59 | 61.59 | 1.41x | ✅ |
+| min_30 | math_operators | 31.48 | 14.75 | 0.47x | ❌ |
+| minus_di_14 | directional | 63.79 | 59.05 | 0.93x | ⚠️ |
+| minus_dm_14 | momentum | 10.30 | 48.04 | 4.66x | ✅ |
+| mom_10 | momentum | 3.37 | 5.46 | 1.62x | ✅ |
+| mult | math_operators | 3.20 | 5.94 | 1.85x | ✅ |
+| natr_14 | volatility | 31.91 | 52.15 | 1.63x | ✅ |
+| obv | volume | 11.27 | 12.54 | 1.11x | ✅ |
+| percentrank_30 | statistics_extra | 465.20 | 362.69 | 0.78x | ❌ |
+| plus_di_14 | directional | 58.77 | 66.14 | 1.13x | ✅ |
+| plus_dm_14 | momentum | 9.91 | 47.98 | 4.84x | ✅ |
+| ppo_12_26 | momentum_extra | 53.39 | 46.47 | 0.87x | ⚠️ |
+| roc_10 | momentum | 6.23 | 10.85 | 1.74x | ✅ |
+| rsi_14 | momentum | 25.91 | 31.19 | 1.20x | ✅ |
+| rsi_14@10000 | scaled_10k | 25.05 | 31.02 | 1.24x | ✅ |
+| rsi_14@100000 | scaled_100k | 261.18 | 306.71 | 1.17x | ✅ |
+| rsi_14@1000000 | scaled_1m | 6081.47 | 4339.54 | 0.71x | ❌ |
+| sar | overlap_extra | 69.34 | 60.53 | 0.87x | ⚠️ |
+| sin | math_transform | 23.60 | 24.83 | 1.05x | ✅ |
+| sma_20 | overlap | 18.38 | 26.37 | 1.43x | ✅ |
+| sma_20@10000 | scaled_10k | 16.29 | 19.26 | 1.18x | ✅ |
+| sma_20@100000 | scaled_100k | 171.53 | 198.46 | 1.16x | ✅ |
+| sma_20@1000000 | scaled_1m | 4227.49 | 3171.37 | 0.75x | ❌ |
+| sqrt | math_transform | 8.96 | 16.60 | 1.85x | ✅ |
+| stddev_20 | volatility | 29.30 | 43.88 | 1.50x | ✅ |
+| stoch_14_3_3 | momentum | 85.48 | 96.64 | 1.13x | ✅ |
+| stochf_14_3 | momentum | 137.15 | 78.50 | 0.57x | ❌ |
+| stochrsi_14_14_3_3 | momentum | 243.01 | 109.06 | 0.45x | ❌ |
+| sub | math_operators | 3.39 | 5.90 | 1.74x | ✅ |
+| sum_30 | math_operators | 11.95 | 19.25 | 1.61x | ✅ |
+| t3_5 | overlap_extra | 38.21 | 346.87 | 9.08x | ✅ |
+| tanh | math_transform | 43.51 | 45.27 | 1.04x | ✅ |
+| tema_20 | overlap | 28.04 | 125.75 | 4.49x | ✅ |
+| trima_20 | overlap | 35.94 | 29.02 | 0.81x | ⚠️ |
+| trix_15 | momentum | 42.55 | 128.32 | 3.02x | ✅ |
+| tsf_14 | statistics_extra | 35.76 | 66.08 | 1.85x | ✅ |
+| typprice | price_transform_full | 6.74 | 10.67 | 1.58x | ✅ |
+| ultosc_7_14_28 | momentum | 88.79 | 58.05 | 0.65x | ❌ |
+| var_20 | statistics | 28.51 | 25.52 | 0.90x | ⚠️ |
+| wclprice | price_transform | 6.40 | 47.40 | 7.40x | ✅ |
+| willr_14 | momentum | 32.56 | 34.52 | 1.06x | ✅ |
+| wma_20 | overlap | 24.69 | 20.66 | 0.84x | ⚠️ |
 
-## 1. 核心指标性能（10K bars，历史快照）
+- **Total paired benchmarks**: 90
+- **Finkit faster or equal on this run**: 61
 
-| 指标 | Finkit (µs) | TA-Lib C (µs) | 当次性能比 | 状态 |
-| --- | ---: | ---: | ---: | :---: |
-| SMA(20) | 12.75 | 20.19 | **1.58x faster** | ✅ |
-| EMA(12) | 20.73 | 29.66 | **1.43x faster** | ✅ |
-| RSI(14) | 26.60 | 55.12 | **2.07x faster** | ✅ |
-| MACD(12,26,9) | 97.53 | 101.07 | **1.04x faster** | ✅ |
-| BBANDS(20,2) | 41.74 | 56.53 | **1.35x faster** | ✅ |
-| ATR(14) | 39.78 | 61.28 | **1.54x faster** | ✅ |
-
-**历史结论**：在这一次 Windows x86_64 AVX2 快照中，上述 6 个配对指标的 Finkit point estimate 均快于当时的 TA-Lib C 对照，其中 RSI 为 2.07x。该结论只适用于这次记录，不应扩展为所有机器、所有版本或所有指标均更快。
-
----
-
-## 2. 流式指标性能（历史快照）
-
-| 指标 | 10K (µs) | 100K (µs) | 500K (µs) | ns/val (500K) |
-| --- | ---: | ---: | ---: | ---: |
-| SMA(20) | 22 | 220 | 2,200 | **0.44** |
-| EMA(12) | 29 | 290 | 2,900 | **0.58** |
-| RSI(14) | 93 | 930 | 9,300 | **1.86** |
-
-这些数据用于观察当时的线性扩展特征；当前 Streaming 性能应重新在目标硬件上执行现行 benchmark。
-
----
-
-## 3. 公式引擎性能（历史快照）
-
-| 指标 | 原生 (µs) | 公式引擎 (µs) | 当次开销 |
-| --- | ---: | ---: | ---: |
-| SMA(20) | 12.75 | 16.58 | 1.30x |
-| EMA(12) | 20.73 | 55.14 | 2.66x |
-| RSI(14) | 26.60 | 42.82 | 1.61x |
-
-这组数据只反映当时版本的一次测量。当前 Formula 性能重点应继续比较 parse+execute 与 compile-once/eval-many，并把计划复用、scratch reuse 和 end-to-end binding 成本纳入同一证据链。
-
----
-
-## 4. 当前性能门禁应看哪里
-
-现行性能合同不再由这份历史 Markdown 数字决定，而由代码和 CI 门禁决定：
-
-- `core/tests/memory_regression.rs` — caller-owned hot path allocation；
-- `core/tests/performance_regression.rs` — O(n) 相对复杂度、HT_SINE release throughput、DirtyRange 行级效率与 full-equivalence；
-- `core/benches/talib_c_comparison.rs` — Finkit vs TA-Lib C 配对基准；
-- `scripts/bench_report.py` — schema、paired-row 校验与 competitor gate；
-- `.github/workflows/competitive-benchmark.yml` — 定期 head-to-head 证据；安装的 TA-Lib C 版本由 `tests/contracts/talib_coverage_matrix_v1.json` 的 `talib_core_version`（当前 `0.8.1`）在运行时决定，版本不符则拒绝记录证据。
-
----
-
-## 5. 当前推荐复现方法
-
-```bash
-# 正确性与性能回归
-cargo test -p finkit --test memory_regression --release --locked -- --test-threads=1
-cargo test -p finkit --test performance_regression --release --locked -- --test-threads=1
-
-# TA-Lib C 同机配对 + 环境记录 + 可选 precision
-./scripts/bench-vs-talib.sh --precision
-```
-
-有效竞品报告至少应同时保留：commit SHA、working-tree 状态、CPU/平台、Rust/Cargo、TA-Lib 版本、数据规模、参数和 paired benchmark rows。
-
----
-
-## 6. 进一步阅读
-
-- [Benchmark results](benchmark-results.md) — 当前性能合同与证据入口；
-- [Finkit vs TA-Lib C](BENCHMARK_VS_TALIB.md) — 竞品基准方法与 claim rules；
-- [竞品对比与超越路线](competitive-positioning-zh.md) — TA-Lib / VectorBT / Pandas TA Classic / ta-rs 的系统级对比。
-
-**结论**：这份文件的价值是“保留原始历史事实”，而不是“把历史数字当作永久结论”。Finkit 的性能优势必须持续由当前 commit 上的可复现证据证明。
+Do not convert one machine snapshot into a universal performance claim. Re-run the suite on the target deployment hardware.

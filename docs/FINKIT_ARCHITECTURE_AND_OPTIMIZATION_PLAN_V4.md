@@ -2804,3 +2804,110 @@ CHANGELOG 明确列出。
 
 未闭环（明确记账，不假装做完）：§32.3 记录的 30 项「追平 TA-Lib」复测、以及
 第九轮 D/E 的三轮审计与安装包重建，按用户在决策门上的选择另行排期。
+
+# 35. 第十轮：TA-Lib C 全量对比、落后项算法化追平与公式层审计（2026-10-04）
+
+用户指令：全部指标在**数值和计算效率**上对比 TA-Lib、提升公式执行效率、继续排查
+断链/孤儿/死循环、≥3 轮审计、更新文档、推送、重建安装包。
+
+## 35.1 TA-Lib C 0.8.1 全量对比（本机首次跑通 C 级基准）
+
+`C:\TA-Lib\lib\ta-lib-static.lib` 在位后，`scripts/bench-vs-talib.sh` 全链路首次在本机
+跑通：90 组 Finkit↔TA-Lib 配对（10K bars 基准 + 10K/100K/1M 缩放组 + 40+ 指标的
+AVX2 派生组）。**首轮快照：59 组 Finkit 更快，13 组 ❌（慢于 TA-Lib 25% 以上）**。
+
+**门禁脚本本身的一个真 bug 顺带修复**：`bench_report.py` 用 `startswith("FTA_")`
+做大小写敏感匹配，而 Criterion 在磁盘上把 bench id 小写化（`fta_sma_20`），
+导致配对发现恒为 0（`found 0 paired rows`）；且带 scale 的目录布局索引错位
+（bench 与 scale 取反）。修复后报告/JSON 门禁恢复工作。
+
+## 35.2 落后项逐项追平（算法级，全部语义保持或对齐 house NaN 契约）
+
+| 指标 | 轮前 µs | 轮后 µs | TA-Lib µs | 前→后 | 手段 |
+|---|---:|---:|---:|---|---|
+| WILLR_14 | 83.5 | **32.1** | 34.3 | 0.42x ❌ → **1.07x ✅** | `willr14_into`（Van Herk 块扫描）本就是为 bench 关键路径写的，但**从未接入公共入口**（孤儿快路径）；`willr_into` 在 period==14 且输入无 NaN 时分派给它 |
+| STOCH_14_3_3 | 150.4 | **84.9** | 95.5 | 0.65x ❌ → **1.11x ✅** | `stoch_monotonic_fast_into` 的极值维护从 128 槽环形队列换成 cached-index（每腿每 bar 一次比较，过期才回扫）；平局取最新、过期边界与原队列一致 |
+| AROONOSC_14 | 170.1 | **59.4** | 44.1 | 0.26x ❌ → **0.72x ❌**（2.9x 提速） | 整个函数从 VecDeque 重写为与 `aroon_with_deques` 相同的 cached-index 结构 |
+| MAX_30 | 29.1 | **22.3** | 14.6 | 0.52x ❌ → 0.65x ❌ | 内核重写（见 §35.3）：比较天然跳 NaN 免显式分支、expiry 仅在比较失败后查、warm 相位拆分消除每 bar emit 门 |
+| MIN_30 | 37.0 | **32.1** | 15.0 | 0.42x ❌ → 0.47x ❌ | 同上 |
+| ln | 75.0 | 见最终快照 | 47.2 | 0.63x ❌ | 两遍扫描（全量验证 + 全量计算）融合为单遍；错误契约不变（首个非法元素拒绝整次调用） |
+
+**STOCH 族 NaN 语义修正（随 STOCH 追平落地）**：原队列实现把 NaN 推入队列使其
+成为窗口极值，`denominator > 1e-15` 判假后 fast-K 输出 50.0；现按契约 B 直接
+dropna——NaN 输入不再冻结在 50.0，与 HHV/LLV 家族一致。
+
+## 35.3 公式层追平 + 潜在问题修复（第一轮审计产出）
+
+`core/src/formula/functions_legacy.rs` 中 15+ 处 O(n·w) 逐窗重扫的算法化：
+
+- **HHVBARS / LLVBARS / MAXINDEX / MININDEX** → 共享 `ArgExtremeDeque`（单调
+  deque 取 arg-extreme，O(1)/bar）。平局保**最早**下标（严格比较弹栈——eager
+  弹平局会在旧元素过期后把答案错位到更晚的 bar，被 `test_fn_maxindex` /
+  `test_hhvbars_llvbars_keep_values_without_window_allocations` 当场抓住）。
+- **EVERY / EXIST / COUNT** → 滑动真值计数 O(1)/bar。EVERY 的谓词是 `<= 0.0`
+  （NaN 不算假），因此计"失败数"而非"成功数"，逐位保持原语义。
+- **VWMA / MFI / TOTALVOL** → 滑动和 + 窗内缺失跟踪：NaN 只污染含它的窗口
+  （与逐窗重扫一致），而非永久毒化累加器。
+- **ICHIMOKU_TENKAN / ICHIMOKU_KIJUN / DONCHIAN（中轨/上/下/宽）** →
+  `rolling_minmax_visit` / `rolling_max` / `rolling_min`（第九轮快内核）。
+  DONCHIAN_UPPER/LOWER 全缺失窗口由 `±inf` 改为 NaN（与家族对齐）；
+  ICHIMOKU 的 `(n - 1)` 在 `n == 0` 时的 **usize 下溢 panic**（参数绕过了
+  `extract_n` 守卫）一并消除——内核对 `window == 0` 幂等返回。
+
+**其他修复**：
+
+- **解析器栈溢出**（abort 级，FFI panic 守卫拦不住）：pest 递归下降对超深
+  `((((…))))` 会打爆线程栈。`parse_formula` 现预扫描括号嵌套深度，超 256 层
+  直接返回 `Err`（新增 `test_deep_nesting_is_rejected_not_a_stack_overflow`）。
+- **aroonosc 全缺失窗口 panic**：旧实现 `highs[0]` 索引空队列；重写后报 NaN。
+- **aroonosc usize 减法下溢**：`(highest_idx - lowest_idx)` 改为先转 f64 再减。
+- **`bench_report.py` 配对 bug**：见 §35.1。
+
+**评估后不接线（如实记账）**：`simd_ops::simd_linreg_slope`（含 AVX2）零外部
+调用者，但其 AVX2 变体只向量化了初始窗口求和（period=14 仅 3 个 chunk），主循
+环与标量相同——接线无收益，保留为公共 API 并在此记录结论。
+`SimdOps::hhv/llv`（AVX2/AVX512/NEON 块扫描）同样无内部调用者（公式层走
+`statistics` 快内核），但属公共 SIMD API 表面，保留。
+
+## 35.4 三轮审计结论
+
+1. **第一轮（静态扫描 + 修公式层）**：产出 §35.3 全部修复；`extract_n` 守卫
+   确认覆盖其余 `(n - 1)` 循环。
+2. **第二轮（测试反馈驱动）**：ArgExtremeDeque 平局/过期语义 bug、MININDEX
+   offer 前置、aroonosc 下溢——全部被 lib 门禁当场抓住并修复（3037/3037）。
+3. **第三轮（回归 + 门禁）**：62 target / 3950 integration 全绿（含
+   `golden_talib_tests` 数值金标、`formula_differential_tests` 52/52、
+   `extrema_cached_path` 10/10、`test_index_contract`）；`cargo check` 0 警告；
+   fmt / clippy / 22 门禁见 CHANGELOG 当日条目。
+
+**死循环/递归审计**：executor 三处 `loop` 均有 `MAX_LOOP_ITERATIONS`（10_000）
+上限；stateful FOR 有 `STATEFUL_MAX_LOOP_ITERATIONS` 背照 + 构造期拒绝；沙箱
+递归深度可配上限。解析器新增嵌套深度守卫（§35.3）后，四条递归链
+（parse→optimize→compile→execute）全部有界。
+
+## 35.5 追平状态总账（诚实记账，最终快照 `docs/BENCHMARK_REPORT.md`）
+
+- **90 组配对：61 组 Finkit 更快或持平（轮前 59 组），13 组仍 ❌**。
+- **本轮移出 ❌**：`WILLR_14`（0.42x → **1.07x ✅**）、`STOCH_14_3_3`
+  （0.65x → **1.11x ✅**）；`AROONOSC_14` 0.26x → 0.72x（仍 ❌）；
+  `MAX_30` 0.52x → 0.67x、`MIN_30` 0.42x → 0.47x、`ln` 0.63x → 0.76x
+  （仍 ❌，根因见下）。
+- **仍落后（❌，根因已定位）**：
+  - `MIN_30`/`MAX_30`/`AROONOSC_14`：TA-Lib 的裸 cached-index 循环没有 NaN
+    契约、warm 门与 `has_finite` 跟踪，我们的每 bar 分支多 1-2 条；再压只能
+    牺牲缺失值语义（不做）。
+  - `STOCHF`/`STOCHRSI`：走 `stochf_with_ma_type` 另一条内核路径，未在本轮
+    改造范围（与 `stoch` 的 monotonic fast path 不同代码）。
+  - `ULTOSC`：已是环形缓冲零分配实现，剩余差距在 TA-Lib 的三周期滑动和布局。
+  - `LINREG_SLOPE/INTERCEPT`：已是 O(1)/bar 滑动实现，剩余 ~1.3x 为
+    TA-Lib 固定系数布局差异。
+  - `PERCENTRANK_30`：窗口内比较计数本质 O(w)（每 bar 的参照值在变，前缀和
+    不适用），TA-Lib 同为 O(w) 但常数更小。
+  - `ln`：单遍融合后仍慢 ~25%，TA-Lib 直接调 C 运行时 `log()`，每元素成本
+    已接近 `log()` 本身。
+  - 缩放组 `SMA/RSI/BBANDS @1M`：10K/100K 领先、1M 落后，为缓存效应，非算法
+    问题。
+- **数值一致性**：`golden_talib_tests`（TA-Lib 金标 JSON，覆盖全部对比指标）
+  在 62 target / 3950 全绿中；`bench_vs_talib_precision.py` 需要 PyPI
+  `talib` + `finkit` wheel（本机未装，按设计 exit 2，不伪造数据）。
+

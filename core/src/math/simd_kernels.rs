@@ -13,6 +13,7 @@
 //! These write results into caller-provided buffers without requiring `Vec`.
 
 #[cfg(feature = "std")]
+use crate::math::statistics::rescan_extreme_window;
 use crate::utils::smoothing_factor;
 
 #[cfg(all(feature = "no_std", not(feature = "std")))]
@@ -377,7 +378,6 @@ fn stoch_monotonic_fast_into(
         return;
     }
 
-    const MASK: usize = 127;
     let fastk_start = k_period - 1;
     let slowk_start = fastk_start + k_slow - 1;
     let slowd_start = slowk_start + d_period - 1;
@@ -390,12 +390,6 @@ fn stoch_monotonic_fast_into(
         *value = f64::NAN;
     }
 
-    let mut max_queue = [0usize; 128];
-    let mut min_queue = [0usize; 128];
-    let mut max_head = 0usize;
-    let mut max_tail = 0usize;
-    let mut min_head = 0usize;
-    let mut min_tail = 0usize;
     let mut fast_k_ring = alloc::vec![0.0_f64; k_slow];
     let mut k_ring = alloc::vec![0.0_f64; d_period];
     let mut fk_ring_pos = 0usize;
@@ -408,40 +402,42 @@ fn stoch_monotonic_fast_into(
     let k_out_ptr = k_out.as_mut_ptr();
     let d_out_ptr = d_out.as_mut_ptr();
 
+    // Cached-index arg-extremes instead of a monotonic queue: one comparison
+    // per leg per bar, and the window is only rescanned when the cached
+    // extreme actually leaves it. The tie rule (newest wins) and the expiry
+    // boundary (`idx + k_period <= i`) match the deque this replaces; missing
+    // bars fail every comparison and are skipped, so a NaN no longer freezes
+    // the fast-K value at 50.0 for as long as it sits in the window.
+    let mut highest = f64::NEG_INFINITY;
+    let mut highest_idx = 0usize;
+    let mut lowest = f64::INFINITY;
+    let mut lowest_idx = 0usize;
+
     for i in 0..len {
-        while max_tail > max_head {
-            let back = max_queue[(max_tail - 1) & MASK];
-            if unsafe { *high_ptr.add(back) <= *high_ptr.add(i) } {
-                max_tail -= 1;
-            } else {
-                break;
-            }
-        }
-        max_queue[max_tail & MASK] = i;
-        max_tail += 1;
+        let new_high = unsafe { *high_ptr.add(i) };
+        let new_low = unsafe { *low_ptr.add(i) };
 
-        while min_tail > min_head {
-            let back = min_queue[(min_tail - 1) & MASK];
-            if unsafe { *low_ptr.add(back) >= *low_ptr.add(i) } {
-                min_tail -= 1;
-            } else {
-                break;
-            }
+        if new_high >= highest {
+            highest = new_high;
+            highest_idx = i;
+        } else if highest_idx + k_period <= i {
+            let (rescanned, position, _found) =
+                rescan_extreme_window::<true>(high, i + 1 - k_period, i);
+            highest = rescanned;
+            highest_idx = position;
         }
-        min_queue[min_tail & MASK] = i;
-        min_tail += 1;
 
-        let window_start = (i + 1).saturating_sub(k_period);
-        while max_head < max_tail && max_queue[max_head & MASK] < window_start {
-            max_head += 1;
-        }
-        while min_head < min_tail && min_queue[min_head & MASK] < window_start {
-            min_head += 1;
+        if new_low <= lowest {
+            lowest = new_low;
+            lowest_idx = i;
+        } else if lowest_idx + k_period <= i {
+            let (rescanned, position, _found) =
+                rescan_extreme_window::<false>(low, i + 1 - k_period, i);
+            lowest = rescanned;
+            lowest_idx = position;
         }
 
         let fk = if i >= fastk_start {
-            let highest = unsafe { *high_ptr.add(max_queue[max_head & MASK]) };
-            let lowest = unsafe { *low_ptr.add(min_queue[min_head & MASK]) };
             let denom = highest - lowest;
             if denom > 1e-15 {
                 (unsafe { *close_ptr.add(i) } - lowest) / denom * 100.0

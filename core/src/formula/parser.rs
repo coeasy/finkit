@@ -8,7 +8,38 @@ use crate::formula::ast::*;
 #[grammar = "formula/grammar.pest"]
 pub struct FormulaParser;
 
+/// Deepest parenthesis nesting `parse_formula` accepts.
+///
+/// The recursive-descent grammar consumes nesting on the call stack, so a
+/// pathological `((((…))))` input would overflow the thread stack — an
+/// abort, not a panic, which no FFI guard can catch. The depth is therefore
+/// rejected before pest ever sees the input. Real formulas nest a handful
+/// of levels; 256 leaves orders of magnitude of headroom.
+const MAX_NESTING_DEPTH: usize = 256;
+
+fn nesting_depth(source: &str) -> usize {
+    let mut depth = 0usize;
+    let mut max = 0usize;
+    for ch in source.chars() {
+        match ch {
+            '(' | '[' => {
+                depth += 1;
+                max = max.max(depth);
+            }
+            ')' | ']' => depth = depth.saturating_sub(1),
+            _ => {}
+        }
+    }
+    max
+}
+
 pub fn parse_formula(source: &str) -> Result<AstNode, String> {
+    if nesting_depth(source) > MAX_NESTING_DEPTH {
+        return Err(format!(
+            "Parse error: nesting depth exceeds the limit of {MAX_NESTING_DEPTH} levels"
+        ));
+    }
+
     let pairs =
         FormulaParser::parse(Rule::program, source).map_err(|e| format!("Parse error: {}", e))?;
 
@@ -889,6 +920,19 @@ mod tests {
         } else {
             panic!("Expected BinaryOp with Sub");
         }
+    }
+
+    #[test]
+    fn test_deep_nesting_is_rejected_not_a_stack_overflow() {
+        // 256 levels stay parseable.
+        let ok = format!("{}1{}", "(".repeat(200), ")".repeat(200));
+        assert!(parse_formula(&ok).is_ok());
+
+        // Beyond the limit the input is rejected up front. Before the guard
+        // this overflowed the thread stack (an abort no FFI guard catches).
+        let too_deep = format!("{}1{}", "(".repeat(300), ")".repeat(300));
+        let error = parse_formula(&too_deep).unwrap_err();
+        assert!(error.contains("nesting depth"), "got: {error}");
     }
 
     #[test]

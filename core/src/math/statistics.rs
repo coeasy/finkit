@@ -412,7 +412,7 @@ fn first_finite(values: &[f64]) -> Option<usize> {
 /// component is the only way to tell "no finite bar in this window" apart from
 /// "the extreme is very large", so it must be carried out with the value.
 #[inline]
-fn rescan_extreme_window<const WANT_MAX: bool>(
+pub(crate) fn rescan_extreme_window<const WANT_MAX: bool>(
     values: &[f64],
     start: usize,
     end: usize,
@@ -481,39 +481,48 @@ fn rolling_extreme_cached<const WANT_MAX: bool>(
     let source = data.as_ptr();
     let target = output.as_mut_ptr();
 
-    for i in 0..data.len() {
-        // SAFETY: `i < data.len() == output.len()` (callers keep the two in
-        // step) and both pointers are derived from slices that outlive the loop.
-        unsafe {
-            let value = *source.add(i);
-            let expired = has_finite && best_index + window <= i;
-
-            if !value.is_nan()
-                && (!has_finite || {
-                    if WANT_MAX {
-                        value >= best
-                    } else {
-                        value <= best
-                    }
-                })
-            {
+    // The update is branch-lean on purpose. `NaN` fails every comparison, so a
+    // missing bar falls through the dominance test with no explicit NaN check,
+    // and the expiry test only runs when the incoming bar failed to take the
+    // extreme (a bar that does take it is never out of the window).
+    macro_rules! track {
+        ($i:expr) => {{
+            // SAFETY: `$i < data.len() == output.len()` (callers keep the two
+            // in step) and both pointers are derived from slices that outlive
+            // the loop.
+            let value = unsafe { *source.add($i) };
+            let dominates = if WANT_MAX {
+                value >= best
+            } else {
+                value <= best
+            };
+            if dominates {
                 best = value;
-                best_index = i;
+                best_index = $i;
                 has_finite = true;
-            } else if expired {
-                // The cached extreme left the window: rescan the window from its
-                // left edge, dropping the bars that are missing.
+            } else if has_finite && best_index + window <= $i {
+                // The cached extreme left the window: rescan the window from
+                // its left edge, dropping the bars that are missing.
                 let (rescanned, position, found) =
-                    rescan_extreme_window::<WANT_MAX>(data, i + 1 - window, i);
+                    rescan_extreme_window::<WANT_MAX>(data, $i + 1 - window, $i);
                 best = rescanned;
                 best_index = position;
                 has_finite = found;
             }
+        }};
+    }
 
-            if i >= warm_at {
-                *target.add(i) = if has_finite { best } else { f64::NAN };
-            }
-        }
+    // Warm phase: the extrema are tracked but nothing is emitted yet, so the
+    // per-bar emit gate of the old single loop disappears.
+    let warm_end = warm_at.min(data.len());
+    for i in 0..warm_end {
+        track!(i);
+    }
+    // Reporting phase: same update plus one unconditional store per bar.
+    for i in warm_end..data.len() {
+        track!(i);
+        // SAFETY: `i < output.len()`, see the invariant above.
+        unsafe { *target.add(i) = if has_finite { best } else { f64::NAN } };
     }
 }
 
@@ -540,47 +549,59 @@ fn rolling_minmax_cached(
     let high_ptr = high.as_ptr();
     let low_ptr = low.as_ptr();
 
-    for i in 0..high.len() {
-        // SAFETY: `i < high.len() == low.len()` and both pointers come from
-        // slices that outlive the loop.
-        unsafe {
-            let candidate_high = *high_ptr.add(i);
-            let candidate_low = *low_ptr.add(i);
-            let high_expired = has_high && highest_index + window <= i;
-            let low_expired = has_low && lowest_index + window <= i;
+    // Branch-lean update, mirroring `rolling_extreme_cached`: `NaN` fails every
+    // comparison and so never takes an extreme, and each leg's expiry is only
+    // tested after its dominance test failed.
+    macro_rules! track {
+        ($i:expr) => {{
+            // SAFETY: `$i < high.len() == low.len()` and both pointers come
+            // from slices that outlive the loop.
+            let candidate_high = unsafe { *high_ptr.add($i) };
+            let candidate_low = unsafe { *low_ptr.add($i) };
 
-            if !candidate_high.is_nan() && (!has_high || candidate_high >= highest) {
+            if candidate_high >= highest {
                 highest = candidate_high;
-                highest_index = i;
+                highest_index = $i;
                 has_high = true;
-            } else if high_expired {
+            } else if has_high && highest_index + window <= $i {
                 let (rescanned, position, found) =
-                    rescan_extreme_window::<true>(high, i + 1 - window, i);
+                    rescan_extreme_window::<true>(high, $i + 1 - window, $i);
                 highest = rescanned;
                 highest_index = position;
                 has_high = found;
             }
 
-            if !candidate_low.is_nan() && (!has_low || candidate_low <= lowest) {
+            if candidate_low <= lowest {
                 lowest = candidate_low;
-                lowest_index = i;
+                lowest_index = $i;
                 has_low = true;
-            } else if low_expired {
+            } else if has_low && lowest_index + window <= $i {
                 let (rescanned, position, found) =
-                    rescan_extreme_window::<false>(low, i + 1 - window, i);
+                    rescan_extreme_window::<false>(low, $i + 1 - window, $i);
                 lowest = rescanned;
                 lowest_index = position;
                 has_low = found;
             }
+        }};
+    }
 
-            if i >= warm_high_at && i >= warm_low_at {
-                emit(
-                    i,
-                    if has_high { highest } else { f64::NAN },
-                    if has_low { lowest } else { f64::NAN },
-                );
-            }
-        }
+    // Warm-up split: while either leg is still short of its warm point nothing
+    // is emitted. Both warm points then coincide with plain tracking.
+    let tracked_end = warm_high_at.min(warm_low_at).min(high.len());
+    let emit_from = warm_high_at.max(warm_low_at).min(high.len());
+    for i in 0..tracked_end {
+        track!(i);
+    }
+    for i in tracked_end..emit_from {
+        track!(i);
+    }
+    for i in emit_from..high.len() {
+        track!(i);
+        emit(
+            i,
+            if has_high { highest } else { f64::NAN },
+            if has_low { lowest } else { f64::NAN },
+        );
     }
 }
 

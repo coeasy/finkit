@@ -2088,6 +2088,17 @@ pub fn willr_into(
         });
     }
 
+    // The fixed-period block-scan kernel is bit-identical to the generic
+    // visitor on NaN-free input, but the generic path also implements the
+    // documented warm-up contract (skip a leading missing run), which the
+    // block scan does not. Dispatch on cleanliness so both properties hold.
+    if period == 14
+        && high.iter().all(|value| !value.is_nan())
+        && low.iter().all(|value| !value.is_nan())
+    {
+        return willr14_into(high, low, close, output);
+    }
+
     crate::utils::simd_fill_nan(&mut output[..period - 1]);
     rolling_minmax_visit(high, low, period, |i, highest, lowest| {
         let range = highest - lowest;
@@ -3166,36 +3177,57 @@ pub fn aroonosc(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>>
     validate_input(high.len(), period + 1)?;
     let mut output = Array1::from_elem(high.len(), f64::NAN);
     let inv_period = 100.0 / period as f64;
-    let mut highs = VecDeque::with_capacity(period + 1);
-    let mut lows = VecDeque::with_capacity(period + 1);
-    for i in 0..=period {
-        while highs.back().is_some_and(|&j| high[j] <= high[i]) {
-            highs.pop_back();
+    let window = period + 1;
+
+    // Cached-index arg-extremes — the same strategy `aroon_with_deques` uses
+    // and the one that beats a monotonic deque by ~3x here: one comparison per
+    // leg per bar, rescanning only when the cached extreme leaves the window.
+    // `NaN` fails every comparison, so missing bars are skipped with no
+    // explicit test; a window with no finite bar reports NaN (the deque version
+    // used to index an empty queue and panic there instead).
+    let mut highest = f64::NEG_INFINITY;
+    let mut highest_idx = 0usize;
+    let mut has_high = false;
+    let mut lowest = f64::INFINITY;
+    let mut lowest_idx = 0usize;
+    let mut has_low = false;
+
+    for i in 0..high.len() {
+        let new_high = high[i];
+        let new_low = low[i];
+
+        if new_high >= highest {
+            highest = new_high;
+            highest_idx = i;
+            has_high = true;
+        } else if has_high && highest_idx + window <= i {
+            let (rescanned, position, found) =
+                crate::math::statistics::rescan_extreme_window::<true>(high, i + 1 - window, i);
+            highest = rescanned;
+            highest_idx = position;
+            has_high = found;
         }
-        while lows.back().is_some_and(|&j| low[j] >= low[i]) {
-            lows.pop_back();
+
+        if new_low <= lowest {
+            lowest = new_low;
+            lowest_idx = i;
+            has_low = true;
+        } else if has_low && lowest_idx + window <= i {
+            let (rescanned, position, found) =
+                crate::math::statistics::rescan_extreme_window::<false>(low, i + 1 - window, i);
+            lowest = rescanned;
+            lowest_idx = position;
+            has_low = found;
         }
-        highs.push_back(i);
-        lows.push_back(i);
-    }
-    output[period] = (highs[0] as f64 - lows[0] as f64) * inv_period;
-    for i in period + 1..high.len() {
-        let window_start = i - period;
-        while highs.back().is_some_and(|&j| high[j] <= high[i]) {
-            highs.pop_back();
+
+        if i + 1 >= window {
+            output[i] = if has_high && has_low {
+                // Cast before subtracting: the argmax may sit below the argmin.
+                (highest_idx as f64 - lowest_idx as f64) * inv_period
+            } else {
+                f64::NAN
+            };
         }
-        while lows.back().is_some_and(|&j| low[j] >= low[i]) {
-            lows.pop_back();
-        }
-        highs.push_back(i);
-        lows.push_back(i);
-        while highs.front().is_some_and(|&j| j < window_start) {
-            highs.pop_front();
-        }
-        while lows.front().is_some_and(|&j| j < window_start) {
-            lows.pop_front();
-        }
-        output[i] = (highs[0] as f64 - lows[0] as f64) * inv_period;
     }
     Ok(output)
 }

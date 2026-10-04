@@ -1,5 +1,5 @@
 use ndarray::{s, Array1};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use crate::formula::simd::SimdOps;
 use crate::formula::types::*;
@@ -27,6 +27,55 @@ pub(crate) type FormulaFn =
 
 fn nan_vec(len: usize) -> Array1<f64> {
     Array1::from_elem(len, f64::NAN)
+}
+
+/// Sliding arg-extreme over a trailing window, backed by a monotonic deque.
+///
+/// Amortized O(1) per bar. `WANT_MAX` selects the direction. Ties keep the
+/// earliest bar (the strict pop leaves equal bars queued, so the front stays
+/// the first occurrence), matching the per-window rescans this replaces.
+/// Missing bars are never queued, so a window with no finite bar yields
+/// `None` from [`Self::extreme_index`].
+#[derive(Default)]
+struct ArgExtremeDeque<const WANT_MAX: bool> {
+    deque: VecDeque<(usize, f64)>,
+}
+
+impl<const WANT_MAX: bool> ArgExtremeDeque<WANT_MAX> {
+    #[inline]
+    fn offer(&mut self, index: usize, value: f64) {
+        if value.is_nan() {
+            return;
+        }
+        // Strict comparisons keep *equal* bars in the deque instead of popping
+        // them: the front must stay the earliest extreme, and an eagerly popped
+        // tie would surface a later bar's offset once the earlier one expires.
+        while self
+            .deque
+            .back()
+            .is_some_and(|&(_, v)| if WANT_MAX { v < value } else { v > value })
+        {
+            self.deque.pop_back();
+        }
+        self.deque.push_back((index, value));
+    }
+
+    /// Drop every entry that left the window `[window_start, ..]`.
+    #[inline]
+    fn expire_before(&mut self, window_start: usize) {
+        while self
+            .deque
+            .front()
+            .is_some_and(|&(index, _)| index < window_start)
+        {
+            self.deque.pop_front();
+        }
+    }
+
+    #[inline]
+    fn extreme_index(&self) -> Option<usize> {
+        self.deque.front().map(|&(index, _)| index)
+    }
 }
 
 fn ensure_args_len(name: &str, args: &[Array1<f64>], expected: usize) -> Result<(), FormulaError> {
@@ -253,16 +302,33 @@ fn fn_vwma_indicator(
     let n = extract_n(args, 2, "VWMA")?;
     let data_len = ctx.data_len;
     let mut out = nan_vec(data_len);
-    for i in (n - 1)..data_len {
-        let start = (i + 1).saturating_sub(n);
-        let mut pv = 0.0f64;
-        let mut v = 0.0f64;
-        for j in start..=i {
-            pv += close[j] * volume[j];
-            v += volume[j];
+
+    // Two sliding sums (`Σ close*volume`, `Σ volume`) make this O(1) per bar.
+    // A bar whose close or volume is missing keeps the sums finite by being
+    // excluded and is tracked in `missing`, so any window that contained a
+    // missing bar still reports NaN — exactly what the per-window rescan did.
+    let mut pv_sum = 0.0f64;
+    let mut v_sum = 0.0f64;
+    let mut missing = 0usize;
+    for i in 0..data_len {
+        let (c, v) = (close[i], volume[i]);
+        if c.is_nan() || v.is_nan() {
+            missing += 1;
+        } else {
+            pv_sum += c * v;
+            v_sum += v;
         }
-        if v.abs() > 1e-15 {
-            out[i] = pv / v;
+        if i >= n {
+            let (oc, ov) = (close[i - n], volume[i - n]);
+            if oc.is_nan() || ov.is_nan() {
+                missing -= 1;
+            } else {
+                pv_sum -= oc * ov;
+                v_sum -= ov;
+            }
+        }
+        if i + 1 >= n && missing == 0 && v_sum.abs() > 1e-15 {
+            out[i] = pv_sum / v_sum;
         }
     }
     Ok(out)
@@ -342,23 +408,16 @@ fn fn_hhvbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     let data_len = ctx.data_len;
     let mut output = nan_vec(data_len);
 
-    // Scan the source slice in place. The previous implementation allocated
-    // and copied a temporary window for every bar, which made this O(bars)
-    // allocations on top of the O(bars * period) scan.
+    // Monotonic deque over bar indices: amortized O(1) per bar instead of
+    // rescanning the window. Ties keep the earliest bar (`<=` pops the equal
+    // tail), matching the per-window rescan this replaces. Missing bars are
+    // never queued; a window with no finite bar reports nothing.
+    let mut deque = ArgExtremeDeque::<true>::default();
     for i in 0..data_len {
         let window_start = (i + 1).saturating_sub(n);
-        let mut max_value = f64::NEG_INFINITY;
-        let mut max_index = None;
-
-        for j in window_start..=i {
-            let value = input[j];
-            if !value.is_nan() && value > max_value {
-                max_value = value;
-                max_index = Some(j);
-            }
-        }
-
-        if let Some(index) = max_index {
+        deque.offer(i, input[i]);
+        deque.expire_before(window_start);
+        if let Some(index) = deque.extreme_index() {
             output[i] = (i - index) as f64;
         }
     }
@@ -374,22 +433,14 @@ fn fn_llvbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     let data_len = ctx.data_len;
     let mut output = nan_vec(data_len);
 
-    // Keep the first occurrence on ties, matching the old temporary-window
-    // implementation while avoiding one Vec allocation per bar.
+    // Same deque as `fn_hhvbars`, mirrored for the minimum; see
+    // [`ArgExtremeDeque`] for the tie and missing-bar rules.
+    let mut deque = ArgExtremeDeque::<false>::default();
     for i in 0..data_len {
         let window_start = (i + 1).saturating_sub(n);
-        let mut min_value = f64::INFINITY;
-        let mut min_index = None;
-
-        for j in window_start..=i {
-            let value = input[j];
-            if !value.is_nan() && value < min_value {
-                min_value = value;
-                min_index = Some(j);
-            }
-        }
-
-        if let Some(index) = min_index {
+        deque.offer(i, input[i]);
+        deque.expire_before(window_start);
+        if let Some(index) = deque.extreme_index() {
             output[i] = (i - index) as f64;
         }
     }
@@ -503,15 +554,19 @@ pub(crate) fn fn_count(
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
 
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let mut count = 0usize;
-        for j in window_start..=i {
-            if cond[j] > 0.0 {
-                count += 1;
-            }
+    // Sliding true-count over the trailing window: O(1) per bar. `> 0.0`
+    // treats a missing bar as false, same as the per-window rescan.
+    let mut true_count = 0usize;
+    for i in 0..data_len {
+        if cond[i] > 0.0 {
+            true_count += 1;
         }
-        result[i] = count as f64;
+        if i >= n && cond[i - n] > 0.0 {
+            true_count -= 1;
+        }
+        if i + 1 >= n {
+            result[i] = true_count as f64;
+        }
     }
 
     Ok(result)
@@ -811,16 +866,20 @@ fn fn_every(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, F
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
 
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let mut all_true = true;
-        for j in window_start..=i {
-            if cond[j] <= 0.0 {
-                all_true = false;
-                break;
-            }
+    // Sliding count of bars that fail the predicate: `EVERY` is true when the
+    // window holds no false bar. The predicate is `<= 0.0`, so a missing bar
+    // does *not* fail it — counting failures (not successes) keeps that rule.
+    let mut false_count = 0usize;
+    for i in 0..data_len {
+        if cond[i] <= 0.0 {
+            false_count += 1;
         }
-        result[i] = if all_true { 1.0 } else { 0.0 };
+        if i >= n && cond[i - n] <= 0.0 {
+            false_count -= 1;
+        }
+        if i + 1 >= n {
+            result[i] = if false_count == 0 { 1.0 } else { 0.0 };
+        }
     }
 
     Ok(result)
@@ -834,16 +893,18 @@ fn fn_exist(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, F
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
 
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let mut any_true = false;
-        for j in window_start..=i {
-            if cond[j] > 0.0 {
-                any_true = true;
-                break;
-            }
+    // Sliding true-count: `EXIST` is true when at least one bar is true.
+    let mut true_count = 0usize;
+    for i in 0..data_len {
+        if cond[i] > 0.0 {
+            true_count += 1;
         }
-        result[i] = if any_true { 1.0 } else { 0.0 };
+        if i >= n && cond[i - n] > 0.0 {
+            true_count -= 1;
+        }
+        if i + 1 >= n {
+            result[i] = if true_count > 0 { 1.0 } else { 0.0 };
+        }
     }
 
     Ok(result)
@@ -1034,23 +1095,19 @@ fn fn_maxindex(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let data_len = ctx.data_len;
     let mut output = nan_vec(data_len);
 
+    // Monotonic deque: amortized O(1) per bar; see [`ArgExtremeDeque`]. The
+    // reported index stays relative to the window start, as before. Every bar
+    // is offered — bars before the first full window must still be tracked.
+    let mut deque = ArgExtremeDeque::<true>::default();
     for i in 0..data_len {
+        deque.offer(i, input[i]);
         if i + 1 < n {
             continue;
         }
         let window_start = i + 1 - n;
-        let mut max_val = f64::NEG_INFINITY;
-        let mut max_idx: f64 = 0.0;
-
-        for j in window_start..=i {
-            if !input[j].is_nan() && input[j] > max_val {
-                max_val = input[j];
-                max_idx = (j - window_start) as f64;
-            }
-        }
-
-        if max_val > f64::NEG_INFINITY {
-            output[i] = max_idx;
+        deque.expire_before(window_start);
+        if let Some(index) = deque.extreme_index() {
+            output[i] = (index - window_start) as f64;
         }
     }
 
@@ -1065,23 +1122,16 @@ fn fn_minindex(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let data_len = ctx.data_len;
     let mut output = nan_vec(data_len);
 
+    let mut deque = ArgExtremeDeque::<false>::default();
     for i in 0..data_len {
+        deque.offer(i, input[i]);
         if i + 1 < n {
             continue;
         }
         let window_start = i + 1 - n;
-        let mut min_val = f64::INFINITY;
-        let mut min_idx: f64 = 0.0;
-
-        for j in window_start..=i {
-            if !input[j].is_nan() && input[j] < min_val {
-                min_val = input[j];
-                min_idx = (j - window_start) as f64;
-            }
-        }
-
-        if min_val < f64::INFINITY {
-            output[i] = min_idx;
+        deque.expire_before(window_start);
+        if let Some(index) = deque.extreme_index() {
+            output[i] = (index - window_start) as f64;
         }
     }
 
@@ -2000,27 +2050,45 @@ fn fn_mfi(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, For
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
 
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let mut pos_flow = 0.0f64;
-        let mut neg_flow = 0.0f64;
-        for j in window_start..=i {
-            if j == 0 {
-                continue;
-            }
-            let tp = (high[j] + low[j] + close[j]) / 3.0;
-            let prev_tp = (high[j - 1] + low[j - 1] + close[j - 1]) / 3.0;
-            let mf = tp * volume[j];
-            if tp > prev_tp {
-                pos_flow += mf;
-            } else {
-                neg_flow += mf;
+    // `flow(j)` — typical price times volume, classified by the typical-price
+    // change — is a per-bar series, so the two flow sums slide in O(1) per
+    // bar. `j == 0` has no previous bar and never contributes (its index is
+    // never added, so it must never be subtracted either). A bar with a
+    // missing flow is excluded from the sums and tracked in `missing`, which
+    // reproduces the per-window rescan's "one NaN poisons the window" rule.
+    let mut pos_flow = 0.0f64;
+    let mut neg_flow = 0.0f64;
+    let mut missing = 0usize;
+    for i in 0..data_len {
+        if i >= 1 {
+            let tp = (high[i] + low[i] + close[i]) / 3.0;
+            let prev_tp = (high[i - 1] + low[i - 1] + close[i - 1]) / 3.0;
+            let mf = tp * volume[i];
+            match () {
+                _ if mf.is_nan() => missing += 1,
+                _ if tp > prev_tp => pos_flow += mf,
+                _ => neg_flow += mf,
             }
         }
-        if neg_flow.abs() < 1e-15 {
-            result[i] = 100.0;
-        } else {
-            result[i] = 100.0 - (100.0 / (1.0 + pos_flow / neg_flow));
+        if i >= n {
+            let out_bar = i - n;
+            if out_bar >= 1 {
+                let tp = (high[out_bar] + low[out_bar] + close[out_bar]) / 3.0;
+                let prev_tp = (high[out_bar - 1] + low[out_bar - 1] + close[out_bar - 1]) / 3.0;
+                let mf = tp * volume[out_bar];
+                match () {
+                    _ if mf.is_nan() => missing -= 1,
+                    _ if tp > prev_tp => pos_flow -= mf,
+                    _ => neg_flow -= mf,
+                }
+            }
+        }
+        if i + 1 >= n && missing == 0 {
+            if neg_flow.abs() < 1e-15 {
+                result[i] = 100.0;
+            } else {
+                result[i] = 100.0 - (100.0 / (1.0 + pos_flow / neg_flow));
+            }
         }
     }
 
@@ -2845,17 +2913,10 @@ fn fn_ichimoku_tenkan(
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
 
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let hh = (window_start..=i)
-            .map(|j| high[j])
-            .fold(f64::NEG_INFINITY, f64::max);
-        let ll = (window_start..=i)
-            .map(|j| low[j])
-            .fold(f64::INFINITY, f64::min);
-        result[i] = (hh + ll) / 2.0;
-    }
-
+    // Fused high/low extrema kernel, O(1) per bar. The previous fold also
+    // underflowed on `n == 0` (`(n - 1)` on usize); the kernel just leaves
+    // the output missing.
+    ichimoku_midpoint(high, low, n, &mut result);
     Ok(result)
 }
 
@@ -2875,18 +2936,23 @@ fn fn_ichimoku_kijun(
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
 
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let hh = (window_start..=i)
-            .map(|j| high[j])
-            .fold(f64::NEG_INFINITY, f64::max);
-        let ll = (window_start..=i)
-            .map(|j| low[j])
-            .fold(f64::INFINITY, f64::min);
-        result[i] = (hh + ll) / 2.0;
-    }
-
+    ichimoku_midpoint(high, low, n, &mut result);
     Ok(result)
+}
+
+/// `(HHV(high, n) + LLV(low, n)) / 2` via the shared extrema kernel.
+fn ichimoku_midpoint(high: &Array1<f64>, low: &Array1<f64>, n: usize, result: &mut Array1<f64>) {
+    if n == 0 || high.len() != low.len() {
+        return;
+    }
+    rolling_minmax_visit(
+        high.as_slice().unwrap(),
+        low.as_slice().unwrap(),
+        n,
+        |index, highest, lowest| {
+            result[index] = (highest + lowest) / 2.0;
+        },
+    );
 }
 
 #[allow(unused_assignments)]
@@ -2970,17 +3036,7 @@ fn fn_donchian(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
 
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let hh = (window_start..=i)
-            .map(|j| high[j])
-            .fold(f64::NEG_INFINITY, f64::max);
-        let ll = (window_start..=i)
-            .map(|j| low[j])
-            .fold(f64::INFINITY, f64::min);
-        result[i] = (hh + ll) / 2.0;
-    }
-
+    ichimoku_midpoint(high, low, n, &mut result);
     Ok(result)
 }
 
@@ -2993,17 +3049,13 @@ fn fn_donchian_upper(
     let _low = &args[1];
     let n = extract_n(args, 2, "DONCHIAN_UPPER")?;
 
-    let data_len = ctx.data_len;
-    let mut result = nan_vec(data_len);
-
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        result[i] = (window_start..=i)
-            .map(|j| high[j])
-            .fold(f64::NEG_INFINITY, f64::max);
+    // Shared single-series kernel, O(1) per bar. The old fold reported `+inf`
+    // for an all-missing window; the kernel reports NaN there, consistent
+    // with the rest of the rolling-extrema family.
+    match lib_stat::rolling_max(high.as_slice().unwrap(), n) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
     }
-
-    Ok(result)
 }
 
 fn fn_donchian_lower(
@@ -3015,17 +3067,10 @@ fn fn_donchian_lower(
     let low = &args[1];
     let n = extract_n(args, 2, "DONCHIAN_LOWER")?;
 
-    let data_len = ctx.data_len;
-    let mut result = nan_vec(data_len);
-
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        result[i] = (window_start..=i)
-            .map(|j| low[j])
-            .fold(f64::INFINITY, f64::min);
+    match lib_stat::rolling_min(low.as_slice().unwrap(), n) {
+        Ok(result) => Ok(result),
+        Err(_) => Ok(nan_vec(ctx.data_len)),
     }
-
-    Ok(result)
 }
 
 fn fn_donchian_middle(
@@ -3047,15 +3092,16 @@ fn fn_donchian_width(
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
 
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let hh = (window_start..=i)
-            .map(|j| high[j])
-            .fold(f64::NEG_INFINITY, f64::max);
-        let ll = (window_start..=i)
-            .map(|j| low[j])
-            .fold(f64::INFINITY, f64::min);
-        result[i] = hh - ll;
+    // Fused high/low extrema kernel, O(1) per bar.
+    if n > 0 && high.len() == low.len() {
+        rolling_minmax_visit(
+            high.as_slice().unwrap(),
+            low.as_slice().unwrap(),
+            n,
+            |index, highest, lowest| {
+                result[index] = highest - lowest;
+            },
+        );
     }
 
     Ok(result)
@@ -6188,10 +6234,28 @@ fn fn_totalvol(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
     let mut result = nan_vec(data_len);
 
     let vol = ctx.volume.as_slice();
-    for i in (n - 1)..data_len {
-        let window_start = (i + 1).saturating_sub(n);
-        let sum: f64 = (window_start..=i).map(|j| vol[j]).sum();
-        result[i] = sum;
+
+    // Sliding window sum, O(1) per bar. Missing bars are excluded from the
+    // running sum and tracked in `missing`, so only windows that actually
+    // contain one report NaN — the per-window rescan's rule.
+    let mut sum = 0.0f64;
+    let mut missing = 0usize;
+    for i in 0..data_len {
+        if vol[i].is_nan() {
+            missing += 1;
+        } else {
+            sum += vol[i];
+        }
+        if i >= n {
+            if vol[i - n].is_nan() {
+                missing -= 1;
+            } else {
+                sum -= vol[i - n];
+            }
+        }
+        if i + 1 >= n && missing == 0 {
+            result[i] = sum;
+        }
     }
 
     Ok(result)
