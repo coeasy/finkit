@@ -456,7 +456,14 @@ impl BytecodeVM {
         // semantically isolated.
         self.stack.clear();
         self.variables.clear();
-        let mut execution_ctx = ctx.clone();
+        // The VM only ever *mutates* the string table (`PushString`); every
+        // other context field is read-only. Cloning the whole context used to
+        // deep-copy all five OHLCV arrays per execution — hundreds of
+        // kilobytes of memcpy that dominated the runtime of short formulas —
+        // so now the data stays borrowed and only the (typically empty)
+        // string table is cloned. `ExecResult::string_table` carries the
+        // scratch table out, exactly as the cloned context did.
+        let mut string_table = ctx.string_table.clone();
         let mut outputs = AHashMap::new();
         let mut final_value = Array1::zeros(ctx.data_len);
         let mut draw_commands = DrawResult::new();
@@ -501,7 +508,13 @@ impl BytecodeVM {
                     continue;
                 }
                 _ => {
-                    self.execute_op(op, &mut execution_ctx, &mut outputs, &mut draw_commands)?;
+                    self.execute_op(
+                        op,
+                        ctx,
+                        &mut string_table,
+                        &mut outputs,
+                        &mut draw_commands,
+                    )?;
                     pc += 1;
                 }
             }
@@ -515,7 +528,7 @@ impl BytecodeVM {
             outputs,
             final_value,
             draw_commands,
-            string_table: execution_ctx.string_table,
+            string_table,
         })
     }
 
@@ -524,7 +537,8 @@ impl BytecodeVM {
     fn execute_op(
         &mut self,
         op: &OpCode,
-        ctx: &mut FormulaContext,
+        ctx: &FormulaContext,
+        string_table: &mut Vec<String>,
         outputs: &mut AHashMap<String, Array1<f64>>,
         draw_commands: &mut DrawResult,
     ) -> Result<(), FormulaError> {
@@ -852,8 +866,8 @@ impl BytecodeVM {
                 Ok(())
             }
             OpCode::PushString(value) => {
-                let index = ctx.string_table.len();
-                ctx.string_table.push(value.clone());
+                let index = string_table.len();
+                string_table.push(value.clone());
                 self.stack.push(FormulaValue::Scalar(index as f64));
                 Ok(())
             }

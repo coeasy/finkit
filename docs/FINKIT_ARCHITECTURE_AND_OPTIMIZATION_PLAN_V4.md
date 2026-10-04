@@ -2496,8 +2496,8 @@ WHILE/FOR 有 `iterations >= MAX_LOOP_ITERATIONS`（=10000）兜底；stateful �
 | Batch 0（P0 发布红灯） | **已完成** | §4 清单全 `[x]`：fmt / clippy Euler 常数 / `avx2_fma_available` cfg / Python `u16` 变换 postcondition / C-C++ request JSON / toolchain pin / release aggregator |
 | Batch 1（孤儿与仓库治理） | **已完成** | `circuit_breaker.rs` 等 5 个孤儿删除；`check_rust_source_reachability.py` 479 文件全可达；`check_no_tracked_build_artifacts.py`；`check_unbounded_loops.py` |
 | Batch 2（生成系统收敛） | **前置已完成** | build-state gate + transform postcondition（完整 BindingSpec 单一生成器仍是独立里程碑） |
-| Batch 3（Runtime 收敛） | **已完成**，1 项半程 | §24a 六项落点齐全；第 6 项「公式与因子前端改走 `SemanticGraph`」**未做**，§24a 已如实记录 |
-| Batch 4（性能） | **已完成**，1 项有意不做 | CSE 4.2×、`execute_into` 零分配、DirtyRange、scheduler、workload benchmark；**kernel fusion 未实现且不谎报** |
+| Batch 3（Runtime 收敛） | **已完成**（第 6 项于 §32.1 收口） | §24a 六项落点齐全；第 6 项「公式与因子前端改走 `SemanticGraph`」已在第七轮落地（本表下文 31.2 写于其前，保留作审计轨迹） |
+| Batch 4（性能） | **已完成**（fusion 已执行并经测量否决，见 §32.2） | CSE 4.2×、`execute_into` 零分配、DirtyRange、scheduler、workload benchmark；kernel fusion 第七轮完整实现→门禁→实测全链长更慢→代码移除，数据存 §32.2 |
 | §18 五条边 | **已完成** | batch==streaming / full==range / allocating==into / tree==plan / Rust==FFI 各有具名门禁 |
 
 **结论：V4 的 Batch 主体已落地，两处缺口（§24a 第 6 项、kernel fusion）都在方案内如实标注，
@@ -2649,3 +2649,61 @@ kernel），那在 `eval_simd`/JIT 的冻结边界之外，记为后继工作而
 - **R8（文档/接口）**：本文件 §24a 第 6 项改写为完成态；CHANGELOG 增第七轮条目。
 - **R9（收尾扫描）**：22/22 `check_*.py` 门禁、`gen_ssot_docs.py --check`、
   孤儿/断链/死循环门禁、安装包重建与契约门禁（见 CHANGELOG 当日条目的验证清单）。
+
+# 33. 第八轮：效率、死基准与仓库卫生（2026-10-04）
+
+用户指令：继续优化公式执行效率、全体指标优于 TA-Lib、清理历史无效文件、≥3 轮审计、
+推送、重建安装包。
+
+## 33.1 性能：Bytecode VM 去掉每次执行的全量 context 克隆
+
+`BytecodeVM::execute` 每次执行 `ctx.clone()`——深拷贝全部五条 OHLCV 数组（10K bars
+约 400 KB memcpy），而 VM 对 context 的**唯一**写点是 `PushString` 的 string table
+（通常为空），且克隆体在函数末尾即被丢弃。改为借用数据 + 只克隆 string table，
+scratch 表经 `ExecResult::string_table` 带出（与旧行为一致）。同机 criterion
+变更检测（10k bars）：
+
+| 公式（bytecode 路径） | 前 | 后 | 变化 |
+|---|---:|---:|---|
+| MA_20 | 49.0 µs | **34.5 µs** | −34%（现**快于** AST 40.6 µs） |
+| EMA_12 | 50.0 µs | **34.1 µs** | −36%（快于 AST 54.0 µs） |
+| RSI_14 | 58.0 µs | **42.2 µs** | −31% |
+| MACD | 153 µs | 159 µs | ~持平（计算主导） |
+
+bytecode 自身 53 测试 + 全量公式回归（3029 lib + 52 tree==plan + 17 convergence）全绿。
+原生侧（复活的 `performance_benchmark`，100K bars）：SMA 174 µs / EMA 175 µs /
+RSI 252 µs / MACD 1.35 ms / HHV 859 µs——叠加记录在案的跨库快照（14/14 快于 TA-Lib，
+1.03–2.53×，geomean ≈1.6×，PARITY）与 CI 中钉版本的 TA-Lib C 0.8.1 门禁，本机无
+`ta-lib-static` 不伪造 C 级数据。
+
+## 33.2 三个从未测量过的 criterion 基准复活
+
+`accuracy_test` / `formula_performance_bench` / `performance_benchmark` 三个文件躺在
+`core/benches/` 却没有 `harness = false` 条目：`cargo bench` 把它们包进 libtest
+harness，每次都报 "0 tests"——编译了、发布了、从不测量。补齐三条目后全部可跑，
+`accuracy_test` 的跨指标精度报告全 ✓。审计了其余 crate（visualization /
+factor-analysis / cli）——无 bench 目录，无同类缺陷。
+
+## 33.3 历史无效文件清理（~188 MB，全部 gitignored，零 git 影响）
+
+| 对象 | 大小 | 性质 |
+|---|---:|---|
+| `.core_test_tail.log` | 225 KB | 2026-08-30 遗留测试日志（与第五轮删的 `CargoLock_test_tail.log` 同类） |
+| `core/test_output.txt` | — | 遗留编译错误日志 |
+| `target-verify/` | **179 MB** | 陈旧验证构建缓存目录 |
+| `ffi/c-binding/build-usage*/`（2 个） | 1.3 MB | build-usage 脚本的 CMake 陈旧产物 |
+| 6 个图表输出（`gpu_large_chart.html` 等） | 7.3 MB | CI WebGL job 每次现场重新生成的产物，本地是 9/13 陈旧副本 |
+| `dist/*.log`、`dist/.build-quick/*.log` | — | 发布目录里的陈旧构建日志 |
+
+`scripts/archive/` 刻意保留：审计轨迹，`check_orphan_scripts.py` 已按 manual 记账。
+V4 §31 对照表同步改为指向 §32 的完成态（原「未做/未实现」表述保留为审计轨迹）；
+方案语料中剩余的真正未决项均为**用户决策门**（dzh 静默映射、IF 真值/ema 种子、
+发布级默认路径翻转——约束文件自身规定行为变更需单独确认）。
+
+## 33.4 三轮审计与验证
+
+- **R8（代码）**：bench 配置审计（发现并修复 3 个死基准）+ VM 优化 + 全量回归绿。
+- **R9（门禁）**：22/22 `check_*.py`、`gen_ssot_docs.py --check`、SSOT 一致、
+  孤儿/断链/死循环门禁绿（死循环 9/9 有界）。
+- **R10（收尾）**：非 pyo3 crate 全量 `cargo check` + clippy 0 error、提交推送
+  （SSH，复核远端 SHA）、安装包重建 + manifest/契约门禁（见 CHANGELOG 当日条目）。

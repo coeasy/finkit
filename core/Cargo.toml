@@ -229,3 +229,18 @@ memory-profile = ["std"]
 [[bench]]
 name = "workload_bench"
 harness = false
+
+# These three sat in benches/ without a `harness = false` entry, so `cargo bench`
+# wrapped them in the libtest harness and they reported "0 tests" every run —
+# compiled, shipped, and never measuring anything.
+[[bench]]
+name = "accuracy_test"
+harness = false
+
+[[bench]]
+name = "formula_performance_bench"
+harness = false
+
+[[bench]]
+name = "performance_benchmark"
+harness = false

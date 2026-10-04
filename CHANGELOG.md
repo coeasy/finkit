@@ -7,6 +7,42 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Changed - 2026-10-04 (eighth pass — efficiency, dead benches, workspace hygiene)
+
+- **Bytecode VM: the per-execution whole-context clone removed.** `BytecodeVM::
+  execute` used to `ctx.clone()` — a deep copy of all five OHLCV arrays, often
+  100s of KB — on *every* run, even though the only field the VM ever mutates
+  is the (typically empty) string table, and the clone was discarded at the
+  end. The data is now borrowed and only the string table is cloned, with the
+  scratch table carried out in `ExecResult::string_table` exactly as before.
+  Measured on the same machine (criterion change detection vs the stored
+  baseline, 10k bars): MA_20 bytecode 49.0 → 34.5 µs (−34%, now *faster* than
+  the AST interpreter), EMA_12 50.0 → 34.1 µs (−36%), RSI_14 58.0 → 42.2 µs
+  (−31%); MACD is compute-dominated and unchanged. The bytecode VM's own 53
+  tests and the full formula corpus (3029 lib + 52 tree==plan differential +
+  17 runtime-convergence) stay green.
+- **Three criterion benches that never measured anything, fixed.**
+  `accuracy_test`, `formula_performance_bench` and `performance_benchmark` sat
+  in `core/benches/` without `harness = false` entries, so `cargo bench`
+  wrapped them in the libtest harness and they reported "0 tests" on every
+  run — compiled, shipped, silent. The entries now exist; all three run
+  (`accuracy_test`'s cross-indicator report prints all ✓).
+- **Workspace hygiene: ~188 MB of stale, gitignored artifacts removed.** A
+  225 KB leftover test log (`CargoLock`-era `.core_test_tail.log`), a stale
+  `core/test_output.txt` build log, a 179 MB stale `target-verify/` build
+  cache, two stale `ffi/c-binding/build-usage*` CMake directories, stale
+  `dist/*.log` build logs, and the six chart outputs (`gpu_large_chart.html`
+  et al.) that CI regenerates fresh on every WebGL job. `scripts/archive/` is
+  deliberately kept: it is the recorded audit trail and the orphan-script
+  gate already accounts for it.
+- **V4 plan bookkeeping made self-consistent**: §31's conformance table still
+  said Batch 3 item 6 was "未做" and kernel fusion "未实现" after §32 recorded
+  both as executed; the table now points at §32 while keeping the pre-round
+  text as audit trail. The remaining genuinely-open items in the plan corpus
+  are user-decision gates (behaviour changes reserved for explicit
+  confirmation: `dzh` silent mapping, `IF` truth value / `ema_scalar` seed,
+  and the release-level default-path flip to `Plan`).
+
 ### Changed - 2026-10-04 (seventh pass — the plan's remaining items, executed)
 
 The instruction this pass answered was: *finish the two items the plan still
