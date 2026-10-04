@@ -33,52 +33,60 @@ pub fn delta(input: ArrayView1<'_, f64>, period: usize) -> Array1<f64> {
     out
 }
 
-pub fn ts_argmax(input: ArrayView1<'_, f64>, window: usize) -> Array1<f64> {
+/// Monotonic deque shared by [`ts_argmax`] / [`ts_argmin`].
+///
+/// `WANT_MAX` selects a decreasing queue (maxima) or an increasing one
+/// (minima). Missing bars are never queued, so an all-missing window reports
+/// `NaN` exactly like the scan it replaces. Ties keep the **newest** bar,
+/// matching the `>=` / `<=` dominance of the original scan, and the emitted
+/// value is the winner's offset from the window start (a partial leading
+/// window is measured from bar 0, as before).
+fn ts_arg_extreme_into<const WANT_MAX: bool>(
+    input: ArrayView1<'_, f64>,
+    window: usize,
+) -> Array1<f64> {
     let len = input.len();
     let mut out = Array1::from_elem(len, f64::NAN);
     if window == 0 {
         return out;
     }
+
+    let mut queue: std::collections::VecDeque<usize> = std::collections::VecDeque::new();
     for i in 0..len {
-        let start = rolling_window_start(i, window);
-        let slice = input.slice(s![start..=i]);
-        let mut max_v = f64::NEG_INFINITY;
-        let mut max_idx = None;
-        for (j, v) in slice.iter().enumerate() {
-            if !v.is_nan() && *v >= max_v {
-                max_v = *v;
-                max_idx = Some(j);
+        let value = input[i];
+        if !value.is_nan() {
+            while let Some(&back) = queue.back() {
+                let dominated = if WANT_MAX {
+                    input[back] <= value
+                } else {
+                    input[back] >= value
+                };
+                if dominated {
+                    queue.pop_back();
+                } else {
+                    break;
+                }
             }
+            queue.push_back(i);
         }
-        if let Some(idx) = max_idx {
-            out[i] = idx as f64;
+
+        let start = rolling_window_start(i, window);
+        while queue.front().is_some_and(|&front| front < start) {
+            queue.pop_front();
+        }
+        if let Some(&front) = queue.front() {
+            out[i] = (front - start) as f64;
         }
     }
     out
 }
 
+pub fn ts_argmax(input: ArrayView1<'_, f64>, window: usize) -> Array1<f64> {
+    ts_arg_extreme_into::<true>(input, window)
+}
+
 pub fn ts_argmin(input: ArrayView1<'_, f64>, window: usize) -> Array1<f64> {
-    let len = input.len();
-    let mut out = Array1::from_elem(len, f64::NAN);
-    if window == 0 {
-        return out;
-    }
-    for i in 0..len {
-        let start = rolling_window_start(i, window);
-        let slice = input.slice(s![start..=i]);
-        let mut min_v = f64::INFINITY;
-        let mut min_idx = None;
-        for (j, v) in slice.iter().enumerate() {
-            if !v.is_nan() && *v <= min_v {
-                min_v = *v;
-                min_idx = Some(j);
-            }
-        }
-        if let Some(idx) = min_idx {
-            out[i] = idx as f64;
-        }
-    }
-    out
+    ts_arg_extreme_into::<false>(input, window)
 }
 
 pub fn ts_rank(input: ArrayView1<'_, f64>, window: usize) -> Array1<f64> {

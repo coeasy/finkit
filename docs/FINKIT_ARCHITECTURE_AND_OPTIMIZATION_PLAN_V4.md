@@ -2911,3 +2911,129 @@ dropna——NaN 输入不再冻结在 50.0，与 HHV/LLV 家族一致。
   在 62 target / 3950 全绿中；`bench_vs_talib_precision.py` 需要 PyPI
   `talib` + `finkit` wheel（本机未装，按设计 exit 2，不伪造数据）。
 
+
+## 36. 第十一轮：落后项追平 + 公式层 O(n·w) 清零 + 三轮审计（2026-10-04）
+
+**最终快照：90 组配对，8 组 ❌（第十轮收尾 13 → 11 → 本轮 8）**，详见 `docs/BENCHMARK_REPORT.md`。
+
+### 36.1 全量基准的干净化（先修测量，再谈优化）
+
+第十轮结束时的基准日志里夹着 `Gnuplot not found` 横幅并疑似重复执行，根因是
+`criterion` 0.5 的默认特性带上 `plotters`（后端需要 gnuplot）。关闭默认特性后
+`Cargo.lock` 少了 30 行 plotters 依赖树，清空 `target/criterion` 重跑：
+**EXIT=0、0 条横幅、185 组配对**。这一条不改任何算法，但它是本轮所有"前后对比"
+数字可信的前提——前一轮的数字是在有干扰的采样环境下取的。
+
+### 36.2 滚动极值：Van Herk–Gil–Werman 块扫描接入值内核
+
+第十轮把 MAX/MIN 换成 cached-index 后仍是 ❌（MAX_30 0.67x、MIN_30 0.47x）。根因
+不是常数因子，而是**算法退化**：cached-index 在缓存的极值离开窗口时要做一次全窗
+回扫，而基准数据是"正弦 + 噪声"的 NaN-free 序列，极值几乎每 bar 都在移动，于是每
+bar 都是 O(w) —— 摊还 O(1) 的前提（极值长期驻留）在噪声序列上根本不成立。
+
+Van Herk–Gil–Werman 算法把这个分布依赖消掉：按 period 分块，预计算
+`suffix`（块内后缀极值）与 `prefix`（下一块前缀极值）两张表，每 bar 只需 ~3 次比较：
+
+- 跨界窗口 = `suffix[offset] ⊕ prefix[offset - 1]`；
+- `today` 每轮推进 `n_available + 1`（部分块时 `n_available = len - block_next`，
+  `today` 自然越界退出）；
+- 输出值与 cached 内核**逐位相同**（"值"版平局不影响结果）。
+
+接入位置是 `fill_rolling_extreme`：`window <= EXTREMA_CACHE_LIMIT(512)` 且
+**全部元素有限**时走块扫描，否则回退 cached-index（>512 仍走环形 deque）。
+守卫用 `is_finite()` 而不是 `!is_nan()`：本家族的 `first_finite` 只跳过 NaN，
+前导 `inf` 是**真实值**（与 `math::leading_warmup` 跳过所有非有限值的语义不同），
+块扫描没有 warm-up 概念，若放行会多输出几个 `inf` bar —— 见 §36.5 第 1、2 条。
+
+**结果**（同一次运行内配对，比率 = TA-Lib / Finkit，<1 = Finkit 较慢）：
+
+| 指标 | 轮前 | 轮后 | TA-Lib | 说明 |
+|---|---:|---:|---:|---|
+| MAX_30 | 0.67x ❌ | **0.80x ⚠️** | 15.30 | 19.11 µs → 出 ❌（+19%） |
+| MIN_30 | 0.47x ❌ | **0.77x ❌** | 15.74 | 20.50 µs → 仍 ❌（+64%，幅度最大） |
+| ULTOSC_7_14_28 | 0.65x ❌ | **0.84x ⚠️** | 57.71 | 69.10 µs → 出 ❌（取模消除 + 极值分派传导） |
+| BBANDS@1M | 脏数据 ❌ | **0.92x ⚠️** | 11240.69 | 12160.17 µs → 出 ❌（上轮为脏采样，非回归） |
+| SMA@1M | 0.58x ❌ | **0.97x ⚠️** | 3277.28 | 3372.10 µs → 出 ❌（内存遍数 5→1） |
+| RSI@1M | 0.43x ❌ | **1.02x ✅** | 4265.69 | 4190.31 µs → 反超（删除全量 init_output 填充） |
+| MACD@10K | ❌（脏） | **1.05x ✅** | 151.64 | 144.30 µs → 出 ❌ |
+
+### 36.3 AROONOSC：一次**失败**的优化尝试（如实记账）
+
+`aroonosc` 需要 argmax(high) 与 argmin(low)，尝试了三版：
+
+1. 两内核版：分别调 arg 版 Van Herk ×2 → **0.63x**（比第十轮 cached 版 0.72x 更差）；
+2. 融合版 `aroonosc_block_into`：一次扫描并行维护 high/low 的 8 张值+索引表，
+   单遍、零分配 → 定向复测两次，每 bar ~10ns vs cached 版 ~7.5ns，**慢 1.65–2.1x**。
+
+结论：**八张动态索引表的代价超过了它省下的回扫**，撤销快路径、删除融合内核与其测试，
+`aroonosc` 保持 cached-index，并在函数注释里写下这次失败的实测数字（避免后人重踩）。
+这也是本轮唯一一个"优化了反而更慢"的项，记账而非隐藏。
+
+### 36.4 热路径取模与内存遍数
+
+- **取模消除**：`stochf` 通用路径的 `d_idx % fastd_period`、`stochrsi_into` 的两处
+  `(x + 1) % period`、`ultosc` 默认路径的 `i % 7 / i % 14 / i % 28`，全部换成
+  wrap 计数器（`pos += 1; if pos == N { pos = 0 }`）。每 bar 一次 `%` 是一次除法
+  （~20 cycles），这些循环每 bar 要算 1–3 次。语义完全等价：这些位置每 bar 恰好
+  递增 1（`stochf` 的首个发出 bar 验证为 `fastk_period - 1`，即 `d_idx` 从 0 起）。
+- **内存遍数**：`sma_inner` 原为 5 遍（校验 2 遍 + warm-up 1 遍 + 全量 NaN 填充 1 遍
+  + kernel 1 遍），融合为**单遍扫描**同时求 `start` 与首个非法值，且只填充预热前缀
+  （kernel 会立即覆写其余槽位）。`rsi_inner` 同理删掉全量 `init_output` 填充（三条
+  RSI 路径 AVX512/AVX2/scalar 都自己写预热 NaN）。`sma@1M` 慢的根因就是这几遍
+  内存扫描，而非滑动和本身。
+
+### 36.5 三轮审计：本轮修掉的 6 个真问题
+
+1. **`sma_inner` 融合扫描的契约回归**（第一轮静态扫描未发现，第三轮逐行比对揪出）：
+   `leading_warmup` 跳过**所有**非有限值（NaN 与 ±inf），而我写的融合扫描用
+   `is_nan()` 找 `start`，于是前导 `inf` 会被当成"序列开始后的非法值"直接报错，
+   旧代码却视其为预热。改为 `is_finite()`，并补两个回归测试（前导 inf 不报错、
+   序列开始后的 inf/NaN 仍报错）。
+2. **极值分派守卫同病**：见 §36.2 末尾。两层"预热"定义不同（moving_avg 跳所有非
+   有限、statistics 只跳 NaN），跨层套用必错 —— 已写进代码注释与本节。
+3. **`MODE` 结果不可复现**：用 `max_by_key` 在 `HashMap` 上取众数，而 Rust 的
+   `RandomState` 每次进程随机化迭代顺序 → 出现并列时**同一次公式不同进程给出不同
+   结果**。改为"计数最高 → 窗口内最早出现者胜"，并复用 HashMap 去掉逐 bar 的 Vec
+   分配（原本每 bar 一次分配 + 一次 `filter` 收集）。
+4. **`BACKSET` O(len·n) → O(len)**：BACKSET 是**向前回填**（bar `j` 亮 ⟺
+   `[j, j+n-1]` 内有触发），因此正向倒计时不等价，必须**反向**扫描 + 倒计时：
+   触发点装填 `n`，随 `i` 递减衰减。这是通达信公式里使用频率最高的函数之一。
+5. **`LAST(X, A, B)` O(len·(A-B)) → O(1)/bar**：定宽滑窗全真判定，窗口从
+   `[i-1-A, i-1-B]` 平移到 `[i-A, i-B]`，维护违规计数（去掉 `i-1-A`、加入 `i-B`）。
+   `A >= data_len` 时按冷区提前返回全 0，与旧实现的 `i < A` 跳过一致。
+6. **`SUMBARS` O(n²) → O(n log n)**：原实现每 bar 从 `i` 反向走到 0，`SUMBARS(VOL,
+   CAPITAL)` 这类阈值很大的用法就是实打实的平方级。值全部**非负且有限**时前缀和单调，
+   改为前缀表 + `partition_point` 二分（逐 bar 变化的阈值也可以，每次搜索独立）；
+   含负值或缺失值时单调性不成立（多加一个 bar 反而降低和），保留原回扫。
+
+以上 6 项全部配了差分/契约测试（与朴素实现逐位比对）：`backset_matches_naive_fill`、
+`last_matches_naive_rescan`、`sumbars_matches_naive_walk`、
+`mode_ties_break_to_earliest_occurrence`、`test_sma_leading_inf_is_warmup_not_error`、
+`test_rolling_extreme_leading_inf_uses_cached_kernel`。
+
+### 36.6 公式层其余 O(n·w)：评估后**不改**（记账）
+
+- `fn_cmo`：可改滑动和，但会带来浮点累加次序变化（原实现每窗重算，无漂移）；且公式
+  层 CMO 不在 TA-Lib 对比基准内，无基准支撑 → **不改**，理由同第十轮的
+  `covariance / correlation / decay_linear`（公有 API 数值漂移 + 无内部调用者）。
+- `timeseries.rs` 的 `covariance / correlation / decay_linear`：同上，维持第十轮结论。
+- 其余 15 处嵌套循环已逐处确认是单遍或 `break` 提前退出，无数据规模级的重扫。
+
+### 36.7 最终快照与仍落后项
+
+见 `docs/BENCHMARK_REPORT.md`（本次运行，90 组配对）。仍 ❌ 的根因：
+
+- `linreg_slope/intercept`：已是 O(1)/bar 滑动实现，剩余差距是 TA-Lib 固定系数
+  布局差异（常数因子）。
+- `ln`：单遍融合后仍慢 ~25%，TA-Lib 直接调 C 运行时 `log()`，每元素成本已接近
+  `log()` 本身。
+- `percentrank_30`：窗口内比较计数本质 O(w)（每 bar 参照值在变，前缀和不适用），
+  TA-Lib 同为 O(w) 但常数更小。
+- `macd`、`stochf`、`stochrsi`：顺序链（EMA→EMA→Signal）与复合内核，本轮只吃到
+  取模消除的收益，链条本身未重排。
+- `max_30` / `aroonosc_14`：见 §36.2 / §36.3。
+- 缩放组 @1M：10K/100K 领先、1M 落后为缓存效应，非算法问题（SMA/RSI 本轮已因内存
+  遍数优化改善）。
+
+**跨运行噪声警告**：本机不同时段 bench 绝对值会膨胀 1.3–1.6x，跨运行对比 ±30% 属
+正常；本轮所有"前后对比"均取自**同一次运行内**的配对，或定向复测（同运行配对）。

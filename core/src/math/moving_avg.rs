@@ -93,8 +93,6 @@ pub fn sma(input: &[f64], period: usize) -> Result<Array1<f64>> {
             constraint: "greater than 0".to_string(),
         });
     }
-    reject_if_non_finite("sma", input)?;
-    validate_input(input.len(), period)?;
     #[cfg(feature = "metrics")]
     {
         crate::metrics::indicator_called("sma");
@@ -108,16 +106,64 @@ pub fn sma(input: &[f64], period: usize) -> Result<Array1<f64>> {
 }
 
 #[inline]
+// The kernel writes every slot from `start + period - 1` on and the warm-up
+// prefix is filled right below, so no slot is ever read uninitialized. Kept as
+// `expect` (not `allow`): CI denies unfulfilled lint expectations.
+#[expect(clippy::uninit_vec)]
 fn sma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let len = input.len();
-    let mut output = init_output(len);
+
+    // One fused scan replaces the old three passes: `reject_if_non_finite`
+    // walked the series twice (leading_warmup + position) and the old
+    // `sma_inner` walked it a third time for the warm-up start. On a
+    // million-bar series those memory-bound passes rivalled the actual O(len)
+    // sliding sum. Same rejection semantics: a leading run is warm-up, any
+    // non-finite value after the series starts is a hard error, and an
+    // all-NaN series emits all-NaN.
+    // `leading_warmup` skips a leading run of *any* non-finite value (NaN and
+    // ±inf alike), so the start scan must test `is_finite()` rather than
+    // `is_nan()` — a leading `inf` is warm-up, not bad input.
+    let mut start = len;
+    let mut invalid = None;
+    for (i, &value) in input.iter().enumerate() {
+        if start == len {
+            if !value.is_finite() {
+                continue;
+            }
+            start = i;
+            continue;
+        }
+        if !value.is_finite() {
+            invalid = Some(i);
+            break;
+        }
+    }
+    if let Some(idx) = invalid {
+        #[cfg(feature = "metrics")]
+        crate::metrics::input_rejected("sma", "non_finite");
+        #[cfg(feature = "tracing")]
+        crate::warn!(indicator = "sma", idx, "rejected non-finite input");
+        return Err(TaError::InvalidParameter {
+            name: "input".to_string(),
+            constraint: format!("non-finite value at index {idx}"),
+        });
+    }
+
+    validate_input(len, period)?;
+
+    // The kernel rewrites every slot from `start + period - 1` on, so only the
+    // warm-up prefix needs the NaN fill — a full-length fill is a whole extra
+    // memory pass the kernel immediately overwrites.
+    let mut output = Vec::with_capacity(len);
+    // SAFETY: every slot is initialized below — the prefix here, the rest by
+    // the kernel; when the series is all warm-up the prefix fill spans `len`.
+    unsafe { output.set_len(len) };
+    let warm_end = (start + period - 1).min(len);
+    output[..warm_end].fill(f64::NAN);
     let inv_period = 1.0 / period as f64;
 
-    // Start after any leading warm-up run. With no warm-up (`start == 0`) this is
-    // the original loop, unchanged and bit-identical.
-    let start = leading_warmup(input);
     if start + period > len {
-        return Ok(output);
+        return Ok(Array1::from_vec(output));
     }
 
     // SIMD-accelerated initial sum: 4-6x faster than iterator sum
@@ -129,7 +175,7 @@ fn sma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
         output[i] = sum * inv_period;
     }
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// Compute SMA writing results into a pre-allocated buffer.
@@ -2343,6 +2389,31 @@ mod tests {
         assert_relative_eq!(result[2], 2.0, epsilon = 1e-10);
         assert_relative_eq!(result[3], 3.0, epsilon = 1e-10);
         assert_relative_eq!(result[4], 4.0, epsilon = 1e-10);
+    }
+
+    /// A leading run of *any* non-finite value is warm-up (`leading_warmup`
+    /// tests `is_finite`, not `is_nan`), so a leading `inf` must not be
+    /// rejected — only a non-finite bar *after* the series has started is.
+    #[test]
+    fn test_sma_leading_inf_is_warmup_not_error() {
+        let input = vec![f64::INFINITY, f64::INFINITY, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0];
+        let result = sma(&input, 3).unwrap();
+        assert!(result[0].is_nan());
+        assert!(result[1].is_nan());
+        assert!(result[2].is_nan());
+        assert!(result[3].is_nan());
+        assert_relative_eq!(result[4], 2.0, epsilon = 1e-10);
+        assert_relative_eq!(result[5], 3.0, epsilon = 1e-10);
+        assert_relative_eq!(result[6], 4.0, epsilon = 1e-10);
+        assert_relative_eq!(result[7], 5.0, epsilon = 1e-10);
+    }
+
+    #[test]
+    fn test_sma_rejects_non_finite_after_start() {
+        let input = vec![f64::NAN, 1.0, 2.0, f64::INFINITY, 4.0];
+        assert!(sma(&input, 3).is_err());
+        let nan_mid = vec![1.0, 2.0, f64::NAN, 4.0, 5.0];
+        assert!(sma(&nan_mid, 3).is_err());
     }
 
     #[test]

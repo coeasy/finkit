@@ -526,6 +526,117 @@ fn rolling_extreme_cached<const WANT_MAX: bool>(
     }
 }
 
+/// Van Herk–Gil–Werman rolling extreme for **fully finite** input.
+///
+/// The cached-index kernel is amortized O(1)/bar, but its rescan fires whenever
+/// the cached extreme leaves the window — on noisy series that is most bars, so
+/// the observed cost degenerates to one full-window scan per bar and loses to a
+/// plain C loop. The block algorithm keeps ~3 comparisons per bar *regardless
+/// of the data distribution*: every window is the extreme of a suffix of the
+/// older block combined with the extreme of a prefix of the newer one, both
+/// precomputed once per block.
+///
+/// Callers dispatch here only after an `is_finite` prescan, so the missing-bar
+/// contract is moot: entries `0..window - 1` are left untouched (the caller's
+/// warm-up fill stays) and every later entry is written with the exact window
+/// extreme — the same values the cached-index kernel would produce bit for bit.
+/// Infinites would break that equivalence, hence the stricter prescan.
+pub(crate) fn van_herk_extreme_into<const WANT_MAX: bool>(
+    data: &[f64],
+    window: usize,
+    output: &mut [f64],
+) {
+    let len = data.len();
+    if window <= 1 || window > len || output.len() != len {
+        return;
+    }
+
+    let mut suffix = vec![0.0f64; window];
+    let mut prefix = vec![0.0f64; window];
+
+    // SAFETY: every indexed read stays within `data` (offsets are bounded by
+    // `len` checks in the loop) and every write stays within `output`, which
+    // has the same length; both slices outlive the loop.
+    let source = data.as_ptr();
+    let target = output.as_mut_ptr();
+
+    unsafe {
+        let mut block_start = 0usize;
+        let mut today = window - 1;
+        while today < len {
+            let block_end = block_start + window - 1;
+
+            // suffix[o] = extreme of data[block_start + o ..= block_end].
+            let mut extreme = *source.add(block_end);
+            suffix[window - 1] = extreme;
+            let mut offset = window - 1;
+            while offset > 0 {
+                offset -= 1;
+                let value = *source.add(block_start + offset);
+                let takes = if WANT_MAX {
+                    value > extreme
+                } else {
+                    value < extreme
+                };
+                if takes {
+                    extreme = value;
+                }
+                suffix[offset] = extreme;
+            }
+
+            // The bar at `block_end` is covered by the suffix table alone.
+            *target.add(today) = suffix[0];
+
+            let block_next = block_start + window;
+            if block_next >= len {
+                break;
+            }
+            let n_available = (len - block_next).min(window - 1);
+
+            // prefix[o] = extreme of data[block_next ..= block_next + o].
+            extreme = *source.add(block_next);
+            prefix[0] = extreme;
+            let mut grown = 1usize;
+            while grown < n_available {
+                let value = *source.add(block_next + grown);
+                let takes = if WANT_MAX {
+                    value > extreme
+                } else {
+                    value < extreme
+                };
+                if takes {
+                    extreme = value;
+                }
+                prefix[grown] = extreme;
+                grown += 1;
+            }
+
+            // Windows crossing the block boundary: suffix covers the older
+            // part, prefix the newer one.
+            let mut offset = 1usize;
+            while offset <= n_available {
+                let prefix_extreme = prefix[offset - 1];
+                let suffix_extreme = suffix[offset];
+                *target.add(today + offset) = if WANT_MAX {
+                    if prefix_extreme > suffix_extreme {
+                        prefix_extreme
+                    } else {
+                        suffix_extreme
+                    }
+                } else if prefix_extreme < suffix_extreme {
+                    prefix_extreme
+                } else {
+                    suffix_extreme
+                };
+                offset += 1;
+            }
+
+            block_start += window;
+            today += n_available + 1;
+        }
+    }
+}
+
 /// Fused high/low form of [`rolling_extreme_cached`].
 ///
 /// The two legs warm up independently: `warm_high_at` and `warm_low_at` may
@@ -810,7 +921,18 @@ fn fill_rolling_extreme<const WANT_MAX: bool>(data: &[f64], window: usize, outpu
     let warm_at = first_finite(data).map_or(data.len(), |start| start + window - 1);
 
     if window <= EXTREMA_CACHE_LIMIT {
-        rolling_extreme_cached::<WANT_MAX>(data, window, warm_at, output);
+        // Fully finite input is the common case for price series, and it is the
+        // regime where the cached-index kernel's rescan degenerates to a full
+        // window scan on most bars. The block algorithm's cost is independent
+        // of the data distribution, so it wins exactly where the cache loses.
+        // The test is `is_finite`, not `!is_nan`: a leading non-finite run is
+        // warm-up (see `warm_at` above), and the block kernel has no warm-up
+        // concept — it would report an `inf` bar the cached kernel skips.
+        if data.iter().all(|value| value.is_finite()) {
+            van_herk_extreme_into::<WANT_MAX>(data, window, output);
+        } else {
+            rolling_extreme_cached::<WANT_MAX>(data, window, warm_at, output);
+        }
     } else {
         rolling_extreme_ring::<WANT_MAX>(data, window, warm_at, output);
     }
@@ -1128,6 +1250,89 @@ pub fn spearman_rank(x: &[f64], y: &[f64]) -> Result<f64> {
 mod tests {
     use super::*;
     use approx::assert_relative_eq;
+
+    /// Deterministic pseudo-noise: enough wiggle to make a cached extreme
+    /// leave the window on most bars, which is exactly the regime the Van
+    /// Herk block scan must win and where it must still agree with the
+    /// cached-index kernel bit for bit.
+    fn noisy(len: usize) -> Vec<f64> {
+        (0..len)
+            .map(|i| {
+                let t = i as f64;
+                100.0 + t * 0.01 + (t * 0.37).sin() * 2.0 + (t * 1.13).cos() * 1.5
+            })
+            .collect()
+    }
+
+    #[test]
+    fn test_van_herk_extreme_matches_cached_index() {
+        let data = noisy(2_000);
+        for window in [2usize, 3, 7, 14, 30, 64, 511, 512] {
+            let mut fast = vec![f64::NAN; data.len()];
+            van_herk_extreme_into::<true>(&data, window, &mut fast);
+            let mut reference = vec![f64::NAN; data.len()];
+            rolling_extreme_cached::<true>(&data, window, window - 1, &mut reference);
+            let mismatch = (0..data.len())
+                .find(|&i| fast[i] != reference[i] && !(fast[i].is_nan() && reference[i].is_nan()));
+            assert_eq!(
+                mismatch,
+                None,
+                "max mismatch at window {window}: {:?}",
+                mismatch.map(|i| (i, fast[i], reference[i]))
+            );
+            let mut fast_min = vec![f64::NAN; data.len()];
+            van_herk_extreme_into::<false>(&data, window, &mut fast_min);
+            let mut reference_min = vec![f64::NAN; data.len()];
+            rolling_extreme_cached::<false>(&data, window, window - 1, &mut reference_min);
+            let mismatch_min = (0..data.len()).find(|&i| {
+                fast_min[i] != reference_min[i]
+                    && !(fast_min[i].is_nan() && reference_min[i].is_nan())
+            });
+            assert_eq!(
+                mismatch_min,
+                None,
+                "min mismatch at window {window}: {:?}",
+                mismatch_min.map(|i| (i, fast_min[i], reference_min[i]))
+            );
+        }
+    }
+
+    /// A leading `inf` is a **value** in this family — `first_finite` skips only
+    /// `NaN` (unlike `leading_warmup` in the moving-average layer, which skips
+    /// every non-finite bar) — so such a series must not be dispatched to the
+    /// block kernel, which has no warm-up concept at all. The guarantee under
+    /// test: the dispatched result equals the cached kernel bit for bit, and
+    /// the infinite bar is reported as soon as the window is full.
+    #[test]
+    fn test_rolling_extreme_leading_inf_uses_cached_kernel() {
+        let base = noisy(600);
+        let window = 30;
+        for (fill, want_max) in [(f64::INFINITY, true), (f64::NEG_INFINITY, false)] {
+            let mut data = vec![fill; 3];
+            data.extend_from_slice(&base);
+            let warm_at = first_finite(&data).map_or(data.len(), |start| start + window - 1);
+
+            let mut dispatched = vec![f64::NAN; data.len()];
+            let mut reference = vec![f64::NAN; data.len()];
+            if want_max {
+                fill_rolling_extreme::<true>(&data, window, &mut dispatched);
+                rolling_extreme_cached::<true>(&data, window, warm_at, &mut reference);
+            } else {
+                fill_rolling_extreme::<false>(&data, window, &mut dispatched);
+                rolling_extreme_cached::<false>(&data, window, warm_at, &mut reference);
+            }
+            let mismatch = (0..data.len()).find(|&i| {
+                dispatched[i] != reference[i] && !(dispatched[i].is_nan() && reference[i].is_nan())
+            });
+            assert_eq!(
+                mismatch,
+                None,
+                "want_max={want_max} fill={fill}: {:?}",
+                mismatch.map(|i| (i, dispatched[i], reference[i]))
+            );
+            assert_eq!(dispatched[window - 1], fill, "want_max={want_max}");
+        }
+    }
 
     #[test]
     fn test_mean() {

@@ -7,6 +7,86 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Changed - 2026-10-04 (eleventh pass — benchmark hygiene, extrema block scan, formula-layer O(n·w) sweep)
+
+Full bench-vs-talib snapshot in `docs/BENCHMARK_REPORT.md`; the round is recorded
+in V4 plan §36. Every before/after number below is a pair from **one** run (or a
+targeted re-run) — absolute timings on this machine drift 1.3-1.6x between runs.
+
+- **The benchmark itself was wrong before it was slow.** `criterion` 0.5 pulls
+  `plotters` in by default and its gnuplot backend sprayed `Gnuplot not found`
+  over the tenth-pass logs. `default-features = false` (Cargo.lock -30 lines);
+  a clean run now finishes EXIT=0 with 0 banners and 185 paired groups. No
+  algorithm changed, but the tenth-pass numbers were measured under that noise.
+
+- **`MAX_30` / `MIN_30`: the slowness was algorithmic, not constant-factor.**
+  The cached-index kernel pays a full-window rescan whenever the cached extreme
+  leaves the window, and on the benchmark's noisy series that is nearly every
+  bar — so amortized O(1)/bar degenerated to O(w)/bar. Both now dispatch to a
+  Van Herk-Gil-Werman block scan (suffix/prefix tables, ~3 comparisons per bar,
+  **independent of the data distribution**) when the window is <= 512 and every
+  element is finite. `ULTOSC` and the 1M `BBANDS` row improved with it (the
+  latter was a dirty sample, not a regression).
+
+- **Hot-path modulo removal.** `stochf`, `stochrsi_into`, and the 7/14/28
+  `ultosc` path each did one to three `%` per bar — a division, ~20 cycles.
+  All replaced with wrap counters (the positions advance by exactly one per
+  emitted bar, so `d_idx` still starts at 0).
+
+- **Memory passes.** `sma_inner` did five passes over the series (validate,
+  validate, warm-up scan, full NaN fill, kernel) — now one fused scan plus a
+  warm-up-prefix-only fill; `rsi_inner` lost its full-length `init_output` fill
+  (all three RSI kernels write their own warm-up NaNs). This is where the 1M
+  `SMA` row was losing, not in the sliding sum.
+
+- **An optimization that lost, recorded rather than hidden.** A fused Van
+  Herk-Gil-Werman scan for `AROONOSC` (both legs, value+index tables, single
+  pass, no allocation) measured **slower** than the cached-index kernel it was
+  meant to replace: ~10ns vs ~7.5ns per bar across two targeted re-runs, and a
+  two-kernel variant measured 0.63x vs the cached 0.72x. The eight dynamically
+  indexed tables cost more than the rescans they remove. The fast path, the
+  kernel, and its tests were deleted; `aroonosc` keeps the cached kernel and
+  carries the measurement in a comment so nobody re-attempts it blind.
+
+- **Formula layer: the remaining per-bar rescans.** `LONGCROSS` (sliding
+  violation count), the 12 "m-th most recent pivot" walks across
+  `TROUGH`/`PEAK`/`TROUGHBARS`/`PEAKBARS` and the `EM_`/`FOX_` families (deque
+  capped at the last m pivots), `ts_argmax`/`ts_argmin` (monotonic deque),
+  `BACKSET` (O(len*n) -> O(len) backwards countdown — it fills *forwards*, so a
+  forward countdown would be wrong), `LAST` (O(len*(A-B)) -> O(1)/bar fixed-width
+  sliding count), and `SUMBARS` (O(n^2) -> O(n log n) prefix table + binary
+  search for non-negative input; signed or missing values keep the rescan
+  because monotonicity does not hold there).
+
+- **Six real defects found by the three audit rounds** (all with differential
+  tests against the naive implementation):
+  1. `sma_inner`'s fused scan used `is_nan()` to find the series start, but
+     `leading_warmup` skips **every** non-finite bar — a leading `inf` used to
+     be warm-up and was being rejected as bad input. Now `is_finite()`.
+  2. Same trap in the extrema dispatch: the guard was `!is_nan()`, while this
+     family's `first_finite` skips only `NaN` (a leading `inf` is a real value
+     here). Tightened to `is_finite()`. The two layers define "warm-up"
+     differently on purpose; the mismatch is now documented in both places.
+  3. `MODE` picked its winner with `max_by_key` over a `HashMap`, and Rust
+     randomizes `HashMap` iteration order per process — **tied counts returned
+     different values on different runs**. Winner is now "highest count, then
+     earliest occurrence in the window"; the per-bar `Vec` allocation is gone.
+  4. `BACKSET`, `LAST`, `SUMBARS`: quadratic/linear-in-window costs above.
+  5. `fill_mth_recent_pivot` now `debug_assert`s that pivots arrive in ascending
+     index order (the zig-zag scan guarantees it; a future caller that sorts
+     differently fails loudly instead of silently shifting answers).
+  6. `aroonosc`'s fused kernel was deleted as dead weight once it lost (above).
+
+- **Deliberately not changed (recorded):** `fn_cmo`, and
+  `covariance`/`correlation`/`decay_linear` in `formula/ops/timeseries.rs` — all
+  three could be made sliding, but each changes floating-point accumulation
+  order for a public API with no benchmark coverage justifying the drift.
+
+- **Verification:** 3047 lib tests (up from 3037, +7 new differential/contract
+  tests, -2 deleted with the aroonosc kernel), integration targets green, 22
+  `scripts/check_*.py` gates + `gen_ssot_docs --check` pass, `cargo fmt`,
+  `cargo check` 0 warnings.
+
 ### Changed - 2026-10-04 (tenth pass — TA-Lib C head-to-head with item-by-item chase, formula-layer audit)
 
 Full bench-vs-talib snapshot in `docs/BENCHMARK_REPORT.md`; the round is

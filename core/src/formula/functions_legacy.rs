@@ -507,22 +507,23 @@ fn fn_longcross(_ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
     let len = a.len().min(b.len());
     let mut result = Array1::zeros(len);
 
+    // "a stayed at or below b for the previous n bars" is a sliding all-false
+    // test over the window `(i - n)..i`, so a counter of bars violating
+    // `a[j] <= b[j]` — i.e. `a[j] > b[j]` — turns the O(len · n) rescan into
+    // one add and one subtract per bar. `NaN` fails `>`, so a missing bar
+    // never counts as a violation, matching the old inner loop.
+    let mut violations = 0usize;
     for i in 1..len {
-        if a[i] > b[i] {
-            let mut below_for_n = true;
-            if i < n {
-                below_for_n = false;
-            } else {
-                for j in (i - n)..i {
-                    if a[j] > b[j] {
-                        below_for_n = false;
-                        break;
-                    }
-                }
-            }
-            if below_for_n && a[i - 1] <= b[i - 1] {
-                result[i] = 1.0;
-            }
+        // Bar `i - 1` enters the window for this bar.
+        if a[i - 1] > b[i - 1] {
+            violations += 1;
+        }
+        // Bars below `i - n` have left it again.
+        if i > n && a[i - n - 1] > b[i - n - 1] {
+            violations -= 1;
+        }
+        if a[i] > b[i] && i >= n && violations == 0 && a[i - 1] <= b[i - 1] {
+            result[i] = 1.0;
         }
     }
 
@@ -664,6 +665,53 @@ fn fn_em_zig(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
     }
 }
 
+/// Fill `result[i]` with `value_of(i, pidx, pval)` for the m-th most recent
+/// pivot whose index is strictly below bar `i`, leaving the slot untouched
+/// when fewer than `m` pivots qualify. `pivots` must be sorted ascending by
+/// index (the zig-zag scan already produces them that way).
+///
+/// The old implementation re-walked the whole pivot list backwards for every
+/// bar — O(data_len · pivots). Since `i` only grows, the qualifying set only
+/// grows at its most-recent end, so a deque capped at the last `m` qualifying
+/// pivots turns the scan into one push per pivot and one read per bar.
+fn fill_mth_recent_pivot(
+    pivots: &[(usize, f64)],
+    m: usize,
+    data_len: usize,
+    result: &mut [f64],
+    value_of: fn(usize, usize, f64) -> f64,
+) {
+    if m == 0 {
+        // The old loop counted up from 1 before comparing against `m`, so
+        // `m == 0` never matched and every slot stayed NaN.
+        return;
+    }
+    // The single forward walk below is only valid for ascending indices; every
+    // caller builds its list from the zig-zag scan, which emits them in bar
+    // order. Cheap enough to assert in debug builds so a future caller that
+    // sorts differently fails loudly instead of silently shifting answers.
+    debug_assert!(
+        pivots.windows(2).all(|pair| pair[0].0 <= pair[1].0),
+        "fill_mth_recent_pivot requires pivots sorted ascending by index"
+    );
+    let mut window: std::collections::VecDeque<(usize, f64)> =
+        std::collections::VecDeque::with_capacity(m + 1);
+    let mut next = 0usize;
+    for i in 0..data_len {
+        while next < pivots.len() && pivots[next].0 < i {
+            window.push_back(pivots[next]);
+            if window.len() > m {
+                window.pop_front();
+            }
+            next += 1;
+        }
+        if window.len() == m {
+            let &(pidx, pval) = window.front().expect("len == m >= 1");
+            result[i] = value_of(i, pidx, pval);
+        }
+    }
+}
+
 fn fn_em_trough(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, FormulaError> {
     ensure_args_len("EM_TROUGH", args, 3)?;
     let _k = extract_f64_arg(args, 0, "EM_TROUGH")?;
@@ -679,18 +727,13 @@ fn fn_em_trough(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64
         .map(|(idx, price, _)| (*idx, *price))
         .collect();
 
-    for i in 0..data_len {
-        let mut count = 0usize;
-        for &(pidx, pval) in troughs.iter().rev() {
-            if pidx < i {
-                count += 1;
-                if count == m {
-                    result[i] = pval;
-                    break;
-                }
-            }
-        }
-    }
+    fill_mth_recent_pivot(
+        &troughs,
+        m,
+        data_len,
+        result.as_slice_mut().unwrap(),
+        |_, _, pval| pval,
+    );
 
     Ok(result)
 }
@@ -710,18 +753,13 @@ fn fn_em_peak(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
         .map(|(idx, price, _)| (*idx, *price))
         .collect();
 
-    for i in 0..data_len {
-        let mut count = 0usize;
-        for &(pidx, pval) in peaks.iter().rev() {
-            if pidx < i {
-                count += 1;
-                if count == m {
-                    result[i] = pval;
-                    break;
-                }
-            }
-        }
-    }
+    fill_mth_recent_pivot(
+        &peaks,
+        m,
+        data_len,
+        result.as_slice_mut().unwrap(),
+        |_, _, pval| pval,
+    );
 
     Ok(result)
 }
@@ -744,18 +782,14 @@ fn fn_em_troughbars(
         .map(|(idx, _, _)| *idx)
         .collect();
 
-    for i in 0..data_len {
-        let mut count = 0usize;
-        for &pidx in troughs.iter().rev() {
-            if pidx < i {
-                count += 1;
-                if count == m {
-                    result[i] = (i - pidx) as f64;
-                    break;
-                }
-            }
-        }
-    }
+    let pivot_values: Vec<(usize, f64)> = troughs.iter().map(|&idx| (idx, 0.0)).collect();
+    fill_mth_recent_pivot(
+        &pivot_values,
+        m,
+        data_len,
+        result.as_slice_mut().unwrap(),
+        |i, pidx, _| (i - pidx) as f64,
+    );
 
     Ok(result)
 }
@@ -775,18 +809,14 @@ fn fn_em_peakbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f
         .map(|(idx, _, _)| *idx)
         .collect();
 
-    for i in 0..data_len {
-        let mut count = 0usize;
-        for &pidx in peaks.iter().rev() {
-            if pidx < i {
-                count += 1;
-                if count == m {
-                    result[i] = (i - pidx) as f64;
-                    break;
-                }
-            }
-        }
-    }
+    let pivot_values: Vec<(usize, f64)> = peaks.iter().map(|&idx| (idx, 0.0)).collect();
+    fill_mth_recent_pivot(
+        &pivot_values,
+        m,
+        data_len,
+        result.as_slice_mut().unwrap(),
+        |i, pidx, _| (i - pidx) as f64,
+    );
 
     Ok(result)
 }
@@ -967,11 +997,20 @@ fn fn_backset(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     let data_len = ctx.data_len;
     let mut result = Array1::zeros(data_len);
 
-    for i in 0..data_len {
+    // `BACKSET` sets the *previous* `n - 1` bars too, so bar `j` is on iff some
+    // trigger fires in `[j, j + n - 1]` — a forward-looking condition. Walking
+    // the series backwards with a countdown answers it in one pass: the trigger
+    // at `i` arms `n` bars including itself, and the counter decays as `i`
+    // moves back. The old inner loop rewrote up to `n` slots per trigger,
+    // O(len · n) with a write storm on every trigger bar.
+    let mut remaining = 0usize;
+    for i in (0..data_len).rev() {
         if cond[i] > 0.0 {
-            for j in (i + 1).saturating_sub(n)..=i {
-                result[j] = 1.0;
-            }
+            remaining = n;
+        }
+        if remaining > 0 {
+            result[i] = 1.0;
+            remaining -= 1;
         }
     }
 
@@ -4387,6 +4426,39 @@ fn fn_sumbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>,
     let len = ctx.data_len;
     let mut out = nan_vec(len);
     let values = input.as_slice().unwrap();
+
+    // Fast path: with non-negative values the prefix sums are monotone, so the
+    // "smallest window ending at `i` whose sum reaches the threshold" is a
+    // binary search over the prefix table instead of a walk that restarts at
+    // bar `i` every time — O(len²) when the threshold is rarely reached (the
+    // usual `SUMBARS(VOL, CAPITAL)` shape). Negative or missing values break
+    // the monotonicity (one more bar can lower the sum), so they keep the
+    // rescan; a per-bar threshold is fine because each search is independent.
+    let monotone =
+        values.iter().all(|v| v.is_finite() && *v >= 0.0) && target.iter().all(|t| t.is_finite());
+    if monotone {
+        let mut prefix = Vec::with_capacity(len + 1);
+        prefix.push(0.0f64);
+        let mut acc = 0.0f64;
+        for &value in values.iter() {
+            acc += value;
+            prefix.push(acc);
+        }
+        for i in 0..len {
+            let need = prefix[i + 1] - target[i];
+            // Largest `j <= i` with `prefix[j] <= need`.
+            let first_above = prefix[..=i].partition_point(|&p| p <= need);
+            out[i] = if first_above == 0 {
+                // Even the empty prefix exceeds `need`: every window ending at
+                // `i` falls short, which the rescan reported as `i + 1` bars.
+                (i + 1) as f64
+            } else {
+                (i - (first_above - 1) + 1) as f64
+            };
+        }
+        return Ok(out);
+    }
+
     for i in 0..len {
         let threshold = target[i];
         let mut cumsum = 0.0;
@@ -4950,20 +5022,33 @@ fn fn_last(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
         ));
     }
 
-    for i in 0..data_len {
-        if i < a {
-            continue;
+    if a >= data_len {
+        // Every bar is inside the cold zone (`i < a`), so nothing can be set.
+        return Ok(result);
+    }
+
+    // "cond held for every bar in [i - a, i - b]" is a fixed-width sliding
+    // all-true test, so a counter of violating bars turns the O(len · (a-b))
+    // rescan into one add and one subtract per bar. `NaN` violates, exactly as
+    // in the original loop.
+    let violates = |j: usize| -> usize {
+        if cond[j] <= 0.0 || cond[j].is_nan() {
+            1
+        } else {
+            0
         }
-        let start = i - a;
-        let end = i - b;
-        let mut all_true = true;
-        for j in start..=end {
-            if cond[j] <= 0.0 || cond[j].is_nan() {
-                all_true = false;
-                break;
-            }
+    };
+    let mut violations = 0usize;
+    for j in 0..=(a - b) {
+        violations += violates(j);
+    }
+    for i in a..data_len {
+        if i > a {
+            // Window moves from `[i-1-a, i-1-b]` to `[i-a, i-b]`.
+            violations -= violates(i - 1 - a);
+            violations += violates(i - b);
         }
-        result[i] = if all_true { 1.0 } else { 0.0 };
+        result[i] = if violations == 0 { 1.0 } else { 0.0 };
     }
 
     Ok(result)
@@ -5036,18 +5121,13 @@ fn fn_peak(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
         .map(|(idx, price, _)| (*idx, *price))
         .collect();
 
-    for i in 0..data_len {
-        let mut count = 0usize;
-        for &(pidx, pval) in peaks.iter().rev() {
-            if pidx < i {
-                count += 1;
-                if count == m {
-                    result[i] = pval;
-                    break;
-                }
-            }
-        }
-    }
+    fill_mth_recent_pivot(
+        &peaks,
+        m,
+        data_len,
+        result.as_slice_mut().unwrap(),
+        |_, _, pval| pval,
+    );
 
     Ok(result)
 }
@@ -5066,18 +5146,13 @@ fn fn_trough(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, 
         .map(|(idx, price, _)| (*idx, *price))
         .collect();
 
-    for i in 0..data_len {
-        let mut count = 0usize;
-        for &(pidx, pval) in troughs.iter().rev() {
-            if pidx < i {
-                count += 1;
-                if count == m {
-                    result[i] = pval;
-                    break;
-                }
-            }
-        }
-    }
+    fill_mth_recent_pivot(
+        &troughs,
+        m,
+        data_len,
+        result.as_slice_mut().unwrap(),
+        |_, _, pval| pval,
+    );
 
     Ok(result)
 }
@@ -5096,18 +5171,14 @@ fn fn_peakbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
         .map(|(idx, _, _)| *idx)
         .collect();
 
-    for i in 0..data_len {
-        let mut count = 0usize;
-        for &pidx in peaks.iter().rev() {
-            if pidx < i {
-                count += 1;
-                if count == m {
-                    result[i] = (i - pidx) as f64;
-                    break;
-                }
-            }
-        }
-    }
+    let pivot_values: Vec<(usize, f64)> = peaks.iter().map(|&idx| (idx, 0.0)).collect();
+    fill_mth_recent_pivot(
+        &pivot_values,
+        m,
+        data_len,
+        result.as_slice_mut().unwrap(),
+        |i, pidx, _| (i - pidx) as f64,
+    );
 
     Ok(result)
 }
@@ -5126,18 +5197,14 @@ fn fn_troughbars(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
         .map(|(idx, _, _)| *idx)
         .collect();
 
-    for i in 0..data_len {
-        let mut count = 0usize;
-        for &pidx in troughs.iter().rev() {
-            if pidx < i {
-                count += 1;
-                if count == m {
-                    result[i] = (i - pidx) as f64;
-                    break;
-                }
-            }
-        }
-    }
+    let pivot_values: Vec<(usize, f64)> = troughs.iter().map(|&idx| (idx, 0.0)).collect();
+    fill_mth_recent_pivot(
+        &pivot_values,
+        m,
+        data_len,
+        result.as_slice_mut().unwrap(),
+        |i, pidx, _| (i - pidx) as f64,
+    );
 
     Ok(result)
 }
@@ -5449,32 +5516,43 @@ fn fn_mode(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>, Fo
     let data_len = ctx.data_len;
     let mut result = nan_vec(data_len);
 
+    // One reused map instead of a `Vec` allocation per bar. Ties are broken by
+    // the **earliest occurrence in the window**: `max_by_key(count)` over a
+    // `HashMap` iteration picked an arbitrary winner, and Rust's `RandomState`
+    // makes that order differ between processes — the same formula could return
+    // different values on different runs.
+    let mut counts: std::collections::HashMap<i64, (usize, usize, f64)> =
+        std::collections::HashMap::new();
     for i in 0..data_len {
         if i + 1 < n {
             continue;
         }
         let start = i + 1 - n;
-        let window: Vec<f64> = input
-            .slice(s![start..=i])
-            .iter()
-            .copied()
-            .filter(|v| !v.is_nan())
-            .collect();
-        if window.is_empty() {
-            continue;
-        }
-        let mut counts: HashMap<i64, (usize, f64)> = HashMap::new();
-        for &v in &window {
-            let key = (v * 100.0).round() as i64;
-            let entry = counts.entry(key).or_insert((0, v));
+        counts.clear();
+        for (offset, &value) in input.slice(s![start..=i]).iter().enumerate() {
+            if value.is_nan() {
+                continue;
+            }
+            let key = (value * 100.0).round() as i64;
+            let entry = counts.entry(key).or_insert((0, start + offset, value));
             entry.0 += 1;
         }
-        let mode_val = counts
-            .values()
-            .max_by_key(|(c, _)| *c)
-            .map(|(_, v)| *v)
-            .unwrap_or(f64::NAN);
-        result[i] = mode_val;
+        let mut best: Option<(usize, usize, f64)> = None;
+        for (_, entry) in counts.iter() {
+            let (count, first_idx, value) = *entry;
+            let wins = match best {
+                None => true,
+                Some((best_count, best_first, _)) => {
+                    count > best_count || (count == best_count && first_idx < best_first)
+                }
+            };
+            if wins {
+                best = Some((count, first_idx, value));
+            }
+        }
+        if let Some((_, _, value)) = best {
+            result[i] = value;
+        }
     }
     Ok(result)
 }
@@ -6311,18 +6389,13 @@ fn fn_fox_trough(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f6
         .map(|(idx, price, _)| (*idx, *price))
         .collect();
 
-    for i in 0..data_len {
-        let mut count = 0usize;
-        for &(pidx, pval) in troughs.iter().rev() {
-            if pidx < i {
-                count += 1;
-                if count == m {
-                    result[i] = pval;
-                    break;
-                }
-            }
-        }
-    }
+    fill_mth_recent_pivot(
+        &troughs,
+        m,
+        data_len,
+        result.as_slice_mut().unwrap(),
+        |_, _, pval| pval,
+    );
 
     Ok(result)
 }
@@ -6341,18 +6414,13 @@ fn fn_fox_peak(ctx: &FormulaContext, args: &[Array1<f64>]) -> Result<Array1<f64>
         .map(|(idx, price, _)| (*idx, *price))
         .collect();
 
-    for i in 0..data_len {
-        let mut count = 0usize;
-        for &(pidx, pval) in peaks.iter().rev() {
-            if pidx < i {
-                count += 1;
-                if count == m {
-                    result[i] = pval;
-                    break;
-                }
-            }
-        }
-    }
+    fill_mth_recent_pivot(
+        &peaks,
+        m,
+        data_len,
+        result.as_slice_mut().unwrap(),
+        |_, _, pval| pval,
+    );
 
     Ok(result)
 }
@@ -6374,18 +6442,14 @@ fn fn_fox_troughbars(
         .map(|(idx, _, _)| *idx)
         .collect();
 
-    for i in 0..data_len {
-        let mut count = 0usize;
-        for &pidx in troughs.iter().rev() {
-            if pidx < i {
-                count += 1;
-                if count == m {
-                    result[i] = (i - pidx) as f64;
-                    break;
-                }
-            }
-        }
-    }
+    let pivot_values: Vec<(usize, f64)> = troughs.iter().map(|&idx| (idx, 0.0)).collect();
+    fill_mth_recent_pivot(
+        &pivot_values,
+        m,
+        data_len,
+        result.as_slice_mut().unwrap(),
+        |i, pidx, _| (i - pidx) as f64,
+    );
 
     Ok(result)
 }
@@ -6407,18 +6471,14 @@ fn fn_fox_peakbars(
         .map(|(idx, _, _)| *idx)
         .collect();
 
-    for i in 0..data_len {
-        let mut count = 0usize;
-        for &pidx in peaks.iter().rev() {
-            if pidx < i {
-                count += 1;
-                if count == m {
-                    result[i] = (i - pidx) as f64;
-                    break;
-                }
-            }
-        }
-    }
+    let pivot_values: Vec<(usize, f64)> = peaks.iter().map(|&idx| (idx, 0.0)).collect();
+    fill_mth_recent_pivot(
+        &pivot_values,
+        m,
+        data_len,
+        result.as_slice_mut().unwrap(),
+        |i, pidx, _| (i - pidx) as f64,
+    );
 
     Ok(result)
 }
@@ -6779,6 +6839,301 @@ mod pr14_semantic_contract_tests {
 
     fn scalar(len: usize, value: f64) -> Array1<f64> {
         Array1::from_elem(len, value)
+    }
+
+    /// Differential guard for the sliding-violation LONGCROSS rewrite: the
+    /// counter version must match a direct O(len·n) rescan on every bar,
+    /// including the `i < n` cold zone and NaN bars.
+    #[test]
+    fn longcross_matches_naive_rescan() {
+        let a: Vec<f64> = (0..60)
+            .map(|i| {
+                let t = i as f64;
+                (t * 0.9).sin() * 3.0 + t * 0.05
+            })
+            .collect();
+        let b: Vec<f64> = (0..60)
+            .map(|i| {
+                let t = i as f64;
+                (t * 0.5).cos() * 1.5
+            })
+            .collect();
+        let mut with_nan = a.clone();
+        with_nan[10] = f64::NAN;
+        with_nan[40] = f64::NAN;
+        for (a_series, name) in [(&a, "finite"), (&with_nan, "with-nan")] {
+            for n in [0usize, 1, 3, 10, 59] {
+                let args = vec![
+                    Array1::from(a_series.clone()),
+                    Array1::from(b.clone()),
+                    Array1::from(vec![n as f64]),
+                ];
+                let got = fn_longcross(&context(Array1::from(vec![0.0]), Array1::ones(1)), &args)
+                    .unwrap();
+                // Naive reference: the original double loop.
+                let len = a.len();
+                let mut expected = Array1::zeros(len);
+                for i in 1..len {
+                    if a_series[i] > b[i] {
+                        let mut below_for_n = i >= n;
+                        let mut j = i.saturating_sub(n);
+                        while below_for_n && j < i {
+                            if a_series[j] > b[j] {
+                                below_for_n = false;
+                            }
+                            j += 1;
+                        }
+                        if below_for_n && a_series[i - 1] <= b[i - 1] {
+                            expected[i] = 1.0;
+                        }
+                    }
+                }
+                assert_eq!(
+                    got.as_slice().unwrap(),
+                    expected.as_slice().unwrap(),
+                    "LONGCROSS {name} n={n}"
+                );
+            }
+        }
+    }
+
+    /// `BACKSET` fills *backwards* from each trigger, so bar `j` is on iff a
+    /// trigger fires in `[j, j + n - 1]`. The countdown rewrite must match the
+    /// original per-trigger fill exactly, including overlapping triggers and
+    /// the last `n - 1` bars (where the window runs past the end).
+    #[test]
+    fn backset_matches_naive_fill() {
+        let cond: Vec<f64> = (0..80)
+            .map(|i| {
+                if [3usize, 4, 20, 21, 22, 50, 79].contains(&i) {
+                    1.0
+                } else {
+                    0.0
+                }
+            })
+            .collect();
+        let len = cond.len();
+        let ctx = context(Array1::from(cond.clone()), Array1::ones(len));
+        for n in [1usize, 2, 3, 5, 17, 40, 80, 200] {
+            let args = vec![Array1::from(cond.clone()), Array1::from(vec![n as f64])];
+            let got = fn_backset(&ctx, &args).unwrap();
+            let mut expected = Array1::zeros(len);
+            for i in 0..len {
+                if cond[i] > 0.0 {
+                    for j in (i + 1).saturating_sub(n)..=i {
+                        expected[j] = 1.0;
+                    }
+                }
+            }
+            assert_eq!(
+                got.as_slice().unwrap(),
+                expected.as_slice().unwrap(),
+                "BACKSET n={n}"
+            );
+        }
+    }
+
+    /// MODE used to pick its winner with `max_by_key` over a `HashMap`
+    /// iteration, which is order-dependent (Rust randomises the seed per
+    /// process) — tied counts could return different values run to run. The
+    /// winner is now the earliest occurrence in the window, checked against a
+    /// direct recount.
+    #[test]
+    fn mode_ties_break_to_earliest_occurrence() {
+        // Window 3 over [5,7,5,7,...]: every window holds a 2-vs-1 or 1-vs-2
+        // majority, and the first full window is a 1-1 tie broken by position.
+        let input = vec![5.0, 7.0, 9.0, 5.0, 7.0, 7.0, 5.0, 5.0];
+        let ctx = context(Array1::from(input.clone()), Array1::ones(input.len()));
+        let args = vec![Array1::from(input.clone()), Array1::from(vec![3.0])];
+        let got = fn_mode(&ctx, &args).unwrap();
+        let mut expected = vec![f64::NAN; input.len()];
+        for i in 0..input.len() {
+            if i + 1 < 3 {
+                continue;
+            }
+            let start = i + 1 - 3;
+            let mut best: Option<(usize, usize, f64)> = None;
+            for j in start..=i {
+                let value = input[j];
+                if value.is_nan() {
+                    continue;
+                }
+                let count = (start..=i).filter(|&k| input[k] == value).count();
+                let wins = match best {
+                    None => true,
+                    Some((best_count, best_first, _)) => {
+                        count > best_count || (count == best_count && j < best_first)
+                    }
+                };
+                if wins {
+                    best = Some((count, j, value));
+                }
+            }
+            if let Some((_, _, value)) = best {
+                expected[i] = value;
+            }
+        }
+        // `assert_eq!` on slices would fail on the leading NaNs (NaN != NaN).
+        let same = got
+            .iter()
+            .zip(expected.iter())
+            .all(|(g, e)| g == e || (g.is_nan() && e.is_nan()));
+        assert!(
+            same,
+            "MODE got {:?} expected {:?}",
+            got.as_slice().unwrap(),
+            expected
+        );
+        // [5, 7, 9]: all appear once, so the earliest (5.0) wins rather than
+        // whatever order the map happened to yield.
+        assert_eq!(got[2], 5.0);
+        // [5, 7, 7]: 7.0 is the actual majority, not just the earliest.
+        assert_eq!(got[5], 7.0);
+    }
+
+    /// `LAST(cond, A, B)` is a fixed-width all-true test over `[i-A, i-B]`; the
+    /// sliding violation counter must match the rescan on every bar, including
+    /// the `i < A` cold zone, `A == B`, and NaN bars (which violate).
+    #[test]
+    fn last_matches_naive_rescan() {
+        let cond: Vec<f64> = (0..60)
+            .map(|i| if i % 7 == 3 && i % 5 == 1 { 0.0 } else { 1.0 })
+            .collect();
+        let mut with_nan = cond.clone();
+        with_nan[9] = f64::NAN;
+        with_nan[33] = f64::NAN;
+        let ctx = context(Array1::from(cond.clone()), Array1::ones(cond.len()));
+        for (series, name) in [(&cond, "finite"), (&with_nan, "with-nan")] {
+            for (a, b) in [(1usize, 1usize), (3, 1), (5, 5), (10, 4), (30, 0), (70, 3)] {
+                let args = vec![
+                    Array1::from(series.clone()),
+                    Array1::from(vec![a as f64]),
+                    Array1::from(vec![b as f64]),
+                ];
+                let got = fn_last(&ctx, &args).unwrap();
+                let len = series.len();
+                let mut expected = Array1::zeros(len);
+                for i in 0..len {
+                    if i < a {
+                        continue;
+                    }
+                    let mut all_true = true;
+                    for j in (i - a)..=(i - b) {
+                        if series[j] <= 0.0 || series[j].is_nan() {
+                            all_true = false;
+                            break;
+                        }
+                    }
+                    expected[i] = if all_true { 1.0 } else { 0.0 };
+                }
+                assert_eq!(
+                    got.as_slice().unwrap(),
+                    expected.as_slice().unwrap(),
+                    "LAST {name} A={a} B={b}"
+                );
+            }
+        }
+    }
+
+    /// The monotone prefix-search fast path must agree bar for bar with the
+    /// backwards rescan, on thresholds that are reached early, reached only
+    /// from bar 0, and never reached at all.
+    #[test]
+    fn sumbars_matches_naive_walk() {
+        let values: Vec<f64> = (0..120)
+            .map(|i| 1.0 + ((i as f64) * 0.7).sin().abs() * 4.0)
+            .collect();
+        let ctx = context(Array1::from(values.clone()), Array1::ones(values.len()));
+        for threshold in [0.0f64, 1.0, 7.5, 60.0, 1e9] {
+            let args = vec![
+                Array1::from(values.clone()),
+                Array1::from_elem(values.len(), threshold),
+            ];
+            let got = fn_sumbars(&ctx, &args).unwrap();
+            let mut expected = vec![f64::NAN; values.len()];
+            for i in 0..values.len() {
+                let mut cumsum = 0.0;
+                let mut bars = 0.0;
+                for j in (0..=i).rev() {
+                    cumsum += values[j];
+                    bars += 1.0;
+                    if cumsum >= threshold {
+                        break;
+                    }
+                }
+                expected[i] = bars;
+            }
+            assert_eq!(
+                got.as_slice().unwrap(),
+                expected.as_slice(),
+                "SUMBARS threshold={threshold}"
+            );
+        }
+
+        // A per-bar threshold takes the same fast path (each search is
+        // independent) and must still match.
+        let varying: Vec<f64> = (0..values.len()).map(|i| 2.0 + (i as f64) * 0.05).collect();
+        let args = vec![Array1::from(values.clone()), Array1::from(varying.clone())];
+        let got = fn_sumbars(&ctx, &args).unwrap();
+        let mut expected = vec![f64::NAN; values.len()];
+        for i in 0..values.len() {
+            let mut cumsum = 0.0;
+            let mut bars = 0.0;
+            for j in (0..=i).rev() {
+                cumsum += values[j];
+                bars += 1.0;
+                if cumsum >= varying[i] {
+                    break;
+                }
+            }
+            expected[i] = bars;
+        }
+        assert_eq!(
+            got.as_slice().unwrap(),
+            expected.as_slice(),
+            "SUMBARS varying threshold"
+        );
+
+        // Negative values break monotonicity and must keep the rescan: a window
+        // can lose sum by growing, which the binary search cannot express.
+        let signed = vec![-1.0f64, 5.0, -3.0, 4.0, 2.0];
+        let signed_ctx = context(Array1::from(signed.clone()), Array1::ones(signed.len()));
+        let args = vec![
+            Array1::from(signed.clone()),
+            Array1::from_elem(signed.len(), 3.0),
+        ];
+        let got = fn_sumbars(&signed_ctx, &args).unwrap();
+        // i=0 never reaches 3 from bar 0 alone; i=2 needs all three bars
+        // (-3 + 5 - 1 = 1 < 3) and reports 3 — the rescan, not a search.
+        assert_eq!(got.as_slice().unwrap(), &[1.0, 1.0, 3.0, 1.0, 2.0]);
+    }
+
+    #[test]
+    fn mth_recent_pivot_handles_few_pivots_and_zero_m() {
+        let pivots = vec![(2usize, 30.0), (7, 40.0), (12, 35.0)];
+        let mut result = vec![f64::NAN; 20];
+
+        // m = 0 stays all-NaN (the old loop could never reach count == 0).
+        fill_mth_recent_pivot(&pivots, 0, 20, &mut result, |_, _, pval| pval);
+        assert!(result.iter().all(|v| v.is_nan()));
+
+        // m = 2: bar 7 sees only one pivot before it, bar 8 onward sees two.
+        fill_mth_recent_pivot(&pivots, 2, 20, &mut result, |_, _, pval| pval);
+        assert!(result[..8].iter().all(|v| v.is_nan()));
+        assert_eq!(result[8], 30.0, "second-most-recent pivot before bar 8");
+        assert_eq!(result[13], 40.0, "second-most-recent pivot before bar 13");
+
+        // m = 1 tracks the most recent pivot.
+        fill_mth_recent_pivot(&pivots, 1, 20, &mut result, |_, _, pval| pval);
+        assert_eq!(result[3], 30.0);
+        assert_eq!(result[9], 40.0);
+        assert_eq!(result[19], 35.0);
+
+        // The bars variant reports (i - pidx) from the same window.
+        let indices = vec![(2usize, 0.0), (7, 0.0), (12, 0.0)];
+        fill_mth_recent_pivot(&indices, 1, 20, &mut result, |i, pidx, _| (i - pidx) as f64);
+        assert_eq!(result[3], 1.0);
+        assert_eq!(result[12], 5.0);
     }
 
     #[test]

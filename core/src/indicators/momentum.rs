@@ -156,13 +156,22 @@ pub fn rsi(input: &[f64], period: usize) -> Result<Array1<f64>> {
 }
 
 #[inline]
+// Every slot is written by `rsi_simd_into` before it is read; the `expect` is
+// deliberate (CI denies unfulfilled lint expectations, so a stale suppression
+// fails the build rather than silently rotting).
+#[expect(clippy::uninit_vec)]
 fn rsi_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let len = input.len();
-    let mut output = init_output(len);
-    // SIMD dispatch (AVX-512 → AVX2 → scalar) lives inside `rsi_simd_into`;
-    // the scalar fallback path is bit-faithful to the original loop above.
-    crate::math::simd_kernels::rsi_simd_into(input, period, output.as_slice_mut().unwrap());
-    Ok(output)
+    // Every dispatch path inside `rsi_simd_into` (AVX-512 → AVX-2 → scalar)
+    // writes the warm-up NaN slots itself, so the old full-length
+    // `init_output` fill was a redundant memory pass over the whole output —
+    // a measurable share of the runtime on million-bar series.
+    let mut output = Vec::with_capacity(len);
+    // SAFETY: `rsi_simd_into` below writes every slot of the `len`-slot buffer
+    // (warm-up NaNs and values alike) before any slot is read.
+    unsafe { output.set_len(len) };
+    crate::math::simd_kernels::rsi_simd_into(input, period, output.as_mut_slice());
+    Ok(Array1::from_vec(output))
 }
 
 /// Compute RSI writing results into a pre-allocated buffer.
@@ -3185,6 +3194,12 @@ pub fn aroonosc(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>>
     // `NaN` fails every comparison, so missing bars are skipped with no
     // explicit test; a window with no finite bar reports NaN (the deque version
     // used to index an empty queue and panic there instead).
+    // NOTE: a fused Van Herk–Gil–Werman block scan (value+index tables for
+    // both legs, single pass, no per-bar allocation) was tried here and
+    // measured *slower* than this cached path on the noisy benchmark series
+    // (~10ns vs ~7.5ns per bar — the eight dynamically indexed tables cost
+    // more than the rescans they prevent), so the cached kernel stays. See
+    // V4 plan §36.
     let mut highest = f64::NEG_INFINITY;
     let mut highest_idx = 0usize;
     let mut has_high = false;
@@ -3666,6 +3681,9 @@ pub fn stochf(
 
     let mut d_ring = vec![0.0_f64; fastd_period];
     let mut d_sum: f64 = 0.0;
+    // `d_idx` grows by exactly one per emitted bar, so the ring position is a
+    // wrapping counter — a `%` here would be a division on the hot path.
+    let mut d_ring_pos = 0usize;
 
     let high_ptr = high.as_ptr();
     let low_ptr = low.as_ptr();
@@ -3720,10 +3738,12 @@ pub fn stochf(
                 *fastk.get_unchecked_mut(i) = fk;
             }
 
-            let d_idx = i - fastk_start;
-            let ring_pos = d_idx % fastd_period;
-            d_sum += fk - *d_ring.get_unchecked(ring_pos);
-            *d_ring.get_unchecked_mut(ring_pos) = fk;
+            d_sum += fk - *d_ring.get_unchecked(d_ring_pos);
+            *d_ring.get_unchecked_mut(d_ring_pos) = fk;
+            d_ring_pos += 1;
+            if d_ring_pos == fastd_period {
+                d_ring_pos = 0;
+            }
 
             if i >= d_start {
                 *fastd.get_unchecked_mut(i) = d_sum * inv_d;
@@ -4158,13 +4178,19 @@ pub fn stochrsi_into(
         let raw = out_k[i];
         k_sum += raw - raw_ring[raw_pos];
         raw_ring[raw_pos] = raw;
-        raw_pos = (raw_pos + 1) % fastk_period;
+        raw_pos += 1;
+        if raw_pos == fastk_period {
+            raw_pos = 0;
+        }
         if i >= k_start {
             let smoothed_k = k_sum / fastk_period as f64;
             out_k[i] = smoothed_k;
             d_sum += smoothed_k - d_ring[d_pos];
             d_ring[d_pos] = smoothed_k;
-            d_pos = (d_pos + 1) % fastd_period;
+            d_pos += 1;
+            if d_pos == fastd_period {
+                d_pos = 0;
+            }
         }
         if i >= d_start {
             out_d[i] = d_sum / fastd_period as f64;
@@ -4331,6 +4357,11 @@ fn ultosc_default_7_14_28_into(
     let mut tr2_sum = 0.0;
     let mut bp3_sum = 0.0;
     let mut tr3_sum = 0.0;
+    // Ring positions increment by exactly one per bar, so wrap counters replace
+    // three `%` divisions on the hot path.
+    let mut pos1 = 0usize;
+    let mut pos2 = 0usize;
+    let mut pos3 = 0usize;
 
     for i in 0..high.len() {
         let (bp, tr) = if i == 0 {
@@ -4339,9 +4370,9 @@ fn ultosc_default_7_14_28_into(
             let tl = low[i].min(close[i - 1]);
             (close[i] - tl, high[i].max(close[i - 1]) - tl)
         };
-        let idx1 = i % 7;
-        let idx2 = i % 14;
-        let idx3 = i % 28;
+        let idx1 = pos1;
+        let idx2 = pos2;
+        let idx3 = pos3;
         bp1_sum += bp - bp1[idx1];
         tr1_sum += tr - tr1[idx1];
         bp2_sum += bp - bp2[idx2];
@@ -4354,6 +4385,18 @@ fn ultosc_default_7_14_28_into(
         tr2[idx2] = tr;
         bp3[idx3] = bp;
         tr3[idx3] = tr;
+        pos1 += 1;
+        if pos1 == 7 {
+            pos1 = 0;
+        }
+        pos2 += 1;
+        if pos2 == 14 {
+            pos2 = 0;
+        }
+        pos3 += 1;
+        if pos3 == 28 {
+            pos3 = 0;
+        }
 
         if i >= 28 {
             let avg1 = if tr1_sum.abs() > 1e-15 {
