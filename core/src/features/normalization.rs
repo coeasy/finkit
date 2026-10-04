@@ -11,7 +11,11 @@ pub fn rolling_zscore_normalize(data: &[f64], window: usize) -> Array1<f64> {
 
 /// Rolling min-max normalization to [0, 1] range.
 ///
-/// Uses only the rolling window to determine min/max bounds.
+/// Uses only the rolling window to determine min/max bounds. The bounds come
+/// from the shared extrema kernel, so the walk is linear in the series rather
+/// than `O(window)` per bar. A missing bar is dropped by that kernel instead of
+/// poisoning the bounds; a missing value *at* the current bar still normalizes
+/// to `NaN`, and a degenerate window (`max == min`) maps to `0.5`.
 pub fn rolling_minmax(data: &[f64], window: usize) -> Array1<f64> {
     let len = data.len();
     let mut out = Array1::from_elem(len, f64::NAN);
@@ -19,18 +23,14 @@ pub fn rolling_minmax(data: &[f64], window: usize) -> Array1<f64> {
         return out;
     }
 
-    for i in (window - 1)..len {
-        let start = i + 1 - window;
-        let slice = &data[start..=i];
-        let min = slice.iter().cloned().fold(f64::INFINITY, f64::min);
-        let max = slice.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-        let range = max - min;
-        if range > 1e-15 {
-            out[i] = (data[i] - min) / range;
+    crate::math::statistics::rolling_minmax_visit(data, data, window, |i, highest, lowest| {
+        let range = highest - lowest;
+        out[i] = if range > 1e-15 {
+            (data[i] - lowest) / range
         } else {
-            out[i] = 0.5;
-        }
-    }
+            0.5
+        };
+    });
     out
 }
 

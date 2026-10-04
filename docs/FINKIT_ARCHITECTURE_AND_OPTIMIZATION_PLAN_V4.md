@@ -2707,3 +2707,100 @@ V4 §31 对照表同步改为指向 §32 的完成态（原「未做/未实现�
   孤儿/断链/死循环门禁绿（死循环 9/9 有界）。
 - **R10（收尾）**：非 pyo3 crate 全量 `cargo check` + clippy 0 error、提交推送
   （SSH，复核远端 SHA）、安装包重建 + manifest/契约门禁（见 CHANGELOG 当日条目）。
+
+## 34. 第九轮 C：滚动极值接入缓存索引快路径 + NaN 透明（2026-10-04）
+
+### 34.1 为什么做
+
+`MAX` / `MIN` 及其派生族（`MIDPOINT` / `MIDPRICE` / `WILLR` / `STOCH` / `AROON`）
+共享同一个滚动极值内核，而它在第九轮之前只有「缓存索引」一条快路径被
+`MIDPOINT` 一类指标用上；`MAX`/`MIN` 本身走的还是每根 bar 重扫窗口的实现，
+窗口 30 就是 O(n·w)。同一轮还发现：`talib_ext.rs::rolling_minmax`（`KDJ` /
+`SMI` 的上游）和 `features/normalization.rs::rolling_minmax`（特征归一化器）
+各写了一份 O(n·w) 的 fold —— **三个调用方、两份重复实现、零共享**。
+
+### 34.2 NaN 契约的最终形态（本轮最容易走错的方向）
+
+仓库早已存在一条**门禁化**的 warm-up 契约，第九轮之前只是没被写进文档，所以
+本轮两次踩坑才反推出它的真实含义：
+
+> 滚动极值在「窗口必须填满 `period` 个 bar」之后才出结果；**缺失值不填充窗口**。
+
+用 pandas 的语言说，这是 `rolling(window=p, min_periods=p).max()`，等价于
+`skipna=True` 但从**首个有限值**起算。设 `f = first_finite(values)`，则首个
+报告位于 `f + period - 1`。
+
+裁决依据是仓库自己的差分门禁（`formula_differential_tests` 的
+`check_all_paths_with_warm_variable`，LEN=200，`warm = MA(CLOSE,5)` → 196 有限）：
+`HHV(X,9)` 期望 **188** 个有限值。若按「窗口从 `period-1` 起就照报、只丢窗内
+NaN」（contract A）会得到 192；只有「先跳过前导缺失段」（contract B）才得到
+188 = 200 − (4+9−1)。同族其余锚点（`LLV`/`MA`/`SUM` 188、`MEDIAN` 192、`RSI` 191）
+全部指向 contract B。
+
+**本轮走过的两条错路，记下来防止再走：**
+
+1. 先按 contract A 改（窗口内 dropna、不跳过前导段）→ 批量通过，但流式立刻
+   与批量分叉（`HHV(MA(CLOSE,2),3)`：流式 `[NaN,NaN,NaN,11,12.5,13.5]` vs
+   批量 `[NaN,NaN,10.5,11,12.5,13.5]`），且 4 条 warm-up 门禁从 188 变 192 而红。
+2. 改流式时用了 `finite_count >= period` 作就绪判据 → 与批量的
+   `i >= first_finite + period - 1` **不等价**：数据 `[5, NaN, 3, 4, …]` 在
+   index 2 批量报 5（窗口 `[5,NaN,3]` 已占满 3 个位置），流式因为只数到 2 个
+   有限值而报 NaN。正确形态是「跳过前导缺失段 + 之后按**绝对 bar 序号**计数」。
+
+### 34.3 实现
+
+| 层 | 改动 |
+|---|---|
+| 批量内核 `core/src/math/statistics.rs` | 新增 `first_finite(values) -> Option<usize>`；`fill_rolling_extreme` 计算 `warm_at = first_finite + window - 1` 并贯穿 `rolling_extreme_cached` / `rolling_extreme_ring` / `rolling_minmax_visit` / `rolling_minmax_cached` / `rolling_minmax_ring`。两条策略（≤512 缓存索引 / >512 单调环）在 NaN 语义上一致，原先的 `has_missing` 分流已删除 —— **gate=512 处不再有一条永远不可达的环** |
+| 融合 high/low 内核 | `rolling_minmax_visit` 两腿**各自独立**算 `warm_high_at` / `warm_low_at`，emit gate 为 `i >= warm_high_at && i >= warm_low_at`，避免一条腿的前导缺失把另一条腿拖进 warm-up |
+| 流式 `StreamingMax` / `StreamingMin` | 用 `started: bool` 跳过前导缺失段，`count` 改为「首个有限 bar 起的 bar 序号」；`NaN` 永不入单调队列但**仍推进 bar 序号**（既当窗口位置也参与过期，过期判据 `pos + period < count`）；就绪判据回到 `count >= period`。与批量逐位对齐 |
+| 孤儿收敛 | `talib_ext::rolling_minmax`（O(n·w) fold）与 `features/normalization::rolling_minmax`（两份 fold）改为委托共享内核 `rolling_minmax_visit`；`KDJ` / `SMI` / 特征归一化器三个调用方共用同一条快路径 |
+
+顺带清掉：`statistics.rs` 上一处因策略合并而失效的 `#[allow(dead_code)]`。
+
+### 34.4 语义变更（对外可见，必须知晓）
+
+1. **前导缺失段推迟首个报告**：`[NaN, NaN, 10, 8, 12, 6, 14]` 的 `HHV(_,3)`
+   从 `[NaN,NaN,10,10,12,12,14]` 变为 `[NaN,NaN,NaN,NaN,12,12,14]`。
+2. **窗口内缺失值不再污染结果**：`[2, 3, NaN]` 的 max 从 `NaN` 变为 `3`
+   （第九轮之前 NaN 一旦入队就永不被支配，把后续所有窗口全打成 NaN）。
+3. **全缺失窗口返回 `None`**（流式）/ `NaN`（批量），不再回吐上一个窗口的值。
+4. **特征归一化器**：当前 bar 本身缺失时结果为 `NaN`（原为 `0.5`）；窗口内有
+   缺失时不再污染上下界。退化窗口（上下界相等）仍为 `0.5`。
+
+前 3 条是第九轮用户拍板的「本轮修成 NaN 透明」；第 4 条是收敛的副作用，已在
+CHANGELOG 明确列出。
+
+### 34.5 门禁
+
+- `core/tests/extrema_cached_path.rs`（新增，10 条）：两策略对拍、缓存边界两侧
+  全覆盖（1/2/3/5/14/30/64/128/200/255/256/511/512/513/1024）、NaN 不污染、
+  前导缺失推迟首个报告、全缺失窗口、融合内核每腿独立丢弃、等值取最早下标、
+  长序列不漂移。
+- `stateful.rs` 的 `streaming_extrema_defer_the_first_report_past_a_leading_missing_run`
+  把流式与批量在**同一份输入**上钉在一起（此前只钉了无前导缺失的情况）。
+- `TEST_INDEX.md` 补齐 3 个未被索引的 target（`extrema_cached_path` /
+  `formula_draw_parity` / `formula_string_literals`）—— `test_index_contract`
+  是双向门禁，正是它把前几轮悄悄新增的测试 target 顶出来的。
+
+### 34.6 验证（2026-10-04，rustc 1.98.1）
+
+| 项 | 结果 |
+|---|---|
+| `cargo test -p finkit --lib` | **3036 passed / 0 failed** |
+| `cargo test -p finkit --test extrema_cached_path` | **10/10 passed** |
+| `cargo test -p finkit --test formula_differential_tests` | **52/52 passed** |
+| `cargo test -p finkit --tests`（全部 integration target） | **全绿**（含 `test_index_contract`） |
+| `cargo fmt --all --check` | 干净 |
+| `cargo clippy --workspace --all-targets` | 本轮改动范围内**无新增 lint**（命中的 15 条全是 workspace 既有的 pedantic 噪声：`must_use_candidate` / `missing_errors_doc` / `doc_backticks` 等） |
+| `cargo test -p finkit --doc` | **240 failed / 0 passed**，失败原因 100% 为 `Failed to spawn` + `所有的管道范例都在使用中`（ERROR_PIPE_BUSY，Windows 沙箱内 rustdoc 无法 fork rustc）。改动前的基线是同一数字，**非本轮回归** |
+
+两个环境层面的既有失败（均非本轮引入、均与本仓库代码无关）：
+
+- **doc test**：ERROR_PIPE_BUSY，见上表。
+- **`pyo3-ffi v0.29.2` build script 退出码 1**：`cargo clippy --workspace`
+  的唯一 `error`，Python 绑定在本机缺可用的解释器发现路径；其余 crate 全部
+  0 error。
+
+未闭环（明确记账，不假装做完）：§32.3 记录的 30 项「追平 TA-Lib」复测、以及
+第九轮 D/E 的三轮审计与安装包重建，按用户在决策门上的选择另行排期。

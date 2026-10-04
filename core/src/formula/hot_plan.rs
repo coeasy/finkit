@@ -149,7 +149,15 @@ impl FormulaHotPlan {
                 ));
             }
         }
-        let (parameters, ranges) = bind_numeric_literals(&semantic)?;
+        let (mut parameters, mut ranges) = bind_numeric_literals(&semantic)?;
+        // A string literal cannot put its text in the arena — the arena is
+        // numeric — so each `STRING_LITERAL` node carries its index into the
+        // plan's ordered literal list instead. The index is what the tree path
+        // evaluates the same node to, and the dispatcher adds the context's
+        // pre-existing table length so a non-empty `string_table` stays
+        // consistent across both paths.
+        let string_ranges = bind_string_literals(&semantic, &mut parameters)?;
+        ranges.extend(string_ranges);
         let optimized = cse_plan(&semantic, &parameters, &ranges)?;
         let lowered = lower_formula_plumbing(&optimized, semantic.root())?;
         let numeric = prune_unreachable(&lowered.plan, &lowered.roots)?;
@@ -830,6 +838,56 @@ fn prune_unreachable(
 /// every lowering decision, including how many times a loop body was
 /// duplicated, and any drift would bind the wrong constant to the wrong node
 /// instead of failing.
+/// Bind each `STRING_LITERAL` node's literal index into the parameter arena.
+///
+/// The plan's literal list is ordered by node id, which is the order the tree
+/// path appends the same literals to `FormulaContext::string_table`. The stored
+/// parameter is the *plan-local* index; the dispatcher offsets it by the
+/// context's pre-existing table length, so both paths agree on the index even
+/// when a caller pre-populated the table.
+fn bind_string_literals(
+    semantic: &FormulaComputePlan,
+    arena: &mut ParameterArena,
+) -> Result<BTreeMap<ComputeNodeId, ParameterRange>, FormulaHotPlanError> {
+    let literals = semantic.string_literals_ordered();
+    if literals.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+
+    let mut string_nodes = Vec::new();
+    for raw_id in 0..semantic.plan().len() {
+        let id = ComputeNodeId(raw_id);
+        if semantic
+            .plan()
+            .node(id)
+            .is_some_and(|node| node.operation == "STRING_LITERAL")
+        {
+            string_nodes.push(id);
+        }
+    }
+    if string_nodes.len() != literals.len() {
+        return Err(FormulaHotPlanError::LiteralBindingMismatch {
+            ast_literals: literals.len(),
+            number_nodes: string_nodes.len(),
+        });
+    }
+
+    let mut ranges = BTreeMap::new();
+    for (index, (node, text)) in literals.iter().enumerate() {
+        debug_assert!(
+            semantic.string_literal(*node).is_some_and(|t| t == *text),
+            "string literal list must stay keyed by the node that carries it"
+        );
+        // `index` is a slot ordinal, never a magnitude: it is exact in f64 for
+        // any table a formula could name.
+        #[allow(clippy::cast_precision_loss)]
+        let value = ParameterValue::from_f64(index as f64);
+        let range = arena.extend([value]);
+        ranges.insert(*node, range);
+    }
+    Ok(ranges)
+}
+
 fn bind_numeric_literals(
     semantic: &FormulaComputePlan,
 ) -> Result<(ParameterArena, BTreeMap<ComputeNodeId, ParameterRange>), FormulaHotPlanError> {

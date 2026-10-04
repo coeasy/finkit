@@ -211,41 +211,15 @@ pub fn minus(data: &[f64], period: usize) -> Result<Array1<f64>> {
 pub fn max(data: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_window(data, period)?;
 
-    let len = data.len();
-    let mut output = init_output(len);
-    if period == 1 {
-        // 1 周期窗口就是自身
-        for (i, v) in data.iter().enumerate() {
-            output[i] = *v;
-        }
-        return Ok(output);
-    }
-
-    // 使用 deque 实现 O(n) 的滑动窗口最大算法
-    let mut deque: VecDeque<usize> = VecDeque::with_capacity(period);
-    for i in 0..len {
-        // 移除超出窗口左侧的元素
-        while let Some(&front) = deque.front() {
-            if front + period <= i {
-                deque.pop_front();
-            } else {
-                break;
-            }
-        }
-        // 维护单调递减：移除所有 <= 当前值的队尾
-        while let Some(&back) = deque.back() {
-            if data[back] <= data[i] {
-                deque.pop_back();
-            } else {
-                break;
-            }
-        }
-        deque.push_back(i);
-
-        if i + 1 >= period {
-            output[i] = data[*deque.front().expect("deque non-empty after push")];
-        }
-    }
+    let mut output = init_output(data.len());
+    // Share the cached-index kernel with the rest of the extrema family. The
+    // kernel leaves the `period - 1` warm-up slots alone, so the NaN fill above
+    // is what callers observe before the first full window.
+    crate::math::statistics::rolling_max_into(
+        data,
+        period,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    );
     Ok(output)
 }
 
@@ -275,40 +249,13 @@ pub fn max(data: &[f64], period: usize) -> Result<Array1<f64>> {
 pub fn min(data: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_window(data, period)?;
 
-    let len = data.len();
-    let mut output = init_output(len);
-    if period == 1 {
-        for (i, v) in data.iter().enumerate() {
-            output[i] = *v;
-        }
-        return Ok(output);
-    }
-
-    // 使用 deque 实现 O(n) 的滑动窗口最小算法
-    let mut deque: VecDeque<usize> = VecDeque::with_capacity(period);
-    for i in 0..len {
-        // 移除超出窗口左侧的元素
-        while let Some(&front) = deque.front() {
-            if front + period <= i {
-                deque.pop_front();
-            } else {
-                break;
-            }
-        }
-        // 维护单调递增：移除所有 >= 当前值的队尾
-        while let Some(&back) = deque.back() {
-            if data[back] >= data[i] {
-                deque.pop_back();
-            } else {
-                break;
-            }
-        }
-        deque.push_back(i);
-
-        if i + 1 >= period {
-            output[i] = data[*deque.front().expect("deque non-empty after push")];
-        }
-    }
+    let mut output = init_output(data.len());
+    // See [`max`]: the warm-up slots stay NaN and the kernel rewrites the rest.
+    crate::math::statistics::rolling_min_into(
+        data,
+        period,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    );
     Ok(output)
 }
 

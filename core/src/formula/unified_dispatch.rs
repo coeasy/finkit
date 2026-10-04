@@ -25,6 +25,15 @@ pub struct FormulaKernelDispatcher<'a> {
     /// OHLC) that the numeric input slots cannot carry. Empty unless the caller
     /// supplies it.
     host: HostContext<'a>,
+    /// Length of `FormulaContext::string_table` before the plan ran.
+    ///
+    /// The plan bakes each `STRING_LITERAL` node's *plan-local* index into its
+    /// parameter arena, while the tree path computes `ctx.string_table.len()` at
+    /// evaluation time. A caller that pre-populated the table (the eastern
+    /// dialect tests do) would otherwise see the two paths disagree by exactly
+    /// that prefix length, so the offset travels here instead of being assumed
+    /// to be zero.
+    string_base: usize,
 }
 
 impl<'a> FormulaKernelDispatcher<'a> {
@@ -37,12 +46,39 @@ impl<'a> FormulaKernelDispatcher<'a> {
     pub const fn new() -> Self {
         Self {
             host: HostContext::new(),
+            string_base: 0,
         }
     }
 
     /// Create a dispatcher carrying host data for the host-dependent kernels.
     pub const fn with_host(host: HostContext<'a>) -> Self {
-        Self { host }
+        Self {
+            host,
+            string_base: 0,
+        }
+    }
+
+    /// Offset every string literal's index by the context's existing table.
+    ///
+    /// See [`Self::string_base`]. Callers that execute against a fresh context
+    /// can leave the default of zero.
+    pub const fn with_string_base(mut self, base: usize) -> Self {
+        self.string_base = base;
+        self
+    }
+
+    /// Current string-table offset.
+    pub const fn string_base(&self) -> usize {
+        self.string_base
+    }
+
+    /// Set the offset for a dispatcher that is already owned by an executor.
+    ///
+    /// [`Self::with_string_base`] covers construction-time configuration; this
+    /// exists because the formula engine builds the executor and then learns the
+    /// context's table length.
+    pub const fn set_string_base(&mut self, base: usize) {
+        self.string_base = base;
     }
 }
 
@@ -62,6 +98,24 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
                 .first()
                 .and_then(|parameter| parameter.as_f64())
                 .ok_or_else(|| KernelDispatchError::new(Self::ERR_PARAMETER))?;
+            buffers[call.output.0].fill(value);
+            return Ok(());
+        }
+
+        if call.kernel == KernelId::from_static("STRING_LITERAL") {
+            if !call.inputs.is_empty() {
+                return Err(KernelDispatchError::new(Self::ERR_ARITY));
+            }
+            let index = call
+                .parameters
+                .first()
+                .and_then(|parameter| parameter.as_f64())
+                .ok_or_else(|| KernelDispatchError::new(Self::ERR_PARAMETER))?;
+            // The tree path evaluates a string literal to the index of its slot
+            // in `FormulaContext::string_table`; the caller has already appended
+            // this plan's literals at `string_base`, so the value matches.
+            #[allow(clippy::cast_precision_loss)] // an index, not a magnitude.
+            let value = self.string_base as f64 + index;
             buffers[call.output.0].fill(value);
             return Ok(());
         }
@@ -2887,7 +2941,12 @@ fn dispatch_draw_call(
     let output = buffers
         .get_mut(call.output.0)
         .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
-    output.fill(f64::NAN);
+    // The tree path returns `FormulaValue::Scalar(0.0)` from every draw node and
+    // broadcasts it, so a formula whose last statement is a draw command
+    // evaluates to a zero series. Filling `NaN` here made the two paths disagree
+    // on the *returned* series for exactly those formulas — a divergence that no
+    // numeric gate saw, because the corpus contained no draw-only case.
+    output.fill(0.0);
     Ok(())
 }
 

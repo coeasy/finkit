@@ -7,6 +7,78 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Changed - 2026-10-04 (ninth pass — rolling extrema on the cached fast path, NaN transparency, orphan fold collapse)
+
+- **`MAX` / `MIN` and the whole extrema family now use the cached-index fast
+  path.** `MAX`, `MIN` and every derived indicator that reads them
+  (`MIDPOINT`, `MIDPRICE`, `WILLR`, `STOCH`, `AROON`) shared one rolling-extrema
+  kernel that still rescaned the window for every bar — O(n·w) for a period-30
+  window, while the same kernel already had a cached-index path that only
+  `MIDPOINT`-style callers reached. The dispatch gate no longer needs a
+  `has_missing` branch, so the branch that used to be unreachable at exactly
+  `EXTREMA_CACHE_LIMIT = 512` is gone.
+
+- **NaN transparency, with the warm-up contract written down for the first
+  time.** Missing bars no longer poison a window: a `NaN` takes its slot in the
+  window but never enters the monotonic queue, so `[2, 3, NaN]` reports `3`
+  instead of `NaN` (before this round a `NaN` could never be dominated, and one
+  missing bar turned *every later window* into `NaN`). The warm-up anchor is
+  now documented as "the window must hold `period` bars, and a missing bar does
+  not fill it" — pandas' `rolling(window=p, min_periods=p)`. The decisive
+  evidence is the repository's own differential gate, which expects 188 finite
+  values out of 200 for `HHV(X, 9)` where `X = MA(CLOSE, 5)`: only
+  "skip the leading missing run first" yields 188, while "report from
+  `period - 1` and drop NaNs inside" yields 192.
+
+  ⚠️ **Behaviour change, three of them:**
+  1. A leading missing run delays the first report. `HHV(_, 3)` on
+     `[NaN, NaN, 10, 8, 12, 6, 14]` is now `[NaN, NaN, NaN, NaN, 12, 12, 14]`
+     (was `[…, 10, 10, 12, 12, 14]`).
+  2. A missing bar inside a window is dropped, not propagated (see above).
+  3. A fully missing window returns `None` (streaming) / `NaN` (batch) instead
+     of re-emitting the previous window's extreme.
+
+- **Streaming `MAX` / `MIN` now match the batch kernels on NaN input.** A
+  `started` flag skips the leading missing run, and `count` is redefined as
+  "bars since the first finite bar", so the first report lands at exactly
+  `first_finite + period - 1` on both paths. A missing bar still advances the
+  bar index and still expires, which is what keeps `HHV(MA(CLOSE, 2), 3)`
+  from diverging between the two paths.
+
+- **Two orphan O(n·w) fold implementations deleted.** `talib_ext::rolling_minmax`
+  (the upstream of `KDJ` and `SMI`) and `features::normalization::rolling_minmax`
+  (the feature normaliser) each carried their own `fold`-based rolling
+  min/max; all three callers now share `rolling_minmax_visit`. Side effect worth
+  knowing: when the current bar is itself missing the normaliser now yields
+  `NaN` instead of `0.5`, while a degenerate window (equal bounds) still yields
+  `0.5` as before.
+
+- **New gate `core/tests/extrema_cached_path.rs` (10 tests)** pins both
+  strategies (cached index ≤512, monotonic ring >512) against a naive oracle
+  across the cache boundary — periods 1/2/3/5/14/30/64/128/200/255/256/511/
+  512/513/1024 — plus NaN-no-poison, leading-run delay, fully-missing windows,
+  per-leg dropna in the fused high/low kernel, earliest-of-equals index, and
+  long-series index drift.
+
+- **`TEST_INDEX.md` was missing three real test targets**, which is what
+  `test_index_contract` (a deliberately two-way gate) exposed this round:
+  `extrema_cached_path`, `formula_draw_parity` and `formula_string_literals`
+  existed on disk but were not discoverable from the index.
+
+- **Docs:** V4 plan §34 records the NaN contract, the two wrong turns that
+  took to derive it, and the environment failures that are not regressions;
+  stale `target/t_round9*.log` scratch logs removed.
+
+**Verification (2026-10-04, rustc 1.98.1):** `cargo test -p finkit --lib`
+3036 passed / 0 failed · `extrema_cached_path` 10/10 · `formula_differential_tests`
+52/52 · all integration targets green · `cargo fmt --all --check` clean ·
+`clippy` introduces no new lint in the changed range (the 15 hits there are all
+pre-existing workspace pedantic noise). Two failures are environmental and were
+identical before this round, so neither is a regression: `cargo test --doc`
+(240/240 fail with `ERROR_PIPE_BUSY` — rustdoc cannot spawn `rustc` in this
+sandbox), and the `pyo3-ffi` build script (no usable interpreter discovery on
+this machine; every other crate is 0 errors).
+
 ### Changed - 2026-10-04 (eighth pass — efficiency, dead benches, workspace hygiene)
 
 - **Bytecode VM: the per-execution whole-context clone removed.** `BytecodeVM::

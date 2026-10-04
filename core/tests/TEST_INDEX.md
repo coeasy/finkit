@@ -25,6 +25,9 @@
 - `edge_case_invalid_input.rs` - NaN / ±Inf 输入拒绝（R-1）
 - `f32_tests.rs` - f32 精度测试
 - `extrema_round6.rs` - 极值轮次回归
+- `extrema_cached_path.rs` - 滚动极值两策略（≤512 缓存索引 / >512 单调环）对拍：
+  NaN 不污染窗口、前导缺失段使首个报告推迟 `period - 1` 根、全缺失窗口报 NaN、
+  融合 high/low 内核每腿独立丢弃缺失值，覆盖 `EXTREMA_CACHE_LIMIT` 两侧
 
 ### 黄金测试 (Golden Tests)
 基于参考实现的基准测试。
@@ -59,6 +62,12 @@
 
 - `formula_engine_integration.rs` - 公式引擎集成测试
 - `formula_differential_tests.rs` - 手写公式集的四路径差分（tree / bytecode / JIT / plan）
+- `formula_draw_parity.rs` - `DRAW` 类语句：两路径返回序列必须一致（tree 给
+  `Scalar(0.0)`），plan 侧尚未复现的绘图命令逐项列举成双向门禁 —— 修好一条就必须删掉一条，
+  否则会永远「绿」着撒谎
+- `formula_string_literals.rs` - 字符串字面量在 plan 路径必须落到
+  `ctx.string_table` 并返回绝对槽位（含调用方预填充表格的偏移场景），并把 plan
+  dispatcher 仍跑不了的吃字符串函数逐项列出
 - `formula_plan_differential.rs` - **全语料**编译计划差分 + 不可腐烂 allowlist
 - `formula_host_context.rs` - 宿主上下文（筹码 / 周期 / 资金流 / OHLC）两路径一致性
 - `formula_regression.rs` - 公式引擎回归测试套件（D-1 ~ D-6）

@@ -508,13 +508,7 @@ impl BytecodeVM {
                     continue;
                 }
                 _ => {
-                    self.execute_op(
-                        op,
-                        ctx,
-                        &mut string_table,
-                        &mut outputs,
-                        &mut draw_commands,
-                    )?;
+                    self.execute_op(op, ctx, &mut string_table, &mut outputs, &mut draw_commands)?;
                     pc += 1;
                 }
             }

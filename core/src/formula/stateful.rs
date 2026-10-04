@@ -1957,4 +1957,49 @@ mod tests {
             assert_same(&actual, expected.as_slice().unwrap());
         }
     }
+
+    #[test]
+    fn streaming_extrema_defer_the_first_report_past_a_leading_missing_run() {
+        // The first report lands `period - 1` bars after the first finite row:
+        // the two leading `NaN`s do not fill the window, so a period-3 window
+        // only completes at index 4. Batch and streaming agree on that anchor.
+        let close = vec![f64::NAN, f64::NAN, 10.0, 8.0, 12.0, 6.0, 14.0];
+        let cases = [
+            (
+                "HHV(CLOSE, 3)",
+                vec![f64::NAN, f64::NAN, f64::NAN, f64::NAN, 12.0, 12.0, 14.0],
+            ),
+            (
+                "LLV(CLOSE, 3)",
+                vec![f64::NAN, f64::NAN, f64::NAN, f64::NAN, 8.0, 6.0, 6.0],
+            ),
+        ];
+        for (source, wanted) in cases {
+            let mut stream =
+                FormulaStatefulStream::from_source(source, FormulaDialect::TongDaXin).unwrap();
+            let mut actual = Vec::new();
+            stream
+                .push_batch_into(
+                    &BTreeMap::from([(String::from("close"), close.clone())]),
+                    &mut actual,
+                )
+                .unwrap();
+
+            let mut context = crate::formula::FormulaContext::new(
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                ndarray::Array1::from_vec(close.clone()),
+                None,
+            );
+            let mut engine = crate::formula::FormulaEngine::new();
+            let expected = engine
+                .eval_with_dialect(source, FormulaDialect::TongDaXin, &mut context)
+                .unwrap();
+
+            assert_same(&actual, expected.as_slice().unwrap());
+            assert_same(&actual, &wanted);
+        }
+    }
 }

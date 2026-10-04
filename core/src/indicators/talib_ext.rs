@@ -68,17 +68,20 @@ fn rolling_sum(input: &[f64], p: usize) -> Vec<f64> {
     out
 }
 
+/// Windowed high/low extrema for the TA-Lib profile.
+///
+/// Delegates to the shared fused kernel rather than folding each window, which
+/// is what used to cost `O(window)` per bar in KDJ and SMI. Both strategies the
+/// kernel picks between are NaN-transparent, so a missing bar never poisons the
+/// extrema and never blocks the bars behind it. The warm-up slots stay `NaN`
+/// because the kernel only visits fully populated windows.
 fn rolling_minmax(high: &[f64], low: &[f64], p: usize) -> (Vec<f64>, Vec<f64>) {
     let mut hi = vec![f64::NAN; high.len()];
     let mut lo = vec![f64::NAN; low.len()];
-    for i in p.saturating_sub(1)..high.len() {
-        let start = i + 1 - p;
-        hi[i] = high[start..=i]
-            .iter()
-            .copied()
-            .fold(f64::NEG_INFINITY, f64::max);
-        lo[i] = low[start..=i].iter().copied().fold(f64::INFINITY, f64::min);
-    }
+    crate::math::statistics::rolling_minmax_visit(high, low, p, |i, highest, lowest| {
+        hi[i] = highest;
+        lo[i] = lowest;
+    });
     (hi, lo)
 }
 

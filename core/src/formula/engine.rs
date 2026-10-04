@@ -710,6 +710,22 @@ impl FormulaEngine {
         let _sandbox_guard =
             crate::formula::sandbox::sandbox_enter(&ctx.sandbox, &ctx.sandbox_state)?;
 
+        // String literals are the one side effect that cannot ride in a numeric
+        // buffer: the tree path appends each literal to `ctx.string_table` at
+        // evaluation time and yields the new slot's index, and functions that
+        // take a name argument (`GET_BLOCK_NAME` and the block/field family)
+        // read that table back by index during the same evaluation.
+        //
+        // The plan carries the texts instead of the numbers, so they are
+        // appended *before* the input series are borrowed: the read-backs then
+        // find the same text at the same index, and the offset handed to the
+        // dispatcher keeps the emitted indices absolute when a caller
+        // pre-populated the table.
+        let string_base = ctx.string_table.len();
+        for (_, literal) in plan.semantic().string_literals_ordered() {
+            ctx.string_table.push(literal.to_string());
+        }
+
         // Bind every numeric input slot the plan declared. A slot that no binding
         // fills is a hard error: substituting another series would convert an
         // input-layout bug into a silent numeric mismatch.
@@ -761,6 +777,7 @@ impl FormulaEngine {
                 capital: ctx.capital,
             };
             let mut executor = unified_formula_executor_with_host(&plan, host);
+            executor.dispatcher_mut().set_string_base(string_base);
             executor
                 .execute_range(&inputs, 0..length)
                 .map_err(|error| {

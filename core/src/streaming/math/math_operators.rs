@@ -407,7 +407,11 @@ impl_indicator_meta!(
 
 /// 滚动窗口最大值 MAX（streaming 版本）。
 ///
-/// 维护最近 `period` 个输入值，返回其中最大值。O(period) 简单扫描实现。
+/// 单调队列实现，摊销 O(1)：每个输入值最多压入/弹出一次，窗口过期只弹队首。
+/// 与批量版 `rolling_max_into` 语义一致：一个窗口在满 `period` 根 bar 后开始
+/// 出结果，前导缺失段（首个有限值之前的 `NaN`）被跳过而不占用 warm-up；
+/// 窗口内部的 `NaN` 只占窗口位置、永不入队，因此既不成为极值也不阻塞其后
+/// 出现的有限值；窗口内全部缺失时返回 `None`（对应批量路径的带内 `NaN`）。
 ///
 /// # 示例
 /// ```rust
@@ -424,7 +428,13 @@ impl_indicator_meta!(
 pub struct StreamingMax {
     period: usize,
     deque: VecDeque<(usize, f64)>,
+    /// Bars consumed since the first finite bar. Leading missing bars are
+    /// dropped before counting, which is what makes the first report land at
+    /// `first_finite + period - 1` like the batch kernel.
     count: usize,
+    /// True once the first finite bar has been consumed. Until then every bar
+    /// is discarded so a leading run of missing bars does not fill the window.
+    started: bool,
     last_value: Option<f64>,
 }
 
@@ -434,6 +444,7 @@ impl StreamingMax {
             period,
             deque: VecDeque::with_capacity(period),
             count: 0,
+            started: false,
             last_value: None,
         }
     }
@@ -441,18 +452,37 @@ impl StreamingMax {
 
 impl StreamingIndicator for StreamingMax {
     fn next(&mut self, input: f64) -> Option<f64> {
-        self.count += 1;
-
-        while self.deque.back().map_or(false, |&(_, v)| v <= input) {
-            self.deque.pop_back();
+        // A missing bar can never be the window maximum, and a leading run of
+        // them does not fill the window: the first finite bar starts the
+        // bar index at 0, matching the batch `first_finite` warm-up anchor.
+        if !self.started {
+            if input.is_nan() {
+                return None;
+            }
+            self.started = true;
         }
 
-        self.deque.push_back((self.count - 1, input));
+        let position = self.count;
+        self.count += 1;
 
+        // A missing bar can never be the window maximum and must not block the
+        // bars behind it: it still advances the bar index so the window stays
+        // anchored to the original bars, but it is never queued. Same rule as
+        // the batch `rolling_max_into` kernel.
+        if !input.is_nan() {
+            while self.deque.back().is_some_and(|&(_, v)| v <= input) {
+                self.deque.pop_back();
+            }
+
+            self.deque.push_back((position, input));
+        }
+
+        // Expiry keys off the bar index, not the value count, so a missing bar
+        // inside the window still occupies and eventually vacates its slot.
         while self
             .deque
             .front()
-            .map_or(false, |&(pos, _)| pos + self.period < self.count)
+            .is_some_and(|&(pos, _)| pos + self.period < self.count)
         {
             self.deque.pop_front();
         }
@@ -462,6 +492,9 @@ impl StreamingIndicator for StreamingMax {
             return None;
         }
 
+        // A fully missing window reports nothing instead of holding the
+        // previous window's maximum, which is what the batch kernel emits as
+        // an in-band `NaN`.
         let result = self.deque.front().map(|&(_, v)| v);
         self.last_value = result;
         result
@@ -470,6 +503,7 @@ impl StreamingIndicator for StreamingMax {
     fn reset(&mut self) {
         self.deque.clear();
         self.count = 0;
+        self.started = false;
         self.last_value = None;
     }
 
@@ -489,7 +523,9 @@ impl_indicator_meta!(
 
 /// 滚动窗口最小值 MIN（streaming 版本）。
 ///
-/// 维护最近 `period` 个输入值，返回其中最小值。O(period) 简单扫描实现。
+/// 单调队列实现，摊销 O(1)。缺失值规则与 [`StreamingMax`] 相同，也与批量版
+/// `rolling_min_into` 一致：前导缺失段不占用 warm-up，窗口内部的 `NaN` 只占
+/// 窗口位置、永不入队，窗口内全部缺失时返回 `None`。
 ///
 /// # 示例
 /// ```rust
@@ -505,7 +541,10 @@ impl_indicator_meta!(
 pub struct StreamingMin {
     period: usize,
     deque: VecDeque<(usize, f64)>,
+    /// Bars consumed since the first finite bar; see [`StreamingMax::count`].
     count: usize,
+    /// True once the first finite bar has been consumed.
+    started: bool,
     last_value: Option<f64>,
 }
 
@@ -515,6 +554,7 @@ impl StreamingMin {
             period,
             deque: VecDeque::with_capacity(period),
             count: 0,
+            started: false,
             last_value: None,
         }
     }
@@ -522,18 +562,33 @@ impl StreamingMin {
 
 impl StreamingIndicator for StreamingMin {
     fn next(&mut self, input: f64) -> Option<f64> {
-        self.count += 1;
-
-        while self.deque.back().map_or(false, |&(_, v)| v >= input) {
-            self.deque.pop_back();
+        // See `StreamingMax`: a leading run of missing bars does not fill the
+        // window, so the first finite bar starts the bar index at 0.
+        if !self.started {
+            if input.is_nan() {
+                return None;
+            }
+            self.started = true;
         }
 
-        self.deque.push_back((self.count - 1, input));
+        let position = self.count;
+        self.count += 1;
+
+        // See `StreamingMax`: a missing bar advances the bar index but is
+        // never queued, so it can neither become the minimum nor block the
+        // bars behind it.
+        if !input.is_nan() {
+            while self.deque.back().is_some_and(|&(_, v)| v >= input) {
+                self.deque.pop_back();
+            }
+
+            self.deque.push_back((position, input));
+        }
 
         while self
             .deque
             .front()
-            .map_or(false, |&(pos, _)| pos + self.period < self.count)
+            .is_some_and(|&(pos, _)| pos + self.period < self.count)
         {
             self.deque.pop_front();
         }
@@ -551,6 +606,7 @@ impl StreamingIndicator for StreamingMin {
     fn reset(&mut self) {
         self.deque.clear();
         self.count = 0;
+        self.started = false;
         self.last_value = None;
     }
 
@@ -908,6 +964,57 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_streaming_max_drops_missing_bars_like_batch() {
+        let data = vec![5.0, f64::NAN, 3.0, 4.0, 6.0, f64::NAN, 2.0, 8.0];
+        let period = 3;
+        let batch = crate::indicators::math_operators::max(&data, period).unwrap();
+        let mut s = StreamingMax::new(period);
+        for (i, value) in data.iter().enumerate() {
+            let actual = s.next(*value);
+            if batch[i].is_nan() {
+                assert!(actual.is_none(), "index {i}: expected a missing bar");
+            } else {
+                let actual = actual.unwrap_or(f64::NAN);
+                assert!(
+                    (actual - batch[i]).abs() < 1e-12,
+                    "index {i}: {actual} vs {}",
+                    batch[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_streaming_max_warm_up_skips_a_leading_missing_run() {
+        // A leading missing bar does not fill the window: the first finite bar
+        // starts the bar index at 0, so the first report lands `period - 1`
+        // bars after it, exactly like the batch `rolling_max_into` kernel.
+        let mut m = StreamingMax::new(3);
+        assert_eq!(m.next(f64::NAN), None); // skipped: before the first finite bar
+        assert_eq!(m.next(10.5), None);
+        assert_eq!(m.next(10.0), None);
+        assert_eq!(m.next(11.0), Some(11.0)); // [10.5, 10.0, 11.0]
+
+        // Expiry keys off the bar index, so a missing bar inside the window
+        // still occupies and eventually vacates its slot.
+        assert_eq!(m.next(9.0), Some(11.0)); // [10.0, 11.0, 9.0]
+        assert_eq!(m.next(7.0), Some(11.0)); // [11.0, 9.0, 7.0]
+        assert_eq!(m.next(8.0), Some(9.0)); // [9.0, 7.0, 8.0]
+    }
+
+    #[test]
+    fn test_streaming_max_fully_missing_window_reports_missing() {
+        let mut m = StreamingMax::new(3);
+        m.next(1.0);
+        m.next(2.0);
+        m.next(3.0);
+        assert_eq!(m.next(f64::NAN), Some(3.0)); // [2, 3, NaN]
+        assert_eq!(m.next(f64::NAN), Some(3.0)); // [3, NaN, NaN]
+        assert_eq!(m.next(f64::NAN), None); // [NaN, NaN, NaN]
+        assert_eq!(m.next(7.0), Some(7.0)); // [NaN, NaN, 7]
+    }
+
     // ------------------------- StreamingMin -------------------------
 
     #[test]
@@ -970,6 +1077,53 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn test_streaming_min_drops_missing_bars_like_batch() {
+        let data = vec![5.0, f64::NAN, 3.0, 4.0, 6.0, f64::NAN, 2.0, 8.0];
+        let period = 3;
+        let batch = crate::indicators::math_operators::min(&data, period).unwrap();
+        let mut s = StreamingMin::new(period);
+        for (i, value) in data.iter().enumerate() {
+            let actual = s.next(*value);
+            if batch[i].is_nan() {
+                assert!(actual.is_none(), "index {i}: expected a missing bar");
+            } else {
+                let actual = actual.unwrap_or(f64::NAN);
+                assert!(
+                    (actual - batch[i]).abs() < 1e-12,
+                    "index {i}: {actual} vs {}",
+                    batch[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn test_streaming_min_warm_up_counts_finite_bars() {
+        // See `test_streaming_max_warm_up_counts_finite_bars`: the warm-up keys
+        // off the finite-bar count while expiry keys off the bar index.
+        let mut m = StreamingMin::new(3);
+        assert_eq!(m.next(f64::NAN), None);
+        assert_eq!(m.next(10.5), None);
+        assert_eq!(m.next(10.0), None);
+        assert_eq!(m.next(9.0), Some(9.0)); // [10.5, 10.0, 9.0]
+        assert_eq!(m.next(12.0), Some(9.0)); // [10.0, 9.0, 12.0]
+        assert_eq!(m.next(11.0), Some(9.0)); // [9.0, 12.0, 11.0]
+        assert_eq!(m.next(5.0), Some(5.0)); // [12.0, 11.0, 5.0]
+    }
+
+    #[test]
+    fn test_streaming_min_fully_missing_window_reports_missing() {
+        let mut m = StreamingMin::new(3);
+        m.next(1.0);
+        m.next(2.0);
+        m.next(3.0);
+        assert_eq!(m.next(f64::NAN), Some(2.0)); // [2, 3, NaN]
+        assert_eq!(m.next(f64::NAN), Some(3.0)); // [3, NaN, NaN]
+        assert_eq!(m.next(f64::NAN), None); // [NaN, NaN, NaN]
+        assert_eq!(m.next(7.0), Some(7.0)); // [NaN, NaN, 7]
     }
 
     // ------------------------- StreamingSum -------------------------

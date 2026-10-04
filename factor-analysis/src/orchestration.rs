@@ -129,8 +129,7 @@ impl ResearchPlan {
             }
         }
         let push_order: Vec<usize> = {
-            let mut resolved: std::collections::BTreeSet<usize> =
-                std::collections::BTreeSet::new();
+            let mut resolved: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
             let mut order = Vec::with_capacity(stages.len());
             let mut pending: Vec<usize> = (0..stages.len()).collect();
             while !pending.is_empty() {

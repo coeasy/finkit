@@ -5,8 +5,8 @@
 //! are switched over.
 
 use super::{
-    AdxState, AtrState, MonotonicExtrema, MovingAverageKind, MovingAverageState,
-    RollingExtremaPair, RollingWelfordState,
+    AdxState, AtrState, MovingAverageKind, MovingAverageState, RollingExtremaPair,
+    RollingWelfordState,
 };
 use std::fmt;
 
@@ -184,15 +184,12 @@ fn rolling_extrema_into(
 ) -> Result<(), KernelCompatError> {
     validate(input, window, output)?;
     output.fill(f64::NAN);
-    if window > input.len() {
-        return Ok(());
-    }
-    let mut state = MonotonicExtrema::new(window, max);
-    for (index, value) in input.iter().copied().enumerate() {
-        let current = state.update(index, value);
-        if index + 1 >= window {
-            output[index] = current;
-        }
+    // The shared extrema kernel owns the warm-up and missing-value rules, so
+    // this legacy entry point keeps one answer instead of a second copy of them.
+    if max {
+        crate::math::statistics::rolling_max_into(input, window, output);
+    } else {
+        crate::math::statistics::rolling_min_into(input, window, output);
     }
     Ok(())
 }

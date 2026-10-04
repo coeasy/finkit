@@ -383,20 +383,229 @@ pub fn kurtosis(data: &[f64]) -> Result<f64> {
     Ok(k - correction)
 }
 
+/// Window size at or below which the cached-index strategy is preferred.
+///
+/// The cached index spends one comparison per bar in the common case but up to
+/// `window` steps whenever the cached position expires; the monotonic ring pays
+/// one insertion and one removal per bar no matter what. Capping the window keeps
+/// that worst case from running away on pathological inputs such as a strictly
+/// monotone series, while every TA-Lib window in the catalogue stays below the
+/// cap. Both strategies answer missing bars the same way, so the cap is the only
+/// thing that selects a path.
+const EXTREMA_CACHE_LIMIT: usize = 512;
+
+/// Index of the first finite bar, `None` when the series holds no finite bar.
+///
+/// The warm-up contract of the extrema family is "the window must be fully
+/// populated", and a non-finite bar is the only way a bar goes unpopulated. So
+/// a leading run of missing bars is skipped outright rather than emitted as
+/// partial-window extremes: the first report sits at `leading_run + window - 1`,
+/// which is what `MA(X, 9)`, `SUM(X, 9)`, `STD(X, 9)` all do and what the
+/// composition gates assert.
+#[inline]
+fn first_finite(values: &[f64]) -> Option<usize> {
+    values.iter().position(|value| !value.is_nan())
+}
+
+/// Rescan `values[start..=end]` for the trailing window's extreme, dropping
+/// missing bars. Returns `(extreme, position, found_a_finite_bar)`; the third
+/// component is the only way to tell "no finite bar in this window" apart from
+/// "the extreme is very large", so it must be carried out with the value.
+#[inline]
+fn rescan_extreme_window<const WANT_MAX: bool>(
+    values: &[f64],
+    start: usize,
+    end: usize,
+) -> (f64, usize, bool) {
+    let mut best = if WANT_MAX {
+        f64::NEG_INFINITY
+    } else {
+        f64::INFINITY
+    };
+    let mut best_index = start;
+    let mut found = false;
+
+    for index in start..=end {
+        let candidate = values[index];
+        let wins = if WANT_MAX {
+            !candidate.is_nan() && (!found || candidate >= best)
+        } else {
+            !candidate.is_nan() && (!found || candidate <= best)
+        };
+        if wins {
+            best = candidate;
+            best_index = index;
+            found = true;
+        }
+    }
+    (best, best_index, found)
+}
+
+/// Cached-index rolling extrema with NaN-transparent comparison.
+///
+/// Missing bars are **dropped**: a `NaN` never holds the extreme and never
+/// blocks a finite bar behind it, and a window whose bars are all missing
+/// reports `NaN`. This is the same contract [`rolling_median_into`] documents,
+/// so the extrema family no longer poisons a window merely because one of its
+/// bars happened to be absent.
+///
+/// The running extreme and its position are carried across bars and the window
+/// is only rescanned when that position leaves it. Expiry must be tested even on
+/// a missing bar: the bar itself never holds the extreme, but a missing bar can
+/// still push the cached extreme out of the window. `has_finite` distinguishes
+/// "no finite bar yet seen" from "the extreme is very large"; without it a
+/// rescan that finds nothing would leave a stale value to be emitted.
+///
+/// Ties deliberately keep the **newest** position, which defers the next rescan;
+/// reported values are unaffected because tied bars hold equal values.
+///
+/// `best` starts at the side's infinity so the first `window` bars are absorbed
+/// by the fast path alone and the first emission is already the true window
+/// extreme. `warm_at` is the first index that may report: `window - 1` for a
+/// finite first bar, later when a leading run of missing bars was skipped, so a
+/// partially populated window is never mistaken for a full one.
+#[inline]
+fn rolling_extreme_cached<const WANT_MAX: bool>(
+    data: &[f64],
+    window: usize,
+    warm_at: usize,
+    output: &mut [f64],
+) {
+    let mut best = if WANT_MAX {
+        f64::NEG_INFINITY
+    } else {
+        f64::INFINITY
+    };
+    let mut best_index = 0usize;
+    let mut has_finite = false;
+    let source = data.as_ptr();
+    let target = output.as_mut_ptr();
+
+    for i in 0..data.len() {
+        // SAFETY: `i < data.len() == output.len()` (callers keep the two in
+        // step) and both pointers are derived from slices that outlive the loop.
+        unsafe {
+            let value = *source.add(i);
+            let expired = has_finite && best_index + window <= i;
+
+            if !value.is_nan()
+                && (!has_finite || {
+                    if WANT_MAX {
+                        value >= best
+                    } else {
+                        value <= best
+                    }
+                })
+            {
+                best = value;
+                best_index = i;
+                has_finite = true;
+            } else if expired {
+                // The cached extreme left the window: rescan the window from its
+                // left edge, dropping the bars that are missing.
+                let (rescanned, position, found) =
+                    rescan_extreme_window::<WANT_MAX>(data, i + 1 - window, i);
+                best = rescanned;
+                best_index = position;
+                has_finite = found;
+            }
+
+            if i >= warm_at {
+                *target.add(i) = if has_finite { best } else { f64::NAN };
+            }
+        }
+    }
+}
+
+/// Fused high/low form of [`rolling_extreme_cached`].
+///
+/// The two legs warm up independently: `warm_high_at` and `warm_low_at` may
+/// differ when only one leg opens with a missing run, which keeps each extreme
+/// from being reported from a partially populated window.
+#[inline]
+fn rolling_minmax_cached(
+    high: &[f64],
+    low: &[f64],
+    window: usize,
+    warm_high_at: usize,
+    warm_low_at: usize,
+    mut emit: impl FnMut(usize, f64, f64),
+) {
+    let mut highest = f64::NEG_INFINITY;
+    let mut highest_index = 0usize;
+    let mut has_high = false;
+    let mut lowest = f64::INFINITY;
+    let mut lowest_index = 0usize;
+    let mut has_low = false;
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+
+    for i in 0..high.len() {
+        // SAFETY: `i < high.len() == low.len()` and both pointers come from
+        // slices that outlive the loop.
+        unsafe {
+            let candidate_high = *high_ptr.add(i);
+            let candidate_low = *low_ptr.add(i);
+            let high_expired = has_high && highest_index + window <= i;
+            let low_expired = has_low && lowest_index + window <= i;
+
+            if !candidate_high.is_nan() && (!has_high || candidate_high >= highest) {
+                highest = candidate_high;
+                highest_index = i;
+                has_high = true;
+            } else if high_expired {
+                let (rescanned, position, found) =
+                    rescan_extreme_window::<true>(high, i + 1 - window, i);
+                highest = rescanned;
+                highest_index = position;
+                has_high = found;
+            }
+
+            if !candidate_low.is_nan() && (!has_low || candidate_low <= lowest) {
+                lowest = candidate_low;
+                lowest_index = i;
+                has_low = true;
+            } else if low_expired {
+                let (rescanned, position, found) =
+                    rescan_extreme_window::<false>(low, i + 1 - window, i);
+                lowest = rescanned;
+                lowest_index = position;
+                has_low = found;
+            }
+
+            if i >= warm_high_at && i >= warm_low_at {
+                emit(
+                    i,
+                    if has_high { highest } else { f64::NAN },
+                    if has_low { lowest } else { f64::NAN },
+                );
+            }
+        }
+    }
+}
+
 /// Visit fused rolling maximum/minimum values without materializing extrema arrays.
 ///
 /// Architecture v3.1 consumers share this kernel across MIDPOINT, MIDPRICE,
-/// WILLR and other extrema-family consumers. For the small windows used by the
-/// TA-Lib-compatible APIs, retaining the current extrema indices and rescanning
-/// only when an extrema leaves the window avoids the branch and container cost
-/// of maintaining two `VecDeque`s on every bar.
+/// WILLR and other extrema-family consumers. Both strategies are NaN-transparent
+/// and give the same answer for every input, so no gating is needed to keep
+/// them in agreement:
+///
+/// * **Cached index** — `window <= EXTREMA_CACHE_LIMIT`. One comparison per side
+///   per bar, rescanning only when an extrema leaves the window. This is what
+///   makes the TA-Lib C `TA_MAX`/`TA_MIN` fast path fast.
+/// * **Monotonic ring** — oversized windows. Every bar is inserted and removed
+///   at most once, which bounds the worst case the cached index would otherwise
+///   pay in rescans.
+///
+/// Missing bars are dropped by both: neither can hold an extrema, and a window
+/// whose bars are all missing emits `NaN`.
 #[inline]
-#[allow(dead_code)]
 pub(crate) fn rolling_minmax_visit(
     high: &[f64],
     low: &[f64],
     window: usize,
-    mut emit: impl FnMut(usize, f64, f64),
+    emit: impl FnMut(usize, f64, f64),
 ) {
     debug_assert_eq!(high.len(), low.len());
     debug_assert!(window > 0);
@@ -405,130 +614,63 @@ pub(crate) fn rolling_minmax_visit(
         return;
     }
 
-    // Most TA windows are small. Keep monotonic queues on the stack so every
-    // bar is inserted/removed at most once without heap allocation or expiry
-    // rescans. The power-of-two ring makes wrapping a single mask operation.
-    const RING_CAPACITY: usize = 256;
-    const RING_MASK: usize = RING_CAPACITY - 1;
-    if window <= RING_CAPACITY {
-        let mut high_queue = [0usize; RING_CAPACITY];
-        let mut low_queue = [0usize; RING_CAPACITY];
-        let mut high_head = 0usize;
-        let mut high_tail = 0usize;
-        let mut low_head = 0usize;
-        let mut low_tail = 0usize;
+    // Each leg warms up from its own first finite bar; see `first_finite`.
+    let warm_high_at = first_finite(high).map_or(high.len(), |start| start + window - 1);
+    let warm_low_at = first_finite(low).map_or(low.len(), |start| start + window - 1);
 
-        for i in 0..high.len() {
-            // Expire stale fronts before insertion so a full 256-slot ring is
-            // never overwritten before its oldest element has been removed.
-            while high_head < high_tail
-                && high_queue[high_head & RING_MASK].saturating_add(window) <= i
-            {
-                high_head += 1;
-            }
-            while low_head < low_tail && low_queue[low_head & RING_MASK].saturating_add(window) <= i
-            {
-                low_head += 1;
-            }
-
-            let new_high = high[i];
-            while high_head < high_tail {
-                let back = high_queue[(high_tail - 1) & RING_MASK];
-                if high[back] <= new_high {
-                    high_tail -= 1;
-                } else {
-                    break;
-                }
-            }
-            high_queue[high_tail & RING_MASK] = i;
-            high_tail += 1;
-
-            let new_low = low[i];
-            while low_head < low_tail {
-                let back = low_queue[(low_tail - 1) & RING_MASK];
-                if low[back] >= new_low {
-                    low_tail -= 1;
-                } else {
-                    break;
-                }
-            }
-            low_queue[low_tail & RING_MASK] = i;
-            low_tail += 1;
-
-            if i + 1 >= window {
-                emit(
-                    i,
-                    high[high_queue[high_head & RING_MASK]],
-                    low[low_queue[low_head & RING_MASK]],
-                );
-            }
-        }
+    if window <= EXTREMA_CACHE_LIMIT {
+        rolling_minmax_cached(high, low, window, warm_high_at, warm_low_at, emit);
         return;
     }
 
-    // Large-window compatibility fallback: retain the cached-index algorithm
-    // without a window-sized heap allocation in the generic path.
-    let high_ptr = high.as_ptr();
-    let low_ptr = low.as_ptr();
-    let mut highest_idx = 0usize;
-    let mut lowest_idx = 0usize;
-    let mut highest = f64::NEG_INFINITY;
-    let mut lowest = f64::INFINITY;
+    rolling_minmax_ring(high, low, window, warm_high_at, warm_low_at, emit);
+}
+
+/// Monotonic-queue form of [`rolling_minmax_visit`], for windows above
+/// [`EXTREMA_CACHE_LIMIT`].
+///
+/// Two queues hold the surviving candidates for each leg. Every bar is inserted
+/// and removed at most once, so the total work is linear in the series regardless
+/// of window size — the bound the cached index cannot offer on strictly monotone
+/// input. Missing bars are never queued, which is why an empty queue at read
+/// time means the window holds nothing finite.
+fn rolling_minmax_ring(
+    high: &[f64],
+    low: &[f64],
+    window: usize,
+    warm_high_at: usize,
+    warm_low_at: usize,
+    mut emit: impl FnMut(usize, f64, f64),
+) {
+    let mut high_queue: std::collections::VecDeque<usize> =
+        std::collections::VecDeque::with_capacity(window);
+    let mut low_queue: std::collections::VecDeque<usize> =
+        std::collections::VecDeque::with_capacity(window);
 
     for i in 0..high.len() {
-        unsafe {
-            let new_high = *high_ptr.add(i);
-            let new_low = *low_ptr.add(i);
+        let new_high = high[i];
+        if !new_high.is_nan() {
+            push_extreme_candidate::<true>(&mut high_queue, high, i, new_high);
+        }
 
-            if i < window {
-                if new_high >= highest {
-                    highest = new_high;
-                    highest_idx = i;
-                }
-                if new_low <= lowest {
-                    lowest = new_low;
-                    lowest_idx = i;
-                }
-            } else {
-                let window_start = i + 1 - window;
-                if highest_idx < window_start {
-                    highest = *high_ptr.add(window_start);
-                    highest_idx = window_start;
-                    let mut scan = window_start + 1;
-                    while scan <= i {
-                        let candidate = *high_ptr.add(scan);
-                        if candidate >= highest {
-                            highest = candidate;
-                            highest_idx = scan;
-                        }
-                        scan += 1;
-                    }
-                } else if new_high >= highest {
-                    highest = new_high;
-                    highest_idx = i;
-                }
+        let new_low = low[i];
+        if !new_low.is_nan() {
+            push_extreme_candidate::<false>(&mut low_queue, low, i, new_low);
+        }
 
-                if lowest_idx < window_start {
-                    lowest = *low_ptr.add(window_start);
-                    lowest_idx = window_start;
-                    let mut scan = window_start + 1;
-                    while scan <= i {
-                        let candidate = *low_ptr.add(scan);
-                        if candidate <= lowest {
-                            lowest = candidate;
-                            lowest_idx = scan;
-                        }
-                        scan += 1;
-                    }
-                } else if new_low <= lowest {
-                    lowest = new_low;
-                    lowest_idx = i;
-                }
-            }
+        expire_extreme_candidates(&mut high_queue, window, i);
+        expire_extreme_candidates(&mut low_queue, window, i);
 
-            if i + 1 >= window {
-                emit(i, highest, lowest);
-            }
+        if i >= warm_high_at && i >= warm_low_at {
+            let high_value = high_queue
+                .front()
+                .map(|&front| high[front])
+                .unwrap_or(f64::NAN);
+            let low_value = low_queue
+                .front()
+                .map(|&front| low[front])
+                .unwrap_or(f64::NAN);
+            emit(i, high_value, low_value);
         }
     }
 }
@@ -563,31 +705,125 @@ pub fn rolling_max(data: &[f64], window: usize) -> Result<Array1<f64>> {
 
     let len = data.len();
     let mut output = Array1::from_elem(len, f64::NAN);
+    rolling_max_into(
+        data,
+        window,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    );
+    Ok(output)
+}
+
+/// Insert `index` into a monotonic queue of candidates, first dropping every tail
+/// that `value` dominates. `WANT_MAX` selects a decreasing queue (maximums) or an
+/// increasing one (minimums).
+///
+/// Shared by the single-series and fused high/low ring paths so the two can never
+/// disagree about which bars are evictable.
+#[inline]
+fn push_extreme_candidate<const WANT_MAX: bool>(
+    queue: &mut std::collections::VecDeque<usize>,
+    values: &[f64],
+    index: usize,
+    value: f64,
+) {
+    while let Some(&back) = queue.back() {
+        let dominated = if WANT_MAX {
+            values[back] <= value
+        } else {
+            values[back] >= value
+        };
+        if dominated {
+            queue.pop_back();
+        } else {
+            break;
+        }
+    }
+    queue.push_back(index);
+}
+
+/// Expire every queued candidate whose bar has left the trailing window.
+#[inline]
+fn expire_extreme_candidates(
+    queue: &mut std::collections::VecDeque<usize>,
+    window: usize,
+    i: usize,
+) {
+    while queue
+        .front()
+        .is_some_and(|&front| front.saturating_add(window) <= i)
+    {
+        queue.pop_front();
+    }
+}
+
+/// Write the rolling maximum into a caller-owned buffer of the same length.
+///
+/// Entries `0..window - 1` are left untouched so callers keep their own warm-up
+/// fill. Missing bars are dropped: a `NaN` is never the window maximum, and a
+/// window of all-`NaN` bars reads back as `NaN`.
+#[inline]
+pub(crate) fn rolling_max_into(data: &[f64], window: usize, output: &mut [f64]) {
+    fill_rolling_extreme::<true>(data, window, output);
+}
+
+/// Write the rolling minimum into a caller-owned buffer of the same length.
+///
+/// See [`rolling_max_into`] for the warm-up and missing-value contract.
+#[inline]
+pub(crate) fn rolling_min_into(data: &[f64], window: usize, output: &mut [f64]) {
+    fill_rolling_extreme::<false>(data, window, output);
+}
+
+#[inline]
+fn fill_rolling_extreme<const WANT_MAX: bool>(data: &[f64], window: usize, output: &mut [f64]) {
+    if window == 0 || window > data.len() || output.len() != data.len() {
+        return;
+    }
+    if window == 1 {
+        output.copy_from_slice(data);
+        return;
+    }
+
+    // The window is not full until `window` bars are in, and a missing bar does
+    // not fill it: skip a leading run of missing bars before reporting.
+    let warm_at = first_finite(data).map_or(data.len(), |start| start + window - 1);
+
+    if window <= EXTREMA_CACHE_LIMIT {
+        rolling_extreme_cached::<WANT_MAX>(data, window, warm_at, output);
+    } else {
+        rolling_extreme_ring::<WANT_MAX>(data, window, warm_at, output);
+    }
+}
+
+/// `VecDeque` monotonic queue used for windows above [`EXTREMA_CACHE_LIMIT`],
+/// where the guaranteed-one-removal-per-bar bound beats the cached index's
+/// rescan cost. NaN bars are never queued, so a window with no finite bar reads
+/// back as `NaN` — the same contract as the cached-index strategy.
+fn rolling_extreme_ring<const WANT_MAX: bool>(
+    data: &[f64],
+    window: usize,
+    warm_at: usize,
+    output: &mut [f64],
+) {
     let mut deque: std::collections::VecDeque<usize> =
         std::collections::VecDeque::with_capacity(window);
 
-    for i in 0..len {
-        while let Some(&back) = deque.back() {
-            if data[back] <= data[i] {
-                deque.pop_back();
-            } else {
-                break;
-            }
-        }
-        deque.push_back(i);
-
-        if let Some(&front) = deque.front() {
-            if front + window <= i {
-                deque.pop_front();
-            }
+    for i in 0..data.len() {
+        let value = data[i];
+        if !value.is_nan() {
+            push_extreme_candidate::<WANT_MAX>(&mut deque, data, i, value);
         }
 
-        if i >= window - 1 {
-            output[i] = data[*deque.front().unwrap()];
+        expire_extreme_candidates(&mut deque, window, i);
+
+        if i >= warm_at {
+            output[i] = match deque.front() {
+                Some(&front) => data[front],
+                // The window holds no finite bar.
+                None => f64::NAN,
+            };
         }
     }
-
-    Ok(output)
 }
 
 /// Find minimum value in a rolling window
@@ -621,30 +857,11 @@ pub fn rolling_min(data: &[f64], window: usize) -> Result<Array1<f64>> {
 
     let len = data.len();
     let mut output = Array1::from_elem(len, f64::NAN);
-    let mut deque: std::collections::VecDeque<usize> =
-        std::collections::VecDeque::with_capacity(window);
-
-    for i in 0..len {
-        while let Some(&back) = deque.back() {
-            if data[back] >= data[i] {
-                deque.pop_back();
-            } else {
-                break;
-            }
-        }
-        deque.push_back(i);
-
-        if let Some(&front) = deque.front() {
-            if front + window <= i {
-                deque.pop_front();
-            }
-        }
-
-        if i >= window - 1 {
-            output[i] = data[*deque.front().unwrap()];
-        }
-    }
-
+    rolling_min_into(
+        data,
+        window,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    );
     Ok(output)
 }
 

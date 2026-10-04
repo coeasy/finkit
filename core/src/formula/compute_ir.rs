@@ -60,6 +60,11 @@ pub struct FormulaComputePlan {
     /// are not part of the numeric plan, so they travel beside it rather than in
     /// a [`ComputeEffect`].
     output_modifiers: BTreeMap<String, OutputModifier>,
+    /// Text of each `STRING_LITERAL` node, keyed by node id.
+    ///
+    /// See [`FormulaLowerer::string_literals`] for why the text travels beside
+    /// the numeric plan instead of inside it.
+    string_literals: BTreeMap<ComputeNodeId, String>,
 }
 
 impl FormulaComputePlan {
@@ -98,6 +103,7 @@ impl FormulaComputePlan {
             plan,
             root,
             number_literals: lowerer.number_literals,
+            string_literals: lowerer.string_literals,
             max_ast_depth: lowerer.max_depth,
             output_modifiers: lowerer.output_modifiers,
         })
@@ -131,6 +137,29 @@ impl FormulaComputePlan {
     /// Number of `NUMBER` literals recorded by the lowerer.
     pub fn number_literals_len(&self) -> usize {
         self.number_literals.len()
+    }
+
+    /// Text carried by a `STRING_LITERAL` node, if that node is a literal.
+    pub fn string_literal(&self, node: ComputeNodeId) -> Option<&str> {
+        self.string_literals.get(&node).map(String::as_str)
+    }
+
+    /// Every string literal, in node-id order.
+    ///
+    /// Node ids are assigned in lowering order, which is the order the tree path
+    /// evaluates the same literals, so this is exactly the sequence
+    /// `FormulaContext::string_table` must receive for the plan path's indices
+    /// to equal the tree path's.
+    pub fn string_literals_ordered(&self) -> Vec<(ComputeNodeId, &str)> {
+        self.string_literals
+            .iter()
+            .map(|(node, text)| (*node, text.as_str()))
+            .collect()
+    }
+
+    /// Number of `STRING_LITERAL` nodes recorded by the lowerer.
+    pub fn string_literals_len(&self) -> usize {
+        self.string_literals.len()
     }
 
     /// Deepest AST nesting the lowerer walked.
@@ -193,6 +222,17 @@ struct FormulaLowerer<'a> {
     loop_var: Option<(String, f64)>,
     /// Literal value of each `NUMBER` node, recorded at creation time.
     number_literals: BTreeMap<ComputeNodeId, f64>,
+    /// Text of each `STRING_LITERAL` node, recorded at creation time.
+    ///
+    /// The plan's numeric arena carries only `f64`, so a string argument cannot
+    /// travel in a kernel parameter the way a `NUMBER` does. The text therefore
+    /// travels beside the plan, keyed by the node that evaluates to its index,
+    /// and the dispatcher receives the ordered list: node-id order *is* lowering
+    /// order, which is the tree path's evaluation order for every string
+    /// literal, so `ctx.string_table` ends up byte-identical after either path.
+    /// Without this, a formula containing a string literal could not run on the
+    /// plan path at all.
+    string_literals: BTreeMap<ComputeNodeId, String>,
     /// Chart styling per declared output, keyed by the name as written.
     output_modifiers: BTreeMap<String, OutputModifier>,
     /// Current AST nesting depth of the walk.
@@ -220,6 +260,7 @@ impl<'a> FormulaLowerer<'a> {
             const_env: BTreeMap::new(),
             loop_var: None,
             number_literals: BTreeMap::new(),
+            string_literals: BTreeMap::new(),
             output_modifiers: BTreeMap::new(),
             depth: 0,
             max_depth: 0,
@@ -245,19 +286,25 @@ impl<'a> FormulaLowerer<'a> {
     fn lower_inner(&mut self, ast: &AstNode) -> ComputeNodeId {
         match ast {
             AstNode::Number(value) => self.add_number(*value),
-            AstNode::StringLit(_) => self.add_effect(
-                "STRING_LITERAL",
-                Vec::new(),
-                ComputeCapabilities {
-                    deterministic: true,
-                    streaming: false,
-                    stateful: true,
-                    lookback: LookbackRequirement::None,
-                    // The executor appends literals to FormulaContext::string_table.
-                    dependency: DependencyShape::FixedLookback(0),
-                    effect: ComputeEffect::Stateful,
-                },
-            ),
+            AstNode::StringLit(value) => {
+                let id = self.add_effect(
+                    "STRING_LITERAL",
+                    Vec::new(),
+                    ComputeCapabilities {
+                        deterministic: true,
+                        streaming: false,
+                        stateful: true,
+                        lookback: LookbackRequirement::None,
+                        // The executor appends literals to FormulaContext::string_table
+                        // and evaluates the node to the new slot's index; the text is
+                        // carried beside the plan (see `Self::string_literals`).
+                        dependency: DependencyShape::FixedLookback(0),
+                        effect: ComputeEffect::Stateful,
+                    },
+                );
+                self.string_literals.insert(id, value.clone());
+                id
+            }
             AstNode::Variable(name) => match self.constant_of(name) {
                 // A variable bound to a constant reads as that constant. This is
                 // what makes an unrolled loop variable reachable inside the
