@@ -42,6 +42,7 @@ tests/pine_corpus/
 
 ## 相关文档
 
-- [Pine 兼容矩阵](../../docs/PINE_COMPAT_MATRIX.md)
+- [Pine 兼容矩阵](../../docs/generated/pine-compatibility.md)
+
 - [Pine 文法](../../docs/formula/pine-grammar.md)
-- [Pine → AlphaTA 迁移指南](../../docs/migration/pine-to-AlphaTA.md)
+- [Pine → Finkit 迁移指南](../../docs/migration/pine-to-finkit.md)

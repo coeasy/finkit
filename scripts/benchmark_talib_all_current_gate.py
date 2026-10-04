@@ -132,8 +132,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     return summary
 
 
-if __name__ == "__main__":
+def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sizes", nargs="+", type=int, default=[100_000])
     parser.add_argument("--output", default="dist/bench/talib-all-current-gate.json")
-    run(parser.parse_args())
+    args = parser.parse_args()
+    summary = run(args)
+    # A gate that cannot fail is not a gate. `run` collects `errors` and
+    # `parity_failures` and prints them, but the previous entry point called
+    # `run(...)` and discarded the summary, so this script always exited 0 —
+    # including on the 61 candlestick functions it is the only gate covering.
+    # Exit 2 matches `benchmark_talib_full_current_gate.py`, whose surface this
+    # script extends.
+    return 0 if not summary["errors"] and not summary["parity_failures"] else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

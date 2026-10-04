@@ -3037,3 +3037,51 @@ Van Herk–Gil–Werman 算法把这个分布依赖消掉：按 period 分块，
 
 **跨运行噪声警告**：本机不同时段 bench 绝对值会膨胀 1.3–1.6x，跨运行对比 ±30% 属
 正常；本轮所有"前后对比"均取自**同一次运行内**的配对，或定向复测（同运行配对）。
+
+
+## 37. 第十二轮：全链路连通性审计、孤儿资产清理与 CI 覆盖补洞（2026-10-05）
+
+本轮的主题不是再追一个性能指标，而是回答四个问题：**主体流程是否全部联通、
+核心链路有没有断链、是否存在孤儿逻辑、前后端是否贯通**。方法是把"人工翻阅"换
+成可复现的扫描（文档引用图、孤儿资产判定、feature 门控测试清单、循环终止性），
+每轮的发现全部修完再进入下一轮。
+
+### 37.1 审计方法与覆盖面
+
+| 检查 | 手段 | 结果 |
+| --- | --- | --- |
+| 文档断链 | 全仓 123 个 md、413 条相对链接逐个解析 | 3 条断链（已修） |
+| 文档引用图 | 入链计数（md/py/yml/rs/json） | 40 个零入链文档，逐个人工判定 |
+| 文档→代码路径引用 | 反引号路径逐个 `os.path.exists` | 15 处指向不存在的文件 |
+| 孤儿公式函数 | 295 个 `fn_*` 与注册表交叉 | **0 孤儿**（全部注册） |
+| 裸 `loop`/`while` 终止性 | 逐个推演推进量与上限 | 6 处全部有单调推进或迭代上限 |
+| 并发死锁 | `Mutex`/`RwLock` 获取点排查 | 5 处单锁方法 + poison 转错，**无嵌套取锁** |
+| 孤儿资产 | 被跟踪但无人引用的 html/json/svg | 1 个模板 + 6 个构建产物 |
+| CI 中被编译掉的测试 | `#[test]` 上的 `cfg(feature)` 扫描 | 3 个 feature 门控簇，2 个从未运行 |
+| 语言绑定漂移 | `sync_bindings.py --check --all` | Python/Node `drift=none`；其余 6 语言 DEFERRED（已知、已记录） |
+
+### 37.2 修复清单
+
+| # | 问题 | 根因 | 处理 |
+| --- | --- | --- | --- |
+| 1 | `visualization/frontend/index.html.template` 无人引用，且 `{{LOCALE_JS_PATH}}` / `{{CONFIG_JS_PATH}}` 指向不存在的文件 | ECharts 时代的模板，被 Lightweight Charts 适配器取代后未清理 | 删除 |
+| 2 | `visualization/` 下 6 个被跟踪的构建产物（7.3 MB，`gpu_large_chart.html` 单个 7 MB） | `.gitignore` 与 `check_no_tracked_build_artifacts.py` 都把产物规则**锚定在仓库根**，而文件实际落在 `visualization/`，门禁于是报"none look like build output" | 取消跟踪；`.gitignore` 去掉根锚定；门禁改为**从 `*/examples/*.rs` 里的输出文件名动态推导**，任意深度匹配 |
+| 3 | 前端适配器契约测试从未在 CI 运行 | 只接线了 `scripts/test_webgl_runtime.mjs`；适配器是 `include_str!` 内联进每个发布 HTML 的，其契约属于交付物 | CI 增加 `node --test visualization/frontend/lightweight-charts-adapter.test.mjs`（本地 3/3 通过） |
+| 4 | Rust→HTML→JS 全链路无集成测试：载荷结构有单测、适配器有单测，**接缝**（模板接线、脚本转义、`schema_version` 一致）无人验证 | 特性测试放在 `#[cfg(feature = "html")]`，而 CI 用默认 features 跑，整段被编译掉 | 新增 `rendered_html_wires_the_adapter_to_a_parseable_payload`（解析内联 `const payload = {...}` 并校验 `schema_version`/K 线数/指标线），CI 改为 `--features html` |
+| 5 | 4 个并行批测（`run_parallel_matches_serial` 等）从未运行 | `rayon` 非默认 feature | CI 增加 `cargo test -p finkit --features rayon --locked --lib -- batch::`（本地 4/4 通过）——并发路径恰好是最不该没有覆盖的地方 |
+| 6 | `scripts/benchmark_talib_all_current_gate.py` **永远不会失败** | 入口调用 `run(...)` 后丢弃返回的 summary，`errors` / `parity_failures` 不影响退出码；而同族的 `..._full_current_gate.py` 有 `return 0/2` | 补 `main()` 返回 2（与同族一致）；两个脚本此前**只被已删除的归档文档引用**→孤儿，现已接进 `talib-release-gate.yml`，补上 61 个 CDL 函数与 math/operator/statistics 的门禁覆盖 |
+| 7 | `docs/archive/` 22 份 + `finkit-vs-talib-expanded-benchmark-results.md` 失效 | 归档索引自己把每一条都标为 Superseded；部分文档引用已删除模块（`runtime_engine.rs`）、已冻结路径（`bytecode`/`JIT`）与过期数字（公式函数 399 → 现 452） | 从工作区删除（**git 历史永久保留**，`git log --diff-filter=D -- docs/archive/` 按名找回）；同步修掉 `docs/README.md`、`runtime-carrier-adoption-plan`、`refactor-plan-2026-09-21` 与两个门禁脚本文档串中的悬空引用 |
+| 8 | 3 条断链 | `docs/src/quickstart.md`、`PINE_COMPAT_MATRIX.md`、`migration/pine-to-AlphaTA.md` 均为改名前的路径 | 指向 `docs/getting-started.md`、`docs/generated/pine-compatibility.md`、`docs/migration/pine-to-finkit.md` |
+
+### 37.3 接口文档补齐
+
+`docs/api-reference.md` 与 `docs/api-reference-zh.md` **此前完全没有** Web 图表载荷
+这一公开契约（Rust 与前端之间唯一的接口）。两处均新增章节：载荷字段表、
+`schema_version = 1` 的强制语义、`null` 而非 `NaN` 的缺失值约定、以及
+`createFinkitLightweightChart` 的调用与 `setPayload`/`update` 的重新校验行为。
+
+### 37.4 结论
+
+- 无孤儿公式函数、无孤儿模块（门禁）、无孤儿脚本（门禁改后重跑通过）、无死循环（门禁 + 逐处推演）、无死锁。
+- 前后端贯通已由**测试**保证而不只是靠人工检查：Rust 渲染 → 内联适配器 → 载荷解析 → JS 适配器单测，四段各有断言，接缝有集成测试。
+- 剩余已知缺口（不掩饰）：`sync_bindings.py` 对 C/Go/.NET/iOS/Java/Android 六种语言为 DEFERRED，**不做漂移检查**，该状态在 `docs/language-bindings.md` 有记录；推进到检查范围需先 `--discover --lang <lang>`。

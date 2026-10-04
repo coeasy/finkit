@@ -17,6 +17,8 @@ on:
       - 'scripts/sync_bindings.py'
       - 'scripts/benchmark_talib_release_gate.py'
       - 'scripts/benchmark_talib_arch_v3_gate.py'
+      - 'scripts/benchmark_talib_all_current_gate.py'
+      - 'scripts/benchmark_talib_full_current_gate.py'
       - 'scripts/gen_talib_numeric_contract.py'
       - 'tests/contracts/talib_numeric_contract_v1.json'
       - 'ffi/python-binding/tests/test_talib_numeric_contract.py'
@@ -61,6 +63,13 @@ jobs:
         run: python scripts/gen_talib_numeric_contract.py --check
       - name: Installed-wheel Architecture v3 parity and speedup gate
         run: python scripts/benchmark_talib_arch_v3_gate.py
+      # Nothing ran these: they were only mentioned by documents that have since
+      # been deleted, so the 61 candlestick functions and the math/operator/
+      # statistics families they add on top of the PR-28 surface were ungated.
+      # `benchmark_talib_all_current_gate.py` imports the `..._full_current_gate`
+      # cases, so running the first covers both.
+      - name: Full public-overlap coverage gate beyond the PR-28 surface
+        run: python scripts/benchmark_talib_all_current_gate.py
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -69,4 +78,5 @@ jobs:
             dist/bench/talib-release-gate.json
             dist/bench/talib-release-gate.md
             dist/bench/talib-architecture-v3-gate.json
+            dist/bench/talib-all-current-gate.json
           if-no-files-found: warn

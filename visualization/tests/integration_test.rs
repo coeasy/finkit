@@ -401,3 +401,107 @@ fn test_html_not_available() {
     let result = chart.save_as_html("test.html");
     assert!(result.is_err());
 }
+
+/// The generated HTML is the only artifact that crosses from Rust into the
+/// browser: it inlines the frontend adapter with `include_str!` and embeds the
+/// versioned payload right next to it. Nothing checked the assembled document —
+/// the adapter has a `node:test` suite and the payload has Rust unit tests, but
+/// the seam between them (template wiring, script escaping, `schema_version`
+/// agreement) was untested, so a template that stopped calling the adapter
+/// would still ship green.
+#[cfg(feature = "html")]
+#[test]
+fn rendered_html_wires_the_adapter_to_a_parseable_payload() {
+    // `render_html` lives on `renderer::Renderer` (the KlineData-in, HTML-out
+    // trait), **not** on `render::Renderer` (the DrawList-in trait the SVG and
+    // canvas renderers implement). Same name, different traits.
+    use finkit_visualization::renderer::{ChartRenderer, Renderer};
+
+    let data = make_test_data(64);
+    let config = ChartConfigBuilder::new()
+        .with_title("HTML Contract")
+        .with_chart_type(ChartType::Candlestick)
+        .build();
+    let renderer = ChartRenderer::new(config);
+    let indicators = vec![IndicatorConfig::new(IndicatorType::MA, vec![5.0])];
+    let html = renderer.render_html(&data, &indicators).unwrap();
+
+    // The adapter is inlined rather than linked, so its entry point and the
+    // CDN import it depends on must both survive into the document.
+    assert!(
+        html.contains("export function createFinkitLightweightChart"),
+        "the embedded adapter is missing from the generated HTML"
+    );
+    assert!(
+        html.contains("import * as LightweightCharts from"),
+        "the generated HTML does not import Lightweight Charts"
+    );
+    assert!(
+        html.contains("const chart = createFinkitLightweightChart(")
+            || html.contains("createFinkitLightweightChart("),
+        "the generated HTML never calls the adapter"
+    );
+
+    // Pull the inlined `const payload = {...};` out and parse it: this is the
+    // exact text the browser will evaluate, so escaping bugs surface here.
+    let marker = "const payload = ";
+    let start = html
+        .find(marker)
+        .expect("generated HTML has no payload assignment")
+        + marker.len();
+    let end = json_object_end(&html, start);
+    let payload: serde_json::Value =
+        serde_json::from_str(&html[start..end]).expect("the inlined payload is not valid JSON");
+
+    // `schema_version` is what the adapter rejects unknown payloads on; if the
+    // two sides drift the browser chart silently renders nothing.
+    assert_eq!(payload["schema_version"], 1);
+    assert_eq!(
+        payload["candles"].as_array().map(|v| v.len()),
+        Some(data.len()),
+        "payload candle count must match the source series"
+    );
+    assert!(
+        payload["lines"].as_array().map_or(false, |v| !v.is_empty()),
+        "the requested indicator line did not reach the payload"
+    );
+}
+
+/// Index just past the closing brace of the JSON object starting at `start`.
+///
+/// Brace counting is used instead of `find(';')` because a payload string can
+/// legally contain a semicolon, which would truncate the object early.
+#[cfg(feature = "html")]
+fn json_object_end(text: &str, start: usize) -> usize {
+    let bytes = text.as_bytes();
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut escaped = false;
+    let mut i = start;
+    while i < bytes.len() {
+        let b = bytes[i];
+        if in_string {
+            if escaped {
+                escaped = false;
+            } else if b == b'\\' {
+                escaped = true;
+            } else if b == b'"' {
+                in_string = false;
+            }
+        } else {
+            match b {
+                b'"' => in_string = true,
+                b'{' => depth += 1,
+                b'}' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return i + 1;
+                    }
+                }
+                _ => {}
+            }
+        }
+        i += 1;
+    }
+    panic!("unterminated JSON object in the generated HTML");
+}

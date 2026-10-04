@@ -7,6 +7,71 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Changed - 2026-10-05 (twelfth pass — connectivity audit, orphan-asset cleanup, CI coverage holes)
+
+Audited "is every flow actually connected" with reproducible scans instead of
+reading: the documentation reference graph, orphan-asset detection, feature-gated
+`#[test]` inventory and loop-termination proofs. Three rounds; every finding in a
+round was fixed before the next one started.
+
+Frontend/backend: `docs/api-reference.md` and `api-reference-zh.md` had no
+description at all of the web chart payload — the one public contract between
+Rust and a browser frontend. Both gained a section covering the payload fields,
+the `schema_version = 1` requirement, the "missing values are JSON `null`, never
+`NaN`" rule, and the `createFinkitLightweightChart` entry point.
+
+Deleted:
+
+- `visualization/frontend/index.html.template` — referenced nothing and nothing
+  referenced it; its `{{LOCALE_JS_PATH}}`/`{{CONFIG_JS_PATH}}` placeholders point
+  at files that do not exist. Superseded by the Lightweight Charts adapter.
+- `docs/archive/` (22 documents) and
+  `docs/finkit-vs-talib-expanded-benchmark-results.md` — the archive's own index
+  marked every entry "Superseded"; several describe modules that no longer exist
+  (`runtime_engine.rs`), paths that were frozen (`bytecode`/`JIT`) and counts that
+  moved on (399 formula functions; the catalogue is at 452). Git history keeps
+  every file: `git log --diff-filter=D -- docs/archive/` recovers one by name.
+  Dangling references in `docs/README.md`, two plan documents and two gate
+  docstrings were repaired with the deletion.
+
+Repository hygiene: six tracked build artifacts (7.3 MB) sat in `visualization/`
+because both `.gitignore` and `check_no_tracked_build_artifacts.py` anchored the
+"renderable output" rule to the repository **root**, so the gate reported
+"none look like build output" while shipping them. The files are untracked, the
+ignore patterns are no longer root-anchored, and the gate now derives example
+output names from `*/examples/*.rs` so it matches at any depth.
+
+CI coverage holes closed:
+
+- `node --test visualization/frontend/lightweight-charts-adapter.test.mjs` — the
+  adapter is `include_str!`-embedded into every generated chart, and its suite had
+  never run.
+- `cargo test -p finkit-visualization --features html` — with default features
+  every generated-document test was compiled out. A new
+  `rendered_html_wires_the_adapter_to_a_parseable_payload` test now parses the
+  inlined payload out of the rendered HTML and asserts the adapter, the import,
+  `schema_version`, the candle count and the indicator line actually survive
+  rendering; that seam was previously untested end to end.
+- `cargo test -p finkit --features rayon --lib -- batch::` — four parallel-batch
+  tests (order preservation, error propagation, serial/parallel equivalence) were
+  compiled out on every run.
+
+`scripts/benchmark_talib_all_current_gate.py` could never fail: its entry point
+called `run(...)` and discarded the summary, so `errors` and `parity_failures`
+never affected the exit code. It now returns 2 like its sibling. Both it and
+`benchmark_talib_full_current_gate.py` were orphaned — only documents that have
+since been deleted mentioned them — and are now wired into
+`talib-release-gate.yml`, which also closes a real gap: the 61 candlestick
+functions and the math/operator/statistics families they add on top of the PR-28
+surface had no gate at all.
+
+Also fixed three broken relative links (`docs/src/quickstart.md`,
+`PINE_COMPAT_MATRIX.md`, `migration/pine-to-AlphaTA.md`) left behind by renames.
+
+Verified clean: no orphan formula functions (all 295 registered), no unbounded
+loops, no nested lock acquisition, `sync_bindings.py --check --all` reports
+`drift=none` for Python and Node.
+
 ### Changed - 2026-10-04 (eleventh pass — benchmark hygiene, extrema block scan, formula-layer O(n·w) sweep)
 
 Full bench-vs-talib snapshot in `docs/BENCHMARK_REPORT.md`; the round is recorded

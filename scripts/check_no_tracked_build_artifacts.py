@@ -53,6 +53,34 @@ BIN_DIR = re.compile(r"(^|/)bin(/|$)")
 BINARY_EXT = re.compile(r"\.(so|dll|dylib|node|exe|pdb|lib|a)$", re.IGNORECASE)
 # Renderable output in the repository root: the shape the CI example jobs write.
 ROOT_RENDERABLE = re.compile(r"^[^/]+\.(html|htm|svg|json|csv)$", re.IGNORECASE)
+# Output filenames the `cargo run --example …` jobs write, matched at **any**
+# depth. See `EXAMPLE_OUTPUT_NAMES` for why the root-only rule is not enough.
+RENDERABLE_SUFFIX = (".html", ".htm", ".svg", ".json", ".csv", ".png")
+
+
+def example_output_names() -> set[str]:
+    """Filenames written by `cargo run --example …` jobs.
+
+    The original rule only matched renderable output sitting in the repository
+    **root**, which is where `cargo run -p finkit-visualization --example …`
+    happened to write when the gate was written. The same files were later
+    committed under `visualization/` instead, and the root-anchored regex
+    stopped matching them: 7.3 MB of regenerable output stayed tracked while
+    the gate kept printing "none look like build output".
+
+    Deriving the names from the example sources keeps the rule honest — a new
+    `save_as_*("something.html")` is caught without touching this file, and a
+    renamed example target stops matching instead of flagging a stale name.
+    """
+    names: set[str] = set()
+    literal = re.compile(r'"([A-Za-z0-9_.\-]+\.(?:html|htm|svg|json|csv|png))"')
+    for source in ROOT.glob("*/examples/*.rs"):
+        text = source.read_text(encoding="utf-8", errors="ignore")
+        names.update(literal.findall(text))
+    return names
+
+
+EXAMPLE_OUTPUT_NAMES = example_output_names()
 
 
 def tracked_files() -> list[str]:
@@ -71,6 +99,11 @@ def is_build_artifact(path: str) -> bool:
     if BINARY_EXT.search(path):
         return True
     if ROOT_RENDERABLE.search(path):
+        return True
+    # Same shape as the root rule but at any depth, for the names the example
+    # binaries actually write. `visualization/gpu_large_chart.html` is exactly
+    # the file the root-anchored regex missed.
+    if path.endswith(RENDERABLE_SUFFIX) and Path(path).name in EXAMPLE_OUTPUT_NAMES:
         return True
     return False
 

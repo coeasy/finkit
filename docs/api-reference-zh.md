@@ -1998,6 +1998,66 @@ for _ in 0..iterations {
 | `LOW` | 最低价 |
 | `VOLUME` | 成交量 |
 
+## Web 图表载荷（Lightweight Charts）
+
+`finkit-visualization` 渲染浏览器图表的方式，是把前端适配器和一份**带版本号的载荷**
+一起内联进单个 HTML 文档。这份载荷就是 Rust 与任意 Web 前端之间的公开契约；随包发布的
+`visualization/frontend/lightweight-charts-adapter.js` 是**参考消费者**，不是唯一可用实现。
+
+可以直接生成完整文档，也可以只取载荷：
+
+```rust
+use finkit_visualization::renderer::{ChartRenderer, Renderer};
+
+let renderer = ChartRenderer::new(config);                // ChartConfig
+let html = renderer.render_html(&kline, &indicators)?;    // 完整 HTML 文档
+```
+
+```rust
+use finkit_visualization::lightweight::LightweightChartsPayload;
+
+let payload = LightweightChartsPayload::from_kline(&data)?;
+let json = payload.to_json_string()?;
+```
+
+### 载荷结构
+
+当前 `schema_version` 为 **1**。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `schema_version` | 整数 | 必须是 `1`。适配器对其它值**直接抛错**——版本不匹配要 loudly 失败，而不是渲染出一张空图。 |
+| `revision` | 整数 | 源数据版本号。 |
+| `candles` | 数组 | `{time, open, high, low, close}`；`time` 为 Unix 秒或 `YYYY-MM-DD` 字符串。 |
+| `volume` | 数组 | `{time, value, color}`；`color` 按当根涨跌方向选取。 |
+| `lines` | 数组 | `{name, data, kind, color?, line_width?, point_style?, hidden?}`；`kind` 为 `line` 或 `histogram`。为空时省略。 |
+| `scene` | 对象? | `{panels, layers, markers, viewport}`，供交互式适配器使用。无场景数据时省略。 |
+
+缺失值一律是 **JSON `null`**，绝不会是 `NaN`（`NaN` 不是合法 JSON）。预热段和非有限值
+都会变成 `null`，适配器再把 `null` 映射为 Lightweight Charts 的留白（`{time}`），
+于是曲线出现**断口**而不是虚假的 0 值。
+
+### 前端入口
+
+```js
+// CDN 地址在 `visualization/src/renderer.rs` 的 `LIGHTWEIGHT_CHARTS_CDN` 中钉住，
+// 生成的 HTML 导入的就是该地址。
+import * as LightweightCharts from '<钉住的 lightweight-charts CDN 地址>';
+import { createFinkitLightweightChart } from './lightweight-charts-adapter.js';
+
+const view = createFinkitLightweightChart(
+  document.getElementById('finkit-chart'),
+  payload,
+  LightweightCharts,
+  { chart: chartOptions },
+);
+view.setPayload(next);   // 整体替换，重新校验 schema_version
+view.update(next);       // 增量更新
+```
+
+`setPayload` 与 `update` 都会重新校验 `schema_version`，因此旧适配器遇到新载荷会
+明确拒绝，而不是静默读错。
+
 ---
 
 ## 相关文档

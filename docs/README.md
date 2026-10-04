@@ -158,7 +158,6 @@ For exact supported functions and Pine mappings, prefer generated catalogs over 
 | [BENCHMARK_VS_TALIB.md](BENCHMARK_VS_TALIB.md) | TA-Lib comparison and reproducibility contract |
 | [talib-0.8.0-coverage-audit-2026-09-19.md](talib-0.8.0-coverage-audit-2026-09-19.md) | TA-Lib Python 0.8.0 public-surface gap audit |
 | [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) | Checked-in historical benchmark snapshot |
-| [finkit-vs-talib-expanded-benchmark-results.md](finkit-vs-talib-expanded-benchmark-results.md) | Expanded installed-package benchmark snapshot |
 | [finkit-outperform-talib-architecture-v3.md](finkit-outperform-talib-architecture-v3.md) | **Live spec** — the speedup semantics `scripts/benchmark_talib_arch_v3_gate.py` encodes |
 | [finkit-vs-talib-performance-optimization-plan.md](finkit-vs-talib-performance-optimization-plan.md) | **Live spec** — backs `scripts/apply_talib_performance_plan.py` |
 | [FUZZING.md](FUZZING.md) | Fuzz targets and crash reproduction |
@@ -189,11 +188,6 @@ document is indistinguishable from one that was deleted.
 | [chart-improvement-plan-zh.md](chart-improvement-plan-zh.md) | — | 图表能力改进计划 |
 | [gpu-rendering-architecture-zh.md](gpu-rendering-architecture-zh.md) | — | GPU 渲染架构设想 |
 | [market-calendar-adapters-zh.md](market-calendar-adapters-zh.md) | — | 交易日历适配器方案 |
-| [archive/upgrade-completion-matrix-zh.md](archive/upgrade-completion-matrix-zh.md) | — | 升级完成度矩阵（进度快照，已归档） |
-
-Dated **architecture/refactor** plans live in [`archive/`](archive/README.md)
-instead, together with the list of documents that were deliberately kept out of
-the archive and why.
 
 ## Current refactor baseline
 
@@ -206,11 +200,15 @@ Everything else below is either a constraint source or an audit trail — not a 
 | [FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) | **唯一执行基线** —— 架构/全链路审计、Batch 0–4 落地状态表、§28–§30 历轮审计记录 |
 | [refactor-plan-2026-09-21.md](refactor-plan-2026-09-21.md) | **约束来源（非执行基线）** —— 用户已确认的产品边界与定调（不做回测/选股、JIT/`eval_simd` 冻结）与方法论记录 |
 | [runtime-carrier-adoption-plan-2026-09-20.md](runtime-carrier-adoption-plan-2026-09-20.md) | R2/R3/R4 声明式载体落地规格（进行中） |
-| [archive/README.md](archive/README.md) | 历史计划归档索引（audit trail，**非**当前指导） |
 
-Every other dated plan in this repository has been moved to [`archive/`](archive/README.md), including
-the 2026-09-26 optimization plan and its companion audit (moved 2026-10-04). Those documents are audit
-trail only: where they conflict with the code, the code wins.
+Superseded **architecture/refactor** plans were archived until 2026-10-05 and
+are now **deleted from the working tree**; git history keeps every one of them
+permanently (see `CHANGELOG.md`, twelfth pass). Keeping a directory whose own
+index marked every entry "Superseded" cost a reader more than it saved: the
+documents described modules that no longer exist
+(`runtime_engine.rs`, the parallel `crates/finkit-*` track) and quoted numbers
+that later rounds moved on from. `git log --diff-filter=D -- docs/archive/`
+recovers any file by name.
 
 ## Generated source of truth — do not delete
 

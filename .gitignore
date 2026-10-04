@@ -157,14 +157,21 @@ packaging/usage/dotnet/tests/obj/
 /.cargo-target*/
 
 # Generated chart demos. `cargo run -p finkit-visualization --example
-# gpu_large_chart` (and `--example improved_chart`) writes these to the
-# repository root, and the very next CI step consumes them
-# (ci.yml "WebGL runtime"). They are build output, not deliverables: the
-# tracked copies added ~7.3 MB to the repository -- gpu_large_chart.html alone
-# is 7 MB -- and left `git status` dirty after every local run. Regenerate with
-# the example; `scripts/check_no_tracked_build_artifacts.py` fails if a copy is
-# tracked again.
-/gpu_large_chart.html
-/improved_chart*.html
-/improved_chart.json
-/improved_chart.svg
+# gpu_large_chart` (and `--example improved_chart`) writes these next to
+# wherever cargo was invoked -- the repository root when run from the workspace
+# root, `visualization/` when run from the crate directory -- and the very next
+# CI step consumes them (ci.yml "WebGL runtime"). They are build output, not
+# deliverables: the tracked copies added ~7.3 MB to the repository --
+# gpu_large_chart.html alone is 7 MB -- and left `git status` dirty after every
+# local run. Regenerate with the example;
+# `scripts/check_no_tracked_build_artifacts.py` fails if a copy is tracked
+# again.
+#
+# The patterns are deliberately **not** anchored to the root: an earlier
+# root-only version of these rules let six copies committed under
+# `visualization/` stay tracked for weeks while the gate reported success.
+gpu_large_chart.html
+improved_chart*.html
+improved_chart.json
+improved_chart.svg
+basic_chart.svg

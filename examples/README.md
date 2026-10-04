@@ -100,7 +100,7 @@ go run examples/go_example/main.go
 
 ## 更多文档
 
-- [快速入门指南](../docs/src/quickstart.md)
+- [快速入门指南](../docs/getting-started.md)
 - [文档索引](../docs/README.md)
 - [API 参考](../docs/api-reference.md)
 - [开发指南](../docs/development.md)

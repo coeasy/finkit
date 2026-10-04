@@ -260,6 +260,13 @@ jobs:
         run: cargo test -p finkit --locked -- --skip test_ht_sine_throughput
       - name: Run core docs tests
         run: cargo test -p finkit --doc --locked
+      # `rayon` is not a default feature, so the four `#[cfg(feature = "rayon")]`
+      # tests in `core/src/batch.rs` are compiled out of the step above: the
+      # parallel batch path — order preservation, error propagation and
+      # serial/parallel numeric equivalence — had no CI coverage at all, which
+      # is the worst possible place to have none.
+      - name: Run the parallel batch tests
+        run: cargo test -p finkit --features rayon --locked --lib -- batch::
 
   research-test:
     name: Factor research correctness and SSOT
@@ -308,11 +315,21 @@ jobs:
       # unit tests were dead in CI. `ffi-common` above is a different crate.
       - name: Test the C binding's Rust unit tests
         run: cargo test -p finkit-ffi --locked
+      # `--features html` is load-bearing: with the default feature set every
+      # `#[cfg(feature = "html")]` test is compiled out, which silently skipped
+      # the generated-document contract (the inlined frontend adapter plus the
+      # versioned payload) on every run.
       - name: Test visualization integration flow
-        run: cargo test -p finkit-visualization --locked
+        run: cargo test -p finkit-visualization --features html --locked
       - uses: actions/setup-node@v7
         with:
           node-version: "20"
+      # The adapter is `include_str!`-embedded into every generated HTML chart,
+      # so its contract is part of the shipped artifact. Nothing ran its
+      # `node:test` suite: only `scripts/test_webgl_runtime.mjs` was wired up,
+      # so a breaking change to the payload shape shipped green.
+      - name: Test the Lightweight Charts frontend adapter contract
+        run: node --test visualization/frontend/lightweight-charts-adapter.test.mjs
       - name: Exercise generated GPU controller contract
         run: |
           cargo run -p finkit-visualization --features html --example gpu_large_chart --locked

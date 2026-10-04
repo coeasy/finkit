@@ -1414,6 +1414,69 @@ timestamp,open,high,low,close,volume
 }
 ```
 
+## Web chart payload (Lightweight Charts)
+
+`finkit-visualization` renders a browser chart by inlining the frontend adapter
+and a **versioned payload** into a single HTML document. That payload is the
+public contract between Rust and any web frontend; the adapter shipped in
+`visualization/frontend/lightweight-charts-adapter.js` is the reference consumer,
+not the only possible one.
+
+Generate a complete document, or take the payload on its own:
+
+```rust
+use finkit_visualization::renderer::{ChartRenderer, Renderer};
+
+let renderer = ChartRenderer::new(config);                // ChartConfig
+let html = renderer.render_html(&kline, &indicators)?;    // full HTML document
+```
+
+```rust
+use finkit_visualization::lightweight::LightweightChartsPayload;
+
+let payload = LightweightChartsPayload::from_kline(&data)?;
+let json = payload.to_json_string()?;
+```
+
+### Schema
+
+The current `schema_version` is **1**.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `schema_version` | integer | Must be `1`. The adapter **throws** on any other value, so a version mismatch fails loudly instead of rendering an empty chart. |
+| `revision` | integer | Source data revision. |
+| `candles` | array | `{time, open, high, low, close}`. `time` is either a Unix second or a `YYYY-MM-DD` string. |
+| `volume` | array | `{time, value, color}`; `color` is picked from the bar direction. |
+| `lines` | array | `{name, data, kind, color?, line_width?, point_style?, hidden?}`; `kind` is `line` or `histogram`. Omitted when empty. |
+| `scene` | object? | `{panels, layers, markers, viewport}` for interactive adapters. Omitted when absent. |
+
+Missing values are **JSON `null`**, never `NaN` — `NaN` is not valid JSON.
+Warm-up bars and non-finite indicator values become `null`, and the adapter maps
+`null` to Lightweight Charts whitespace (`{time}`), so a line shows a gap rather
+than a spurious zero.
+
+### Frontend entry point
+
+```js
+// The CDN URL is pinned in `visualization/src/renderer.rs`
+// (`LIGHTWEIGHT_CHARTS_CDN`); the generated HTML imports exactly that URL.
+import * as LightweightCharts from '<pinned lightweight-charts CDN URL>';
+import { createFinkitLightweightChart } from './lightweight-charts-adapter.js';
+
+const view = createFinkitLightweightChart(
+  document.getElementById('finkit-chart'),
+  payload,
+  LightweightCharts,
+  { chart: chartOptions },
+);
+view.setPayload(next);   // full replacement; re-validates schema_version
+view.update(next);       // incremental update
+```
+
+`setPayload` and `update` both re-check `schema_version`, so an older adapter
+rejects a newer payload instead of silently misreading it.
+
 ## Error Types
 
 ### Rust

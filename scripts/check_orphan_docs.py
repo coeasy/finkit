@@ -18,13 +18,13 @@ A document counts as reachable when another tracked Markdown file either
 - names it as a backticked repository-relative path: `` `docs/foo.md` ``.
 
 The second form is deliberate. Index documents such as `docs/README.md` list
-generated artifacts as backticked bullets rather than links, and `docs/archive/`
-records its contents the same way. Treating those as unreachable would produce
-false positives that train people to ignore the gate.
+generated artifacts as backticked bullets rather than links; treating those as
+unreachable would produce false positives that train people to ignore the gate.
 
-Every document is expected to be reachable, including archived ones — the
-archive has its own index (`docs/archive/README.md`) precisely so it stays
-navigable.
+`docs/archive/` used to be reachable the same way. It was deleted from the
+working tree on 2026-10-05 — every entry in its own index was marked
+"Superseded", and git history keeps them all — so this gate no longer sees
+those files at all.
 
 Usage
 -----

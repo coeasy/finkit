@@ -7,9 +7,10 @@ left to external link checkers because CI should not depend on network availabil
 It also fails when a link target exists in the working tree but is **not tracked
 by git**. CI checks out the committed tree, so an ignored or untracked file
 satisfies this check locally while a fresh clone gets a dangling link — which is
-exactly how `docs/archive/README.md` stayed invisible: `.gitignore` listed
-`docs/archive/`, so the archive index was present on the author's disk, absent
-from every clone, and this gate reported success anyway.
+exactly how an archive index once stayed invisible: `.gitignore` listed the
+archive directory, so the index was present on the author's disk, absent from
+every clone, and this gate reported success anyway. (That directory has since
+been deleted; git history keeps the files.)
 """
 
 from __future__ import annotations
