@@ -2478,3 +2478,99 @@ WHILE/FOR 有 `iterations >= MAX_LOOP_ITERATIONS`（=10000）兜底；stateful �
 - **cargo 编译**：排除 pyo3 的核心 crate 全绿；完整 `--all-targets` 因沙箱管道配额在 pyo3-ffi
   build script 调起 Python 解释器时耗尽（os error 231），属环境限制，非代码改动——本轮未改
   任何 `.rs`，第四轮已确认 0-error 基线。
+
+# 31. 第六轮：方案实现度对照与文档治理（2026-10-04）
+
+第六轮问的是前五轮都没系统问过的两条：**「对照方案，到底实现了几成？」**，以及
+**「文档本身是否在互相矛盾？」**。
+
+## 31.1 方案实现度对照结论
+
+| 计划 | 状态 | 证据 |
+|---|---|---|
+| Batch 0（P0 发布红灯） | **已完成** | §4 清单全 `[x]`：fmt / clippy Euler 常数 / `avx2_fma_available` cfg / Python `u16` 变换 postcondition / C-C++ request JSON / toolchain pin / release aggregator |
+| Batch 1（孤儿与仓库治理） | **已完成** | `circuit_breaker.rs` 等 5 个孤儿删除；`check_rust_source_reachability.py` 479 文件全可达；`check_no_tracked_build_artifacts.py`；`check_unbounded_loops.py` |
+| Batch 2（生成系统收敛） | **前置已完成** | build-state gate + transform postcondition（完整 BindingSpec 单一生成器仍是独立里程碑） |
+| Batch 3（Runtime 收敛） | **已完成**，1 项半程 | §24a 六项落点齐全；第 6 项「公式与因子前端改走 `SemanticGraph`」**未做**，§24a 已如实记录 |
+| Batch 4（性能） | **已完成**，1 项有意不做 | CSE 4.2×、`execute_into` 零分配、DirtyRange、scheduler、workload benchmark；**kernel fusion 未实现且不谎报** |
+| §18 五条边 | **已完成** | batch==streaming / full==range / allocating==into / tree==plan / Rust==FFI 各有具名门禁 |
+
+**结论：V4 的 Batch 主体已落地，两处缺口（§24a 第 6 项、kernel fusion）都在方案内如实标注，
+没有虚假声称。** 但本轮发现方案**漏记了一条**更关键的事实，见 31.2。
+
+## 31.2 方案漏记的实现度缺口：默认执行路径仍是 Tree
+
+`core/src/formula/engine.rs` 的 `FormulaExecutionMode` 默认值是 `Tree`，即**生产默认路径仍是
+参考解释器，而不是 Plan**。这不是疏漏，是被实测挡住的：把默认翻到 `Plan` 会挂掉当时
+**12 个 target / 143 个测试 / 76 个缺失 kernel**。
+
+**但那条理由已经过期，而方案正文没有记录这件事的两面。** 缺口于 **2026-09-24 关闭**：
+`unified_dispatch.rs` 把 44 个 TA-Lib 0.7/0.8 `CALL:<NAME>` kernel 全部路由到
+`dispatch_modern_call`；`core/tests/formula_plan_differential.rs` 的两张 allowlist
+（`DOMESTIC_UNSUPPORTED` / `PINE_UNSUPPORTED`）**都已是空表**，且该门禁对「陈旧的 allowlist
+条目」会失败——所以「空」是断言，不是默认值。
+
+于是 `engine.rs` 里以「76 个缺失 kernel」为**头条理由**的注释成了过期信息，而**真正剩下的
+阻塞**（结构性，不是缺 kernel）被压在后一段：**含字符串字面量的公式在 `Plan` 路径上根本无法
+运行**——树路径语义是「把字面量追加进 `FormulaContext::string_table`，求值为其下标」，而 plan
+executor 只收到 `&[&[f64]]`，没有可追加的上下文。
+
+**修复**：把该注释改为「缺口已于 2026-09-24 关闭 + 空 allowlist 是断言」，并把真正剩下的阻塞
+（字符串字面量）提升为首要理由。**没有改任何行为**——默认仍是 `Tree`，翻默认仍是一次发布级
+决定（前置条件是先给字符串字面量一个 plan 侧归宿）。这条事实已补记入本方案。
+
+## 31.3 文档治理：四份文档同时自称「当前基线」
+
+审计 `docs/` 时发现「谁是当前基线」有**四个互相矛盾的答案**：
+
+| 文档 | 自称 |
+|---|---|
+| `docs/refactor-plan-2026-09-21.md` | 「**本文档是唯一执行基线**」 |
+| `docs/archive/README.md`（两处） | 「**Only** `refactor-plan-2026-09-21.md` is an execution baseline」 |
+| `docs/development.md` | 「current architecture baseline is `architecture-and-feature-audit-2026-09-26.md`，active optimization route is `refactor-plan-2026-09-26.md`」 |
+| `docs/README.md` | V4 =「本轮架构与性能收敛计划」、09-21 =「唯一执行基线」、09-26 =「当前重构路线」 |
+
+同一份索引里三个「当前」，加上 `development.md` 指向另外两个——贡献者读到哪份就得到哪个
+答案。这正是必须清掉的「无效的信息」。
+
+**修复（收敛到唯一权威）**：
+
+- `docs/README.md` 的 "Current refactor baseline" 改为**显式声明只有 V4 是唯一执行基线**；
+  09-21 改标为「**约束来源（非执行基线）**」；09-26 计划与审计标注为已归档。
+- `docs/development.md` 指向 V4。
+- `docs/archive/README.md` 的两处「只有 09-21 是基线」改为「唯一基线是 V4」。
+- `docs/refactor-plan-2026-09-21.md` 抬头的「唯一执行基线」改为「已不是执行基线」，并说明其
+  保留价值是**用户已确认的产品边界与定调**（不做回测 / 不做选股、JIT / `eval_simd` 冻结）。
+
+> **为什么 09-21 不归档**：它承载**仍然生效**的约束。归档目录的定义是
+> "historical records, **not current guidance**"——把仍然生效的约束放进去，等于把它们降级为
+> 「仅供参考」，那才是真的丢信息。所以它留在 `docs/`，但**不再自称基线**。
+
+## 31.4 归档清单（2026-10-04 批次）
+
+| 文档 | 处置 | 理由 |
+|---|---|---|
+| `refactor-plan-2026-09-26.md` | `git mv` → `docs/archive/` | 被 V4 取代 |
+| `architecture-and-feature-audit-2026-09-26.md` | `git mv` → `docs/archive/` | 当轮审计快照，结论被 §28–§30 取代 |
+| `upgrade-completion-matrix-zh.md` | `git mv` → `docs/archive/` | 进度快照，且把 `bytecode` / `JIT` 列为**交付路径**——这两条**已冻结**，属无效信息 |
+
+三份文档内部**没有 markdown 链接**（已核实），归档不产生断链；归档索引已补齐三行，被归档
+文档抬头都加了横幅写明归档日期与「当前基线是 V4」。
+
+## 31.5 接口文档修正（`docs/api-reference.md`）
+
+§30.3 在第五轮删掉不存在的 C++ 绑定条目时，**留下了两处它自己引入的不一致**：
+
+1. 正文仍写 "All **eight** public language surfaces share the same control-plane JSON
+   contracts"，但列表只剩 **7** 条，且紧接着一段明确说 iOS/Android **不**暴露统一控制平面。
+   → 改为「只对暴露控制平面的语言面成立，下列七个」。
+2. C 与 Node 两条 bullet 被缩进成 6 空格，脱离 bullet 列表（被渲染成代码块）。 → 恢复为顶层 bullet。
+
+**教训**：删条目时不仅要删那一行，还要重新数一遍被那条目支撑的数字。这是第四轮
+「审计修复动作本身」在第五轮修复上的再次复现。
+
+## 31.6 本轮验证
+
+- doc 门禁：`check_orphan_docs.py`（归档后仍全可达）、`check_docs_links.py`（含归档文档新增的 `../` 链接）
+- 生成态：`gen_ssot_docs.py --check` 通过
+- 本轮只改了 1 个 `.rs`，且**只改文档注释、无行为变化**：`core/src/formula/engine.rs`

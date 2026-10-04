@@ -4,7 +4,11 @@
 >
 > 本文回答三个问题：项目现在有什么、主要链路如何工作、哪些能力已经完成以及哪些地方仍不合理。结论基于当前源码、测试、CI、发布脚本和现有重构记录，不把“已注册”“能编译”“有测试”误认为“已实现且可生产使用”。
 >
-> 配套重构方案：[`docs/refactor-plan-2026-09-26.md`](refactor-plan-2026-09-26.md)
+> 配套重构方案：[`docs/archive/refactor-plan-2026-09-26.md`](refactor-plan-2026-09-26.md)
+>
+> **已归档（2026-10-04）。** 本文是 2026-09-26 当轮的审计快照，其结论已被 V4 方案的
+> §28–§30 历轮审计取代。当前唯一执行基线是
+> [`docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md`](../FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md)。
 
 ## 1. 审计结论摘要
 

@@ -322,28 +322,37 @@ struct StreamingFormulaState {
 pub enum FormulaExecutionMode {
     /// Tree-walking interpreter. The reference path and the current default.
     ///
-    /// This is not caution for its own sake. Flipping the default was measured,
-    /// not assumed — and the measurement itself was wrong before it was right.
-    /// The first curve (`18 → 12 → 8 → 7 → 6 → 3 → 1`) came from runs
-    /// **without `--no-fail-fast`**, so it recorded the failure count of the
-    /// *first red target*, not the full gap. Re-measured 2026-09-23 with
-    /// `--no-fail-fast`: **12 red targets / 143 failing tests / 76 missing
-    /// kernels**. See `docs/refactor-plan-2026-09-21.md` §3.2 (rounds 8 and 13)
-    /// for both the breakdown and the methodology note.
+    /// **Why the default has not been flipped — and why it is no longer the
+    /// kernel backlog.** Flipping was measured rather than assumed, and the
+    /// measurement itself was wrong before it was right: the first curve
+    /// (`18 → 12 → 8 → 7 → 6 → 3 → 1`) came from runs **without
+    /// `--no-fail-fast`**, so it recorded the failure count of the *first red
+    /// target* instead of the full gap. Re-measured 2026-09-23 that way the gap
+    /// was **12 red targets / 143 failing tests / 76 missing kernels** (see
+    /// `docs/refactor-plan-2026-09-21.md` §3.2 for the methodology note).
+    ///
+    /// That gap was **closed on 2026-09-24**: `unified_dispatch.rs` now routes
+    /// every TA-Lib 0.7/0.8 `CALL:<NAME>` kernel through `dispatch_modern_call`,
+    /// delegating to the exact `canonical_*` implementation the tree path uses.
+    /// Both allowlists in `core/tests/formula_plan_differential.rs`
+    /// (`DOMESTIC_UNSUPPORTED`, `PINE_UNSUPPORTED`) are empty, and that gate
+    /// fails on a *stale* entry — so "empty" is an assertion, not a default.
     ///
     /// Both paths now publish the same observable results — assignments into
     /// `ctx.variables`, declared channels into `ctx.output_names`, chart styling
     /// into `ctx.output_modifiers` — so a caller cannot tell from the context
-    /// which one ran. What remains is coverage, not semantics: under
-    /// [`Self::Plan`] a formula whose operation has no kernel fails at dispatch
-    /// rather than at runtime.
+    /// which one ran.
     ///
-    /// That loud failure is deliberate — a silent fallback would make "the fast
-    /// path" mean "usually the fast path" — but it also means a formula
-    /// containing a **string literal** cannot run under [`Self::Plan`] at all:
-    /// the tree path's semantics are "append the literal to
+    /// The remaining blocker is structural, not a missing kernel: a formula
+    /// containing a **string literal** cannot run under [`Self::Plan`] at all.
+    /// The tree path's semantics are "append the literal to
     /// `FormulaContext::string_table`, evaluate to its index", and the plan
-    /// executor receives only `&[&[f64]]` with no context to append to.
+    /// executor receives only `&[&[f64]]` with no context to append to. Until
+    /// that has a plan-side home, [`Self::Plan`] stays opt-in.
+    ///
+    /// The loud failure is deliberate: a silent fallback would make "the fast
+    /// path" mean "usually the fast path" — a formula whose operation has no
+    /// kernel fails at dispatch rather than at runtime.
     #[default]
     Tree,
     /// Compiled compute plan driven by `UnifiedExecutor`.

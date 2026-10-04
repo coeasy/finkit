@@ -4,7 +4,8 @@ Complete API reference for all language bindings in Finkit.
 
 ## Unified operation and formula contracts
 
-All eight public language surfaces share the same control-plane JSON contracts.
+All public language surfaces that expose the control plane share the same JSON contracts
+(seven named below).
 The typed indicator functions remain the preferred hot path; these entry points
 are for dynamic operation selection, named outputs, capability discovery and
 cross-language parity tests.
@@ -43,8 +44,8 @@ The shared names are:
 - Go: `ta.OperationExecuteJSON`;
 - Java: `Indicators.operationExecuteJson`;
 - .NET: `Indicators.OperationExecuteJson`;
-      - C: `ta_operation_execute_json`;
-      - Node: `operationExecuteJson`.
+- C: `ta_operation_execute_json`;
+- Node: `operationExecuteJson`.
 
 iOS and Android do not expose the unified control-plane entry point. They ship
 per-indicator FFI surfaces instead: iOS builds a static library of `alpha_ta_*`

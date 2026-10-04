@@ -136,7 +136,7 @@ Finkit 不管理账户、订单、撮合、券商连接或交易状态机。它�
 
 这套方法直接来自真实缺陷的复盘：滚动指标曾因“预热段 + 增量累加器把 NaN 当吸收态”而无法组合，
 而当时 5 条路径的差分门禁**全绿**。详细记录见
-[重构基线](refactor-plan-2026-09-21.md) 与 [Formula Runtime 契约](formula-runtime-contract.md) §3.1–§3.2。
+[重构总纲（约束与方法论记录）](refactor-plan-2026-09-21.md) 与 [Formula Runtime 契约](formula-runtime-contract.md) §3.1–§3.2。
 
 ## 性能模型
 

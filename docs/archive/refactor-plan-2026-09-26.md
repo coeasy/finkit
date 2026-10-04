@@ -6,7 +6,10 @@
 >
 > 适用范围：`core`、公式执行路径、因子/研究链路、`ffi-common`、语言绑定、CLI、可视化和 WASM 发布链。
 >
-> 配套现状审计：[`docs/architecture-and-feature-audit-2026-09-26.md`](architecture-and-feature-audit-2026-09-26.md)
+> 配套现状审计：[`docs/archive/architecture-and-feature-audit-2026-09-26.md`](architecture-and-feature-audit-2026-09-26.md)
+>
+> **已归档（2026-10-04）。** 本方案是上一轮记录，**不是**当前执行基线。当前唯一执行基线是
+> [`docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md`](../FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md)。
 >
 > 本方案采用“最小破坏、单核收敛、可逆迁移、门禁驱动”的优化路线，不进行没有验证收益的全仓推倒重写。
 

@@ -24,8 +24,7 @@ Choose the path that matches your goal:
 | Build factor/runtime workloads | [Runtime and factors](runtime-and-factors.md) |
 | Understand research architecture | [Factor research architecture](factor-research-architecture.md) |
 | Diagnose failures | [Troubleshooting](troubleshooting.md) |
-| 审计当前功能和架构 | [功能与架构审计（2026-09-26）](architecture-and-feature-audit-2026-09-26.md) |
-| 查看当前重构路线 | [最优化重构方案（2026-09-26）](refactor-plan-2026-09-26.md) |
+| 查看当前重构路线与审计记录 | [架构、全链路审计与优化改进方案 V4](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) |
 
 ## Product model
 
@@ -190,7 +189,7 @@ document is indistinguishable from one that was deleted.
 | [chart-improvement-plan-zh.md](chart-improvement-plan-zh.md) | — | 图表能力改进计划 |
 | [gpu-rendering-architecture-zh.md](gpu-rendering-architecture-zh.md) | — | GPU 渲染架构设想 |
 | [market-calendar-adapters-zh.md](market-calendar-adapters-zh.md) | — | 交易日历适配器方案 |
-| [upgrade-completion-matrix-zh.md](upgrade-completion-matrix-zh.md) | — | 升级完成度矩阵（进度快照） |
+| [archive/upgrade-completion-matrix-zh.md](archive/upgrade-completion-matrix-zh.md) | — | 升级完成度矩阵（进度快照，已归档） |
 
 Dated **architecture/refactor** plans live in [`archive/`](archive/README.md)
 instead, together with the list of documents that were deliberately kept out of
@@ -198,15 +197,20 @@ the archive and why.
 
 ## Current refactor baseline
 
+**There is exactly one execution baseline:
+[`FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md`](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md).**
+Everything else below is either a constraint source or an audit trail — not a competing plan.
+
 | Document | Purpose |
 | --- | --- |
-| [FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) | **本轮架构与性能收敛计划** —— 执行引擎唯一化、生成系统收敛、Runtime 收敛、性能优先级、§16–§21 落地状态表 |
-| [refactor-plan-2026-09-21.md](refactor-plan-2026-09-21.md) | **唯一执行基线** —— 架构去重主轴、Phase 状态与待决事项 |
+| [FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) | **唯一执行基线** —— 架构/全链路审计、Batch 0–4 落地状态表、§28–§30 历轮审计记录 |
+| [refactor-plan-2026-09-21.md](refactor-plan-2026-09-21.md) | **约束来源（非执行基线）** —— 用户已确认的产品边界与定调（不做回测/选股、JIT/`eval_simd` 冻结）与方法论记录 |
 | [runtime-carrier-adoption-plan-2026-09-20.md](runtime-carrier-adoption-plan-2026-09-20.md) | R2/R3/R4 声明式载体落地规格（进行中） |
 | [archive/README.md](archive/README.md) | 历史计划归档索引（audit trail，**非**当前指导） |
 
-Every other dated plan in this repository has been moved to [`archive/`](archive/README.md). Those
-documents are audit trail only: where they conflict with the code, the code wins.
+Every other dated plan in this repository has been moved to [`archive/`](archive/README.md), including
+the 2026-09-26 optimization plan and its companion audit (moved 2026-10-04). Those documents are audit
+trail only: where they conflict with the code, the code wins.
 
 ## Generated source of truth — do not delete
 
@@ -258,4 +262,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last product/documentation review: 2026-09-27. Workspace target: v0.2.0. Published distribution baseline: v0.1.15._
+_Last product/documentation review: 2026-10-04. Workspace target: v0.2.0. Published distribution baseline: v0.1.15._

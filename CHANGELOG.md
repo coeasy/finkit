@@ -7,6 +7,51 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Fixed - 2026-10-04 (sixth audit pass — plan conformance and documentation governance)
+
+A sixth pass that asked two questions the earlier rounds never opened: *how much
+of the V4 plan is actually implemented?* and *do the documents contradict each
+other about what the plan is?*
+
+- **Documentation governance: four documents each claimed to be the current
+  baseline.** `docs/refactor-plan-2026-09-21.md` said "本文档是唯一执行基线";
+  `docs/archive/README.md` said only that document is an execution baseline;
+  `docs/development.md` said the current architecture baseline was
+  `architecture-and-feature-audit-2026-09-26.md` with
+  `refactor-plan-2026-09-26.md` as the active optimization route; and
+  `docs/README.md` listed three different "current" documents at once. A reader
+  got a different answer depending on which file they opened.
+  `docs/README.md` and `docs/archive/README.md` now state that
+  `docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md` is the **single**
+  execution baseline; `refactor-plan-2026-09-21.md` is re-labelled a *constraint
+  source* (it holds the user-confirmed product boundary and the frozen-JIT
+  decisions) rather than a baseline; `docs/development.md` points at V4.
+- **Archived the superseded 2026-09-26 plan, its companion audit and the
+  `upgrade-completion-matrix-zh.md` progress snapshot.** The matrix still listed
+  `bytecode`/`JIT` as shipped paths after both were frozen, so it was publishing
+  invalid capability claims. All three documents had no internal links, so the
+  moves break nothing; the archive index gained three rows and each document
+  gained an "archived" banner naming V4 as the current baseline.
+- **`core/src/formula/engine.rs` justified the default execution mode with a gap
+  that no longer exists.** The `FormulaExecutionMode::Tree` doc comment led with
+  "Re-measured 2026-09-23: 12 red targets / 143 failing tests / 76 missing
+  kernels" as the reason the default has not been flipped to `Plan`. That gap was
+  closed on 2026-09-24 — `unified_dispatch.rs` routes every TA-Lib 0.7/0.8
+  `CALL:<NAME>` kernel through `dispatch_modern_call`, and both allowlists in
+  `core/tests/formula_plan_differential.rs` are empty (a stale entry fails that
+  gate, so "empty" is an assertion, not a default). The comment now records the
+  closure and leads with the *actual* remaining blocker, which is structural
+  rather than a missing kernel: a formula containing a string literal cannot run
+  on the plan path at all, because the plan executor receives no string table to
+  append to. Documentation-only change — the default is still `Tree`.
+- **`docs/api-reference.md` contradicted itself, left over from the previous
+  round's own fix.** It still said "All **eight** public language surfaces share
+  the same control-plane JSON contracts", but the list it introduces was reduced
+  to seven when the non-existent C++ binding was removed, and the very next
+  paragraph says iOS and Android do **not** expose that control plane. The C and
+  Node bullets had also been left indented six spaces, breaking the list. Both
+  corrected.
+
 ### Fixed - 2026-10-04
 
 A fifth audit pass that re-asked the previous rounds' own questions against what
@@ -616,7 +661,8 @@ publishable state.
   (`--target-dir`, then `$CARGO_TARGET_DIR/release`, then `target/release`),
   and when a member does differ it names the tree the archive *was* packed
   from and the flag to pass.
-- `docs/refactor-plan-2026-09-21.md`, the declared sole execution baseline,
+- `docs/refactor-plan-2026-09-21.md`, then the declared sole execution baseline
+  (now re-labelled a constraint record — see the sixth-audit-pass entry above),
   pointed at `docs/improvement-plan-2026-09-20.md` and
   `docs/architecture-gap-assessment-2026-09-20.md` at their pre-archive
   locations, in the same sentence that says historical plans have been
