@@ -7,6 +7,43 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Changed - 2026-10-04 (seventh pass — the plan's remaining items, executed)
+
+The instruction this pass answered was: *finish the two items the plan still
+records as open, and keep measuring before claiming.*
+
+- **Batch 3 item 6 closed — the formula and factor frontends now lower through
+  the semantic graph.** `FormulaLowerer` pushes every node into a
+  `SemanticGraphBuilder` (push order = the old direct-assembly id order, so the
+  graph is node-for-node isomorphic with what `ComputePlan::compile` saw before);
+  `FormulaComputePlan::graph()` publishes the graph, so content-hash, CSE
+  eligibility and scheduling levels are reachable for a formula without
+  re-lowering. `factor-analysis`'s `ResearchPlan::compile` builds its graph the
+  same way (`NodeKind::Factor`), with a stable Kahn pre-pass that preserves the
+  old path's acceptance of non-topological stage declarations and a `node_stage`
+  remap that keeps the public API speaking stage ids. No execution behaviour
+  changed: the graph's validator *is* `ComputePlan::compile`, and the
+  tree==plan differential corpus (empty allowlists) stays green.
+- **Batch 4 item 6 (kernel fusion) executed to a data-backed verdict: built,
+  gated, measured, rejected.** A complete elementwise-chain fusion
+  (`FUSED:BINARY_CHAIN`, postfix program in the parameter arena, register
+  machine in the dispatcher) passed all four of its own gates — and then lost
+  to the unfused plan at **every** measured chain length on 1M bars (3-op:
+  12.2ms vs 10.5ms; 7-op: 24.9 vs 20.4; 11-op with `%`: 60.0 vs 38.2; 27-op:
+  108 vs 60.8). The per-op cost of a scalar register interpreter is about 2x
+  the per-pass cost of the plain elementwise kernels, which LLVM auto-vectorizes.
+  The code was removed rather than shipped slow or left dead: no orphan logic,
+  no unmeasured kernel. The winning successor — compiling fused chains into
+  SIMD kernels — sits outside the frozen JIT/`eval_simd` boundary and is
+  recorded as future work in V4 §32.2.
+- **Formula execution vs TA-Lib, refreshed.** The recorded cross-library
+  snapshot (TA-Lib 0.6.8 Python binding, worst numeric divergence 4.7e-10,
+  verdict `PARITY`) has finkit faster on all 14 indicators at `1.03x`–`2.53x`
+  (geometric mean ~1.6x); the TA-Lib C 0.8.1 Criterion gate stays in CI where
+  the pinned library is installed — this host has no `ta-lib-static`, and no
+  local C-level numbers were fabricated. Fresh local formula-engine numbers are
+  in V4 §32.3.
+
 ### Fixed - 2026-10-04 (sixth audit pass — plan conformance and documentation governance)
 
 A sixth pass that asked two questions the earlier rounds never opened: *how much

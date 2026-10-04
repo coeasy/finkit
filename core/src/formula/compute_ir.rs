@@ -8,10 +8,11 @@
 use super::ast::{AstNode, BinaryOperator, OutputModifier, UnaryOperator};
 use super::params::expand_implicit_price_args;
 use crate::compute::{
-    ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, ComputePlanError,
+    ComputeCapabilities, ComputeEffect, ComputeNodeId, ComputePlan, ComputePlanError,
     DependencyShape, LookbackRequirement,
 };
 use crate::registry::{builtin_function_registry, FunctionRegistry};
+use crate::semantic_graph::{NodeKind, SemanticGraph, SemanticGraphBuilder, SemanticNodeId};
 use std::collections::BTreeMap;
 
 /// Ceiling on how many times a `for` loop body may be duplicated.
@@ -30,6 +31,15 @@ use super::executor::MAX_LOOP_ITERATIONS as MAX_UNROLLED_LOOP_ITERATIONS;
 /// Validated semantic compute plan derived from one formula AST.
 #[derive(Debug, Clone)]
 pub struct FormulaComputePlan {
+    /// The semantic graph the plan was lowered from.
+    ///
+    /// The formula frontend no longer builds [`ComputeNode`]s directly: every
+    /// node is pushed into a [`SemanticGraphBuilder`], the graph is validated,
+    /// and the plan is [`SemanticGraph::lower`]ed from it. Keeping the graph
+    /// beside the plan is what makes the graph-level services —
+    /// [`SemanticGraph::content_hash`], CSE eligibility, dependency cones,
+    /// scheduling levels — reachable for a formula without re-lowering it.
+    graph: SemanticGraph,
     plan: ComputePlan,
     root: ComputeNodeId,
     /// Exact literal carried by each `NUMBER` node, keyed by node id.
@@ -75,17 +85,29 @@ impl FormulaComputePlan {
         let ast = expand_implicit_price_args(ast);
         let mut lowerer = FormulaLowerer::new(registry);
         let root = lowerer.lower(&ast);
-        let plan = ComputePlan::compile(lowerer.nodes)?;
+        // The builder's validation *is* `ComputePlan::compile`, so this cannot
+        // accept a graph the old direct-lowering path would have rejected, and
+        // the second compile in `graph.lower()` is over the same node set.
+        let graph = lowerer.builder.build()?;
+        let plan = graph.lower()?;
         if let Some(error) = lowerer.pending_error {
             return Err(error);
         }
         Ok(Self {
+            graph,
             plan,
             root,
             number_literals: lowerer.number_literals,
             max_ast_depth: lowerer.max_depth,
             output_modifiers: lowerer.output_modifiers,
         })
+    }
+
+    /// Semantic graph this plan was lowered from.
+    ///
+    /// See the field documentation on [`FormulaComputePlan`].
+    pub const fn graph(&self) -> &SemanticGraph {
+        &self.graph
     }
 
     /// Unified compute plan containing dependencies and effects.
@@ -146,8 +168,11 @@ pub fn lower_formula_ast_with_registry(
 
 struct FormulaLowerer<'a> {
     registry: &'a FunctionRegistry,
-    nodes: Vec<ComputeNode>,
-    next_id: usize,
+    /// Nodes are pushed into a [`SemanticGraphBuilder`] rather than a bare
+    /// `Vec<ComputeNode>`: §16/§24a require every frontend to route through
+    /// the one graph model, and the builder assigns ids in push order, so the
+    /// id a node gets here is identical to the id the old direct path gave it.
+    builder: SemanticGraphBuilder,
     last_write: BTreeMap<String, ComputeNodeId>,
     last_effect: Option<ComputeNodeId>,
     last_control_flow: Option<ComputeNodeId>,
@@ -188,8 +213,7 @@ impl<'a> FormulaLowerer<'a> {
     fn new(registry: &'a FunctionRegistry) -> Self {
         Self {
             registry,
-            nodes: Vec::new(),
-            next_id: 0,
+            builder: SemanticGraphBuilder::new(),
             last_write: BTreeMap::new(),
             last_effect: None,
             last_control_flow: None,
@@ -668,7 +692,13 @@ impl<'a> FormulaLowerer<'a> {
 
     /// Create a `NUMBER` node and record the literal it carries.
     fn add_number(&mut self, value: f64) -> ComputeNodeId {
-        let id = self.add_pure("NUMBER", Vec::new());
+        let id = self.builder.push(
+            NodeKind::Constant,
+            "NUMBER",
+            Vec::new(),
+            pure_capabilities(),
+        );
+        let id = ComputeNodeId(id.0);
         self.number_literals.insert(id, value);
         id
     }
@@ -678,18 +708,7 @@ impl<'a> FormulaLowerer<'a> {
         operation: impl Into<String>,
         dependencies: Vec<ComputeNodeId>,
     ) -> ComputeNodeId {
-        self.add_node(
-            operation,
-            dependencies,
-            ComputeCapabilities {
-                deterministic: true,
-                streaming: true,
-                stateful: false,
-                lookback: LookbackRequirement::None,
-                effect: ComputeEffect::Pure,
-                dependency: DependencyShape::FixedLookback(0),
-            },
-        )
+        self.add_node(operation, dependencies, pure_capabilities())
     }
 
     fn add_draw(
@@ -731,11 +750,29 @@ impl<'a> FormulaLowerer<'a> {
         dependencies: Vec<ComputeNodeId>,
         capabilities: ComputeCapabilities,
     ) -> ComputeNodeId {
-        let id = ComputeNodeId(self.next_id);
-        self.next_id += 1;
-        self.nodes
-            .push(ComputeNode::new(id, operation, dependencies, capabilities));
-        id
+        let id = self.builder.push(
+            NodeKind::Formula,
+            operation,
+            dependencies
+                .into_iter()
+                .map(|dependency| SemanticNodeId(dependency.0))
+                .collect(),
+            capabilities,
+        );
+        ComputeNodeId(id.0)
+    }
+}
+
+/// Capabilities of a pure, stateless, fixed-lookback-zero node — the shape of
+/// every synthesized expression node the lowerer emits without registry help.
+fn pure_capabilities() -> ComputeCapabilities {
+    ComputeCapabilities {
+        deterministic: true,
+        streaming: true,
+        stateful: false,
+        lookback: LookbackRequirement::None,
+        effect: ComputeEffect::Pure,
+        dependency: DependencyShape::FixedLookback(0),
     }
 }
 

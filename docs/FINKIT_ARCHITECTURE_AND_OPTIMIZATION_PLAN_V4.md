@@ -1925,13 +1925,18 @@ generated source
 | 5 | RuntimeContext | `core/src/runtime_context.rs`；`UnifiedExecutor` 拥有一个，全部执行入口经它记账 | `context_separates_full_and_range_executions`、`context_classifies_every_entry_point_and_counts_kernels`、`context_budget_rejects_plan_before_allocating` |
 | 6 | Factor / Formula / Composite 共用 DAG | §16 的四类 `NodeKind` 是**同一张图上的标签**，不是四种图 | `every_frontend_kind_lowers_to_the_same_plan_for_the_same_semantics`（同时断言 lowering 结果与 `content_hash` 都一致——身份里不含 `NodeKind`，否则公式与因子算同一个序列却无法共享缓存） |
 
-### 第 6 项的真实完成度（不要过度声称）
+### 第 6 项的真实完成度（2026-10-04 更新：已完成，见 §32.1）
 
-四类 `NodeKind` 确实收敛到同一张图、同一个 `lower()`、同一个执行器，**但公式与因子
-两条前端目前仍各自直接 lower 自己的 plan**，尚未改走 `SemanticGraph`：
+四类 `NodeKind` 收敛到同一张图、同一个 `lower()`、同一个执行器，且**两条前端均已改走
+`SemanticGraph`**（第七轮，§32.1）：
 
-- 公式：`FormulaComputePlan::compile` 直接把 lowerer 的节点交给 `ComputePlan::compile`。
-- 因子：`FactorPlan` 走自己的 `execute_borrowed`。
+- 公式：`FormulaComputePlan::compile` 的 lowerer 现在把每个节点 push 进
+  `SemanticGraphBuilder`（id 仍按 push 顺序分配，与旧直连路径逐字节同构），经
+  `graph.build()` 校验后 `graph.lower()` 出 plan；`FormulaComputePlan::graph()` 把图
+  本体（content_hash / CSE / 调度分层）暴露给下游。
+- 因子：`factor-analysis` 的 `ResearchPlan::compile` 经 `SemanticGraphBuilder` 构图
+  （`NodeKind::Factor`），含稳定 Kahn 拓扑推送（保持旧直连路径对非拓扑声明顺序的接受域）
+  与 `node_stage` 重映射（公共 API 继续讲 stage id）。
 
 所以 §16 的"一个图"目前在**图这一层**成立，在**前端接入这一层**只完成了一半。本轮
 补上的是生产入口（`UnifiedRuntime::compile_semantic_graph`），使 CSE 从"只有测试和
@@ -2574,3 +2579,73 @@ executor 只收到 `&[&[f64]]`，没有可追加的上下文。
 - doc 门禁：`check_orphan_docs.py`（归档后仍全可达）、`check_docs_links.py`（含归档文档新增的 `../` 链接）
 - 生成态：`gen_ssot_docs.py --check` 通过
 - 本轮只改了 1 个 `.rs`，且**只改文档注释、无行为变化**：`core/src/formula/engine.rs`
+
+# 32. 第七轮：方案收尾执行（2026-10-04）
+
+用户指令：方案剩余项**全部执行**；继续优化公式执行效率；≥3 轮审计后推送、重建安装包。
+本章记录三件事的落地结果与数据。
+
+## 32.1 Batch 3 第 6 项收口：公式/因子前端改走 SemanticGraph
+
+- **公式**：`core/src/formula/compute_ir.rs` 的 `FormulaLowerer` 从 `Vec<ComputeNode>`
+  直连改为 push 进 `SemanticGraphBuilder`；`NodeKind::Formula`（表达式节点）与
+  `NodeKind::Constant`（`NUMBER` 字面量）。builder 的校验**就是** `ComputePlan::compile`，
+  push 顺序即旧 id 顺序，因此图与旧直连产物逐节点同构；`FormulaComputePlan` 新增
+  `graph()` 访问器，公式侧首次可以免二次降级使用 content_hash / CSE / 分层调度。
+- **因子**：`factor-analysis/src/orchestration.rs` 的 `ResearchPlan::compile` 改经
+  `SemanticGraphBuilder`。两个行为保持细节：① 旧直连允许**非拓扑声明顺序**（前向依赖），
+  builder 不允许 → 增加稳定 Kahn 拓扑推送（声明顺序打破平局）+ 显式重复 id 报错（对齐
+  旧 `DuplicateNode` 语义）；② builder id 是 push 序而公共 API 讲 stage id → 新增
+  `node_stage` 重映射，`execution_order()` / `first_append_blocker()` /
+  `first_range_blocker()` 语义不变。
+- **验证**：`formula_plan_differential`（tree==plan，两张 allowlist 仍为空表）4/4；
+  finkit lib formula 模块 674+；`factor-analysis` lib 47/47；`runtime_convergence` 17/17；
+  `semantic_graph` 13/13。**未改任何执行行为**——校验器是同一个，计划同构。
+
+## 32.2 Batch 4 第 6 项（kernel fusion）：已实现→已门禁→已测量→**数据否决，代码移除**
+
+按方案自己的验收纪律（「没有量化的收益，就不该有一版更难维护的 kernel」）把这一项
+**做完了**：实现了完整的 elementwise 链融合（hot_plan 编译期把单用途 `BINARY:*` 链
+改写为一个 `FUSED:BINARY_CHAIN` 节点，后缀程序走参数区，派发器用寄存器机一次循环求值），
+配齐 4 条门禁测试（值等价 / 确实触发 / 保留节点不被吞 / Div 近零护栏），全部通过——
+然后用同一台机器、release、1M bars 实测：
+
+| 链规模 | 公式 | 融合 | 不融合 |
+|---|---|---:|---:|
+| 3 op | `CLOSE*2 + CLOSE*3` | 12.2 ms | **10.5 ms** |
+| 7 op | `CLOSE*2+CLOSE*3+CLOSE*4+CLOSE*5` | 24.9 ms | **20.4 ms** |
+| 3 op (Mod) | `CLOSE%3 + CLOSE%2` | 18.9 ms | **13.3 ms** |
+| 11 op (Mod) | 六个 `%` 链 | 60.0 ms | **38.2 ms** |
+| 27 op | 十四项混合链 | 108 ms | **60.8 ms** |
+
+**结论：在每个链长上融合都更慢（1.2×–1.8×）。** 逐元素寄存器机的每 op 成本
+（~3.5–5.4 ms/op/百万行）约为独立 kernel 逐 pass（~2.1 ms）的 **2 倍**——现有
+`BINARY:*` kernel 是 `for i in 0..len` 的平铺循环，LLVM 能自动向量化；而解释器的
+逐步 match + 寄存器间接寻址阻止向量化，连「不可向量化」的 `Mod` 链也救不回来
+（`floor_remainder` 在两条路径里都是标量，独立 pass 仍更快）。
+
+**处置**：融合代码与门禁整体移除（遵守「无孤儿逻辑」红线——不上线也不留死代码）；
+本节数据即该项的执行记录。**真正的赢面是 SIMD 代码生成**（把融合链编译成向量化
+kernel），那在 `eval_simd`/JIT 的冻结边界之外，记为后继工作而不是假装它不存在。
+
+## 32.3 公式执行效率 vs TA-Lib：现有证据与本次刷新
+
+- **跨库对比（有版本钉死的工作流门禁）**：`docs/BENCHMARK_VS_TALIB.md` 的参考快照
+  （2026-06-24，Windows x86_64 AVX2，TA-Lib 0.6.8 Python 绑定，最差数值偏差
+  `4.7e-10`，判定 `PARITY`）：**14 项指标全部快于 TA-Lib，`1.03×`–`2.53×`，
+  几何均值 ≈ `1.6×`**。对照 TA-Lib **C 0.8.1** 的 Criterion 门禁
+  （`scripts/bench-vs-talib.sh`，钉死 `talib_core_version`，版本不符时宁可失败也不
+  出报告）在 CI 定时工作流执行；本机无 TA-Lib C 静态库，`--features talib-c`
+  构建如实失败（`ta-lib-static` 缺失），未伪造本地 C 级数据。
+- **本机公式引擎刷新（2026-10-04，快速档）**：10K bars 下
+  `MA(C,20)` 67µs / `EMA` 55µs / `RSI(14)` 30µs / `MACD` 149µs /
+  `BOLL` 53µs / `ATR` 67µs；100K bars 下 `MA` 184µs / `EMA` 530µs。
+  叠加既有成果：CSE 4.2×（Factor DAG 201→111 节点）、`execute_into` 零分配、
+  DirtyRange 全量 8.85ms vs 100 行脏区 1.17µs。
+
+## 32.4 三轮审计与验证
+
+- **R7（代码）**：Batch3-6 落地 + 融合实测，全部用例绿（见 32.1/32.2）。
+- **R8（文档/接口）**：本文件 §24a 第 6 项改写为完成态；CHANGELOG 增第七轮条目。
+- **R9（收尾扫描）**：22/22 `check_*.py` 门禁、`gen_ssot_docs.py --check`、
+  孤儿/断链/死循环门禁、安装包重建与契约门禁（见 CHANGELOG 当日条目的验证清单）。

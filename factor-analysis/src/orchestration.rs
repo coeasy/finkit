@@ -1,8 +1,8 @@
 use crate::error::{ResearchError, ResearchResult};
 use finkit::compute::{
-    ComputeCapabilities, ComputeEffect, ComputeNode, ComputeNodeId, ComputePlan, DependencyShape,
-    LookbackRequirement,
+    ComputeCapabilities, ComputeEffect, ComputePlan, DependencyShape, LookbackRequirement,
 };
+use finkit::semantic_graph::{NodeKind, SemanticGraphBuilder, SemanticNodeId};
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 
@@ -96,37 +96,143 @@ impl ResearchStageSpec {
 pub struct ResearchPlan {
     stages: Vec<ResearchStageSpec>,
     plan: ComputePlan,
+    /// Stage id for each plan node, indexed by plan node id.
+    ///
+    /// The semantic-graph builder assigns node ids in push order; this mapping
+    /// keeps the public API speaking stage ids even if a caller ever declares
+    /// stages with sparse or non-sequential ids.
+    node_stage: Vec<usize>,
 }
 
 impl ResearchPlan {
     pub fn compile(stages: Vec<ResearchStageSpec>) -> ResearchResult<Self> {
-        let nodes = stages.iter().map(|stage| {
-            ComputeNode::new(
-                ComputeNodeId(stage.id),
-                format!("research::{:?}", stage.kind),
-                stage
-                    .dependencies
-                    .iter()
-                    .copied()
-                    .map(ComputeNodeId)
-                    .collect(),
-                ComputeCapabilities {
-                    deterministic: true,
-                    streaming: stage.kind.incremental_capability().supports_append(),
-                    stateful: false,
-                    lookback: LookbackRequirement::Dynamic,
-                    dependency: DependencyShape::Dynamic,
-                    effect: if matches!(stage.kind, ResearchStageKind::Report) {
-                        ComputeEffect::EmitOutput("factor-study-report".to_string())
+        // §16/§24a: the factor frontend lowers through the one semantic graph
+        // model, not by assembling `ComputeNode`s directly. The builder assigns
+        // ids in push order and delegates validation to `ComputePlan::compile`,
+        // so the plan produced here is identical to the old direct assembly —
+        // while the graph-level services (content hash, CSE, scheduling levels)
+        // become available to the factor side without a second lowering path.
+        //
+        // The builder requires operands to exist before their users, while the
+        // old direct assembly accepted any declaration order and let the plan
+        // validator do the work. Stages are therefore pushed in dependency
+        // order (stable: declaration order breaks ties), and a dependency that
+        // can never be satisfied is the same `InvalidConfig` the plan validator
+        // would have raised for an unknown operand or a cycle.
+        let mut unique_ids: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
+        for stage in &stages {
+            if !unique_ids.insert(stage.id) {
+                return Err(ResearchError::InvalidConfig(format!(
+                    "duplicate research stage id {}",
+                    stage.id
+                )));
+            }
+        }
+        let push_order: Vec<usize> = {
+            let mut resolved: std::collections::BTreeSet<usize> =
+                std::collections::BTreeSet::new();
+            let mut order = Vec::with_capacity(stages.len());
+            let mut pending: Vec<usize> = (0..stages.len()).collect();
+            while !pending.is_empty() {
+                let mut progressed = false;
+                pending.retain(|&index| {
+                    let stage = &stages[index];
+                    if stage.dependencies.iter().all(|dep| resolved.contains(dep)) {
+                        resolved.insert(stage.id);
+                        order.push(index);
+                        progressed = true;
+                        false
                     } else {
-                        ComputeEffect::Pure
-                    },
+                        true
+                    }
+                });
+                if !progressed {
+                    let unresolved: Vec<String> = pending
+                        .iter()
+                        .map(|&index| {
+                            format!(
+                                "stage {} depends on {}",
+                                stages[index].id,
+                                stages[index]
+                                    .dependencies
+                                    .iter()
+                                    .filter(|dep| !resolved.contains(dep))
+                                    .map(|dep| dep.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            )
+                        })
+                        .collect();
+                    return Err(ResearchError::InvalidConfig(format!(
+                        "research stages have unresolvable dependencies: {}",
+                        unresolved.join("; ")
+                    )));
+                }
+            }
+            order
+        };
+        let mut builder = SemanticGraphBuilder::new();
+        let mut pushed: std::collections::BTreeMap<usize, SemanticNodeId> =
+            std::collections::BTreeMap::new();
+        for index in push_order {
+            let stage = &stages[index];
+            let inputs = stage
+                .dependencies
+                .iter()
+                .copied()
+                .map(|dependency| {
+                    pushed.get(&dependency).copied().ok_or_else(|| {
+                        ResearchError::InvalidConfig(format!(
+                            "research stage {} depends on stage {dependency}, \
+                             which is not declared before it",
+                            stage.id
+                        ))
+                    })
+                })
+                .collect::<ResearchResult<Vec<_>>>()?;
+            let capabilities = ComputeCapabilities {
+                deterministic: true,
+                streaming: stage.kind.incremental_capability().supports_append(),
+                stateful: false,
+                lookback: LookbackRequirement::Dynamic,
+                dependency: DependencyShape::Dynamic,
+                effect: if matches!(stage.kind, ResearchStageKind::Report) {
+                    ComputeEffect::EmitOutput("factor-study-report".to_string())
+                } else {
+                    ComputeEffect::Pure
                 },
-            )
-        });
-        let plan = ComputePlan::compile(nodes)
+            };
+            let id = builder.push(
+                NodeKind::Factor,
+                format!("research::{:?}", stage.kind),
+                inputs
+                    .into_iter()
+                    .map(|input| SemanticNodeId(input.0))
+                    .collect(),
+                capabilities,
+            );
+            if matches!(stage.kind, ResearchStageKind::Report) {
+                builder.target(id);
+            }
+            pushed.insert(stage.id, id);
+        }
+        let graph = builder
+            .build()
             .map_err(|error| ResearchError::InvalidConfig(error.to_string()))?;
-        Ok(Self { stages, plan })
+        let plan = graph
+            .lower()
+            .map_err(|error| ResearchError::InvalidConfig(error.to_string()))?;
+        let mut node_stage = vec![0usize; stages.len()];
+        for stage in &stages {
+            if let Some(node) = pushed.get(&stage.id) {
+                node_stage[node.0] = stage.id;
+            }
+        }
+        Ok(Self {
+            stages,
+            plan,
+            node_stage,
+        })
     }
 
     /// Compile the built-in core/full factor-study profile.
@@ -194,7 +300,11 @@ impl ResearchPlan {
     }
 
     pub fn execution_order(&self) -> Vec<usize> {
-        self.plan.execution_order().iter().map(|id| id.0).collect()
+        self.plan
+            .execution_order()
+            .iter()
+            .map(|id| self.node_stage[id.0])
+            .collect()
     }
 
     pub fn stages(&self) -> &[ResearchStageSpec] {
@@ -210,7 +320,7 @@ impl ResearchPlan {
     #[must_use]
     pub fn first_append_blocker(&self) -> Option<&ResearchStageSpec> {
         self.plan.execution_order().iter().find_map(|id| {
-            let stage = self.stage(id.0)?;
+            let stage = self.stage(self.node_stage[id.0])?;
             (!stage.incremental_capability().supports_append()).then_some(stage)
         })
     }
@@ -220,7 +330,7 @@ impl ResearchPlan {
     #[must_use]
     pub fn first_range_blocker(&self) -> Option<&ResearchStageSpec> {
         self.plan.execution_order().iter().find_map(|id| {
-            let stage = self.stage(id.0)?;
+            let stage = self.stage(self.node_stage[id.0])?;
             (!stage.incremental_capability().supports_range()).then_some(stage)
         })
     }
