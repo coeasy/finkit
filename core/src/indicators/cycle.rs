@@ -1005,7 +1005,7 @@ fn compute_hilbert_selected<const MODE: u8>(
         if MODE == 1 || MODE == 3 || MODE == 5 {
             smooth_price[smooth_price_idx] = smoothed;
         }
-        let adjusted_period = 0.075f64.mul_add(period, 0.54);
+        let adjusted_period = 0.075f64 * period + 0.54;
 
         let mut detrender_value = -detrender[parity][hilbert_idx];
         detrender[parity][hilbert_idx] = a * smoothed;
@@ -1046,17 +1046,14 @@ fn compute_hilbert_selected<const MODE: u8>(
         if parity == 0 {
             hilbert_idx = (hilbert_idx + 1) % 3;
         }
-        let current_q2 = 0.2f64.mul_add(q1_value + ji_value, 0.8 * prev_q2);
-        let current_i2 = 0.2f64.mul_add(i1_prev3[parity] - jq_value, 0.8 * prev_i2);
+        let current_q2 = 0.2f64 * (q1_value + ji_value) + 0.8 * prev_q2;
+        let current_i2 = 0.2f64 * (i1_prev3[parity] - jq_value) + 0.8 * prev_i2;
         let other = parity ^ 1;
         i1_prev3[other] = i1_prev2[other];
         i1_prev2[other] = detrender_value;
 
-        re = 0.8f64.mul_add(
-            re,
-            0.2 * (current_i2.mul_add(prev_i2, current_q2 * prev_q2)),
-        );
-        im = 0.8f64.mul_add(im, 0.2 * (current_i2 * prev_q2 - current_q2 * prev_i2));
+        re = 0.8f64 * re + 0.2 * (current_i2 * prev_i2 + current_q2 * prev_q2);
+        im = 0.8f64 * im + 0.2 * (current_i2 * prev_q2 - current_q2 * prev_i2);
         prev_q2 = current_q2;
         prev_i2 = current_i2;
 
@@ -1069,8 +1066,8 @@ fn compute_hilbert_selected<const MODE: u8>(
             .min(1.5 * previous_period)
             .max(0.67 * previous_period);
         period = period.clamp(6.0, 50.0);
-        period = 0.2f64.mul_add(period, 0.8 * previous_period);
-        smooth_period = 0.33f64.mul_add(period, 0.67 * smooth_period);
+        period = 0.2f64 * period + 0.8 * previous_period;
+        smooth_period = 0.33f64 * period + 0.67 * smooth_period;
 
         if i >= lookback || (MODE != 0 && MODE != 2) {
             match MODE {

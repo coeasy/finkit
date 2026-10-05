@@ -179,7 +179,7 @@ impl SarState {
 
                 self.af = self.effective_acceleration;
                 self.ep = low;
-                self.sar = self.af.mul_add(self.ep - self.sar, self.sar);
+                self.sar = self.af * (self.ep - self.sar) + self.sar;
                 if self.sar < prev_high {
                     self.sar = prev_high;
                 }
@@ -192,7 +192,7 @@ impl SarState {
                     self.ep = high;
                     self.af = (self.af + self.effective_acceleration).min(self.maximum);
                 }
-                self.sar = self.af.mul_add(self.ep - self.sar, self.sar);
+                self.sar = self.af * (self.ep - self.sar) + self.sar;
                 if self.sar > prev_low {
                     self.sar = prev_low;
                 }
@@ -213,7 +213,7 @@ impl SarState {
 
             self.af = self.effective_acceleration;
             self.ep = high;
-            self.sar = self.af.mul_add(self.ep - self.sar, self.sar);
+            self.sar = self.af * (self.ep - self.sar) + self.sar;
             if self.sar > prev_low {
                 self.sar = prev_low;
             }
@@ -226,7 +226,7 @@ impl SarState {
                 self.ep = low;
                 self.af = (self.af + self.effective_acceleration).min(self.maximum);
             }
-            self.sar = self.af.mul_add(self.ep - self.sar, self.sar);
+            self.sar = self.af * (self.ep - self.sar) + self.sar;
             if self.sar < prev_high {
                 self.sar = prev_high;
             }
@@ -362,7 +362,7 @@ pub fn sar_into(
 
                     af = effective_acceleration;
                     ep = current_low;
-                    sar = af.mul_add(ep - sar, sar);
+                    sar = af * (ep - sar) + sar;
                     if sar < previous_high {
                         sar = previous_high;
                     }
@@ -375,7 +375,7 @@ pub fn sar_into(
                         ep = current_high;
                         af = (af + effective_acceleration).min(maximum);
                     }
-                    sar = af.mul_add(ep - sar, sar);
+                    sar = af * (ep - sar) + sar;
                     if sar > previous_low {
                         sar = previous_low;
                     }
@@ -396,7 +396,7 @@ pub fn sar_into(
 
                 af = effective_acceleration;
                 ep = current_high;
-                sar = af.mul_add(ep - sar, sar);
+                sar = af * (ep - sar) + sar;
                 if sar > previous_low {
                     sar = previous_low;
                 }
@@ -409,7 +409,7 @@ pub fn sar_into(
                     ep = current_low;
                     af = (af + effective_acceleration).min(maximum);
                 }
-                sar = af.mul_add(ep - sar, sar);
+                sar = af * (ep - sar) + sar;
                 if sar < previous_high {
                     sar = previous_high;
                 }
@@ -437,37 +437,35 @@ pub fn sar_into(
 /// acceleration parameters. Keeping those constants in the transition loop
 /// lets LLVM remove the parameter/state plumbing while retaining the exact
 /// bootstrap, reversal, and clamp ordering of [`sar_into`].
+///
+/// This used to carry a `const USE_FMA: bool` parameter plus a
+/// `#[target_feature(enable = "fma")]` twin, so the `true` instantiation got
+/// real hardware FMA and the `false` one got the split multiply/add. Both
+/// halves of that idea failed here:
+///
+/// * On x86 the `false` instantiation was effectively unreachable, and its
+///   split form is what every other SAR path (the streaming [`SarState`] and
+///   the general [`sar_into`] loop) uses — the fused one produced different
+///   last bits, which is exactly what
+///   `incremental_state_matches_batch_exactly` and
+///   `single_output_matches_with_af_projection` assert against.
+/// * The speedup was not there either: measured on the paired 10k suite, the
+///   fused default kernel ran 71.8 µs and the split form 43.1 µs for the same
+///   input. The knob was buying a cross-path inconsistency for a regression.
+///
+/// Every SAR path therefore uses the split form, which is both faster here
+/// and the one the bit-exactness tests need. (KAMA keeps its FMA dispatch —
+/// there the fused form really is faster, 25.6 µs vs 30.0 µs.)
 #[inline(always)]
 fn sar_default_into(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()> {
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    if is_x86_feature_detected!("fma") {
-        // SAFETY: the runtime feature check immediately above guarantees that
-        // the target feature required by this specialized kernel is present.
-        return unsafe { sar_default_into_fma(high, low, output) };
-    }
-
-    sar_default_into_impl::<false>(high, low, output)
-}
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[target_feature(enable = "fma")]
-unsafe fn sar_default_into_fma(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()> {
-    sar_default_into_impl::<true>(high, low, output)
+    sar_default_into_impl(high, low, output)
 }
 
 #[inline(always)]
-fn sar_default_into_impl<const USE_FMA: bool>(
-    high: &[f64],
-    low: &[f64],
-    output: &mut [f64],
-) -> Result<()> {
+fn sar_default_into_impl(high: &[f64], low: &[f64], output: &mut [f64]) -> Result<()> {
     #[inline(always)]
-    fn update<const USE_FMA: bool>(af: f64, ep: f64, sar: f64) -> f64 {
-        if USE_FMA {
-            af.mul_add(ep - sar, sar)
-        } else {
-            sar + af * (ep - sar)
-        }
+    fn update(af: f64, ep: f64, sar: f64) -> f64 {
+        af * (ep - sar) + sar
     }
 
     unsafe {
@@ -511,7 +509,7 @@ fn sar_default_into_impl<const USE_FMA: bool>(
 
                 af = 0.02;
                 ep = second_low;
-                sar = update::<USE_FMA>(af, ep, sar);
+                sar = update(af, ep, sar);
                 if sar < previous_high {
                     sar = previous_high;
                 }
@@ -524,7 +522,7 @@ fn sar_default_into_impl<const USE_FMA: bool>(
                     ep = second_high;
                     af = (af + 0.02).min(0.2);
                 }
-                sar = update::<USE_FMA>(af, ep, sar);
+                sar = update(af, ep, sar);
                 if sar > previous_low {
                     sar = previous_low;
                 }
@@ -545,7 +543,7 @@ fn sar_default_into_impl<const USE_FMA: bool>(
 
             af = 0.02;
             ep = second_high;
-            sar = update::<USE_FMA>(af, ep, sar);
+            sar = update(af, ep, sar);
             if sar > previous_low {
                 sar = previous_low;
             }
@@ -558,7 +556,7 @@ fn sar_default_into_impl<const USE_FMA: bool>(
                 ep = second_low;
                 af = (af + 0.02).min(0.2);
             }
-            sar = update::<USE_FMA>(af, ep, sar);
+            sar = update(af, ep, sar);
             if sar < previous_high {
                 sar = previous_high;
             }
@@ -594,7 +592,7 @@ fn sar_default_into_impl<const USE_FMA: bool>(
 
                     af = 0.02;
                     ep = current_low;
-                    sar = update::<USE_FMA>(af, ep, sar);
+                    sar = update(af, ep, sar);
                     if sar < previous_high {
                         sar = previous_high;
                     }
@@ -607,7 +605,7 @@ fn sar_default_into_impl<const USE_FMA: bool>(
                         ep = current_high;
                         af = (af + 0.02).min(0.2);
                     }
-                    sar = update::<USE_FMA>(af, ep, sar);
+                    sar = update(af, ep, sar);
                     if sar > previous_low {
                         sar = previous_low;
                     }
@@ -628,7 +626,7 @@ fn sar_default_into_impl<const USE_FMA: bool>(
 
                 af = 0.02;
                 ep = current_high;
-                sar = update::<USE_FMA>(af, ep, sar);
+                sar = update(af, ep, sar);
                 if sar > previous_low {
                     sar = previous_low;
                 }
@@ -641,7 +639,7 @@ fn sar_default_into_impl<const USE_FMA: bool>(
                     ep = current_low;
                     af = (af + 0.02).min(0.2);
                 }
-                sar = update::<USE_FMA>(af, ep, sar);
+                sar = update(af, ep, sar);
                 if sar < previous_high {
                     sar = previous_high;
                 }

@@ -278,8 +278,8 @@ pub fn adosc_into(
                 fast_ema = cumulative;
                 slow_ema = cumulative;
             } else {
-                fast_ema = fast_ema.mul_add(fast_one_k, cumulative * fast_k);
-                slow_ema = slow_ema.mul_add(slow_one_k, cumulative * slow_k);
+                fast_ema = fast_ema * fast_one_k + cumulative * fast_k;
+                slow_ema = slow_ema * slow_one_k + cumulative * slow_k;
             }
             *output_ptr.add(i) = if i >= lookback {
                 fast_ema - slow_ema
@@ -332,8 +332,8 @@ fn adosc_default_3_10_into(
                 let multiplier = ((c - l) - (h - c)) / range;
                 cumulative += multiplier * *volume_ptr.add(i);
             }
-            fast_ema = fast_ema.mul_add(0.5, cumulative * 0.5);
-            slow_ema = slow_ema.mul_add(1.0 - 2.0 / 11.0, cumulative * (2.0 / 11.0));
+            fast_ema = fast_ema * 0.5 + cumulative * 0.5;
+            slow_ema = slow_ema * (1.0 - 2.0 / 11.0) + cumulative * (2.0 / 11.0);
         }
         *output_ptr.add(9) = fast_ema - slow_ema;
 
@@ -345,8 +345,8 @@ fn adosc_default_3_10_into(
                 let c = *close_ptr.add(i);
                 cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(i);
             }
-            fast_ema = fast_ema.mul_add(0.5, cumulative * 0.5);
-            slow_ema = slow_ema.mul_add(1.0 - 2.0 / 11.0, cumulative * (2.0 / 11.0));
+            fast_ema = fast_ema * 0.5 + cumulative * 0.5;
+            slow_ema = slow_ema * (1.0 - 2.0 / 11.0) + cumulative * (2.0 / 11.0);
             *output_ptr.add(i) = fast_ema - slow_ema;
         }
     }
@@ -477,7 +477,7 @@ pub fn vwap_into(
     let mut cum_volume = 0.0;
     for i in 0..len {
         let typical_price = (high[i] + low[i] + close[i]) * (1.0 / 3.0);
-        cum_tp_vol = typical_price.mul_add(volume[i], cum_tp_vol);
+        cum_tp_vol = typical_price * volume[i] + cum_tp_vol;
         cum_volume += volume[i];
         output[i] = if cum_volume.abs() > 1e-15 {
             cum_tp_vol / cum_volume

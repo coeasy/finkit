@@ -3629,7 +3629,7 @@ fn dispatch_modern_call(
             let mut price_volume = 0.0;
             let mut total_volume = 0.0;
             for index in 0..len {
-                price_volume = price[index].mul_add(volume[index], price_volume);
+                price_volume = price[index] * volume[index] + price_volume;
                 total_volume += volume[index];
                 output[index] = if total_volume.abs() > 1e-15 {
                     price_volume / total_volume

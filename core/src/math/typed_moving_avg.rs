@@ -71,7 +71,7 @@ pub fn ema_f32_into(input: &[f32], period: usize, output: &mut [f32]) -> Result<
     let smoothing = 2.0f32 / (period as f32 + 1.0);
     let mut previous = initial;
     for index in period..input.len() {
-        previous = (input[index] - previous).mul_add(smoothing, previous);
+        previous = (input[index] - previous) * smoothing + previous;
         output[index] = previous;
     }
     Ok(())

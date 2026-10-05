@@ -263,19 +263,18 @@ pub fn floor(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn ln(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    // Single pass: validate and compute together. The error contract is
-    // unchanged — the first non-positive / non-finite bar rejects the whole
-    // call — but the old two-pass shape (validate everything, then map) paid
-    // a full extra scan plus branch on every element.
-    let mut output = Vec::with_capacity(data.len());
-    for (i, &x) in data.iter().enumerate() {
-        if !x.is_finite() || x <= 0.0 {
-            return Err(TaError::InvalidParameter {
-                name: format!("data[{}]", i),
-                constraint: "value > 0".to_string(),
-            });
-        }
-        output.push(x.ln());
+    // `ln` is its own validator: a non-positive, `NaN`, or infinite input maps
+    // to a `NaN` or an infinity, while every finite positive input maps to a
+    // finite value. So the domain check becomes a scan of the *result*, which
+    // is a plain vectorizable pass, instead of a branch on every input element
+    // inside the transcendental's loop. The error contract is unchanged — the
+    // first offending bar still rejects the whole call.
+    let output: Vec<f64> = data.iter().map(|&x| x.ln()).collect();
+    if let Some(index) = output.iter().position(|value| !value.is_finite()) {
+        return Err(TaError::InvalidParameter {
+            name: format!("data[{index}]"),
+            constraint: "value > 0".to_string(),
+        });
     }
     Ok(Array1::from_vec(output))
 }

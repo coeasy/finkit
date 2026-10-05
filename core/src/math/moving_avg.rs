@@ -580,7 +580,7 @@ fn ema_inner(input: &[f64], period: usize, seed: EmaSeed) -> Result<Array1<f64>>
                         constraint: format!("non-finite value at index {i}"),
                     });
                 }
-                prev = (val - prev).mul_add(k, prev);
+                prev = (val - prev) * k + prev;
                 unsafe {
                     *output.get_unchecked_mut(i) = prev;
                 }
@@ -611,7 +611,7 @@ fn ema_inner(input: &[f64], period: usize, seed: EmaSeed) -> Result<Array1<f64>>
                         constraint: format!("non-finite value at index {i}"),
                     });
                 }
-                prev = (val - prev).mul_add(k, prev);
+                prev = (val - prev) * k + prev;
                 unsafe {
                     *output.get_unchecked_mut(i) = prev;
                 }
@@ -1977,7 +1977,7 @@ pub fn zlema(input: &[f64], period: usize) -> Result<Array1<f64>> {
     for i in ema_start + 1..len {
         let a = adj(i);
         // FMA form (see `ema_inner` for rationale).
-        prev = (a - prev).mul_add(k, prev);
+        prev = (a - prev) * k + prev;
         output[i] = prev;
     }
 
@@ -2356,7 +2356,7 @@ pub fn ema_multi_periods(
                 continue;
             }
             let a = alphas[j];
-            prev[j] = (x - prev[j]).mul_add(a, prev[j]);
+            prev[j] = (x - prev[j]) * a + prev[j];
             outputs[j][i] = prev[j];
         }
     }

@@ -1384,7 +1384,7 @@ impl FormulaEngine {
             }
         } else {
             let alpha = 2.0 / (period as f64 + 1.0);
-            state.value = (current - state.value).mul_add(alpha, state.value);
+            state.value = (current - state.value) * alpha + state.value;
         }
         Some(state.value)
     }

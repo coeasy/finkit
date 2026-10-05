@@ -170,15 +170,15 @@ pub fn variance_f64(input: &[f64]) -> f64 {
         let d1 = c[1] - mean;
         let d2 = c[2] - mean;
         let d3 = c[3] - mean;
-        s0 = d0.mul_add(d0, s0);
-        s1 = d1.mul_add(d1, s1);
-        s2 = d2.mul_add(d2, s2);
-        s3 = d3.mul_add(d3, s3);
+        s0 = d0 * d0 + s0;
+        s1 = d1 * d1 + s1;
+        s2 = d2 * d2 + s2;
+        s3 = d3 * d3 + s3;
     }
     let mut sum_sq = (s0 + s1) + (s2 + s3);
     for &value in chunks.remainder() {
         let d = value - mean;
-        sum_sq = d.mul_add(d, sum_sq);
+        sum_sq = d * d + sum_sq;
     }
     sum_sq / input.len() as f64
 }
@@ -200,15 +200,15 @@ pub fn variance_f32(input: &[f32]) -> f32 {
         let d1 = c[1] - mean;
         let d2 = c[2] - mean;
         let d3 = c[3] - mean;
-        s0 = d0.mul_add(d0, s0);
-        s1 = d1.mul_add(d1, s1);
-        s2 = d2.mul_add(d2, s2);
-        s3 = d3.mul_add(d3, s3);
+        s0 = d0 * d0 + s0;
+        s1 = d1 * d1 + s1;
+        s2 = d2 * d2 + s2;
+        s3 = d3 * d3 + s3;
     }
     let mut sum_sq = (s0 + s1) + (s2 + s3);
     for &value in chunks.remainder() {
         let d = value - mean;
-        sum_sq = d.mul_add(d, sum_sq);
+        sum_sq = d * d + sum_sq;
     }
     sum_sq / input.len() as f32
 }

@@ -425,12 +425,19 @@ pub(crate) fn rescan_extreme_window<const WANT_MAX: bool>(
     let mut best_index = start;
     let mut found = false;
 
+    // The `is_nan` / `found` guards the previous form evaluated per candidate
+    // are subsumed by the seed: against `NEG_INFINITY` (or `INFINITY`) a `NaN`
+    // fails `>=` (or `<=`) and is skipped for free, and the first finite bar
+    // wins outright, so `found` only records that some bar did win. Keeping
+    // `>=` / `<=` rather than a strict test preserves the tie rule callers
+    // depend on: the *newest* tied bar holds the position, which matters
+    // wherever the index — not just the value — is reported (AROONOSC).
     for index in start..=end {
         let candidate = values[index];
         let wins = if WANT_MAX {
-            !candidate.is_nan() && (!found || candidate >= best)
+            candidate >= best
         } else {
-            !candidate.is_nan() && (!found || candidate <= best)
+            candidate <= best
         };
         if wins {
             best = candidate;
@@ -919,6 +926,16 @@ fn fill_rolling_extreme<const WANT_MAX: bool>(data: &[f64], window: usize, outpu
     // The window is not full until `window` bars are in, and a missing bar does
     // not fill it: skip a leading run of missing bars before reporting.
     let warm_at = first_finite(data).map_or(data.len(), |start| start + window - 1);
+
+    // Contract for callers that hand over an uninitialized buffer: every slot
+    // from `window - 1` on is written by this call. The block kernel honours it
+    // directly; the cached kernels stop at `warm_at`, which a leading missing
+    // run can push past `window - 1`, so that gap is filled here. It is at most
+    // the leading missing run long, not a full pass over the series.
+    if warm_at > window - 1 {
+        let end = warm_at.min(output.len());
+        output[window - 1..end].fill(f64::NAN);
+    }
 
     if window <= EXTREMA_CACHE_LIMIT {
         // Fully finite input is the common case for price series, and it is the

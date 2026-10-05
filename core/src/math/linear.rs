@@ -115,6 +115,9 @@ pub fn linear_regression(x: &[f64], y: &[f64]) -> Result<LinRegResult> {
 /// let result = linear::linreg_slope(&data, 5).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
+// The `expect` covers both `set_len` sites below; `uninit_vec` spans the
+// `with_capacity`/`set_len` pair, so it has to be attached to the item.
+#[expect(clippy::uninit_vec)]
 pub fn linreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
     if period < 2 {
         return Err(TaError::InvalidParameter {
@@ -124,23 +127,59 @@ pub fn linreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
     }
     validate_input(input.len(), period)?;
 
-    let len = input.len();
-    let mut output = init_output(len);
-
     // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
     // bad data: start the rolling window after it. `warm_start == 0` leaves
     // every index below unchanged. Without this the incremental accumulators
     // below are seeded from a NaN-bearing window and `NaN - NaN` keeps them NaN
     // for the whole series.
     let warm_start = crate::math::leading_warmup(input);
+    let len = input.len();
     if warm_start + period > len {
-        return Ok(output);
+        return Ok(init_output(len));
     }
+
+    // `simd_ops::simd_linreg_slope` seeds the first window with an AVX2
+    // horizontal sum and then runs exactly this recurrence. It has no warm-up
+    // concept, so it is only equivalent once the leading missing run has been
+    // skipped — hence the `warm_start == 0` guard. It also writes every slot
+    // itself (NaN prefix included), so the buffer needs no seeding.
+    //
+    // Wiring it up matters beyond the seeding speedup: before this the kernel
+    // had no production caller at all and was reachable only from
+    // `benches/simd_statistics_bench.rs`, i.e. it was dead code that the
+    // `pub` visibility and one benchmark kept looking alive. Note it
+    // vectorizes only the O(period) seeding — the O(len) recurrence is still
+    // scalar in both paths, which is why the gain here is small.
+    if warm_start == 0 {
+        let mut output = Vec::<f64>::with_capacity(len);
+        // SAFETY: `simd_linreg_slope` writes every slot, NaN prefix included.
+        unsafe {
+            output.set_len(len);
+        }
+        crate::math::simd_ops::simd_linreg_slope(input, period, &mut output);
+        return Ok(Array1::from(output));
+    }
+
+    // Only the warm-up prefix needs a fill: the loop below writes every slot
+    // from `warm_start + period - 1` on. Seeding uninitialized drops a
+    // full-length NaN store pass, which is a double-digit share of a kernel
+    // this cheap.
+    let mut output = Vec::<f64>::with_capacity(len);
+    // SAFETY: every slot from `warm_start + period - 1` on is written below.
+    unsafe {
+        output.set_len(len);
+    }
+    output[..warm_start + period - 1].fill(f64::NAN);
     let p = period as f64;
     // For x = 0..period-1: sum_x = p*(p-1)/2, sum_x2 = p*(p-1)*(2p-1)/6
     let sum_x = p * (p - 1.0) / 2.0;
     let sum_x2 = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
     let denom = p * sum_x2 - sum_x * sum_x;
+    // Hoisted: the per-slot regression below is throughput-bound, and `divsd`
+    // costs ~4 cycles of throughput on its own port. A reciprocal multiply
+    // costs one extra rounding, which is far inside this family's 1e-8
+    // golden tolerance.
+    let inv_denom = 1.0 / denom;
 
     let mut sum_y = 0.0;
     let mut sum_xy = 0.0;
@@ -150,28 +189,45 @@ pub fn linreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
         sum_y += val;
         sum_xy += j as f64 * val;
     }
-    output[warm_start + period - 1] = (p * sum_xy - sum_x * sum_y) / denom;
+    output[warm_start + period - 1] = (p * sum_xy - sum_x * sum_y) * inv_denom;
 
-    for i in warm_start + period..len {
-        let old_val = input[i - period];
-        let new_val = input[i];
-        sum_xy += (period - 1) as f64 * new_val - (sum_y - old_val);
+    // Zipped iteration instead of index arithmetic. `input[i]`,
+    // `input[i - period]` and `output[i]` each carried a bounds check, and
+    // TA-Lib's C loop — which runs the same dependency chain, one division per
+    // bar, *and* an extra `fabs` pair for its drift guard — still beat this
+    // kernel. The three cursors below are in bounds by construction, so the
+    // per-bar checks go away without touching the arithmetic.
+    let start = warm_start + period;
+    let new_vals = &input[start..];
+    let old_vals = &input[warm_start..len - period];
+    let out_tail = &mut output[start..];
+    let p1 = (period - 1) as f64;
+    let mut index = start;
+    for ((out, &new_val), &old_val) in out_tail
+        .iter_mut()
+        .zip(new_vals.iter())
+        .zip(old_vals.iter())
+    {
+        sum_xy += p1 * new_val - (sum_y - old_val);
         sum_y += new_val - old_val;
-        output[i] = (p * sum_xy - sum_x * sum_y) / denom;
+        *out = (p * sum_xy - sum_x * sum_y) * inv_denom;
         since_reseed += 1;
-        if since_reseed == reseed_interval && i + 1 < len {
-            let start = i + 1 - period;
-            sum_y = 0.0;
-            sum_xy = 0.0;
-            for (j, &value) in input[start..=i].iter().enumerate() {
-                sum_y += value;
-                sum_xy += j as f64 * value;
+        if since_reseed == reseed_interval {
+            if index + 1 < len {
+                let reseed_at = index + 1 - period;
+                sum_y = 0.0;
+                sum_xy = 0.0;
+                for (j, &value) in input[reseed_at..=index].iter().enumerate() {
+                    sum_y += value;
+                    sum_xy += j as f64 * value;
+                }
             }
             since_reseed = 0;
         }
+        index += 1;
     }
 
-    Ok(output)
+    Ok(Array1::from(output))
 }
 
 /// Calculate Linear Regression Intercept over a rolling window
@@ -192,6 +248,8 @@ pub fn linreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// let result = linear::linreg_intercept(&data, 5).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
+// See [`linreg_slope`].
+#[expect(clippy::uninit_vec)]
 pub fn linreg_intercept(input: &[f64], period: usize) -> Result<Array1<f64>> {
     if period < 2 {
         return Err(TaError::InvalidParameter {
@@ -201,22 +259,29 @@ pub fn linreg_intercept(input: &[f64], period: usize) -> Result<Array1<f64>> {
     }
     validate_input(input.len(), period)?;
 
-    let len = input.len();
-    let mut output = init_output(len);
-
-    // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
-    // bad data: start the rolling window after it. `warm_start == 0` leaves
-    // every index below unchanged. Without this the incremental accumulators
-    // below are seeded from a NaN-bearing window and `NaN - NaN` keeps them NaN
-    // for the whole series.
     let warm_start = crate::math::leading_warmup(input);
+    let len = input.len();
     if warm_start + period > len {
-        return Ok(output);
+        return Ok(init_output(len));
     }
+
+    // Only the warm-up prefix needs a fill: the loop below writes every slot
+    // from `warm_start + period - 1` on. See [`linreg_slope`].
+    let mut output = Vec::<f64>::with_capacity(len);
+    // SAFETY: every slot from `warm_start + period - 1` on is written below.
+    unsafe {
+        output.set_len(len);
+    }
+    output[..warm_start + period - 1].fill(f64::NAN);
     let p = period as f64;
     let sum_x = p * (p - 1.0) / 2.0;
     let sum_x2 = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
     let denom = p * sum_x2 - sum_x * sum_x;
+    // Hoisted: the per-slot regression below is throughput-bound, and `divsd`
+    // costs ~4 cycles of throughput on its own port. A reciprocal multiply
+    // costs one extra rounding, which is far inside this family's 1e-8
+    // golden tolerance.
+    let inv_denom = 1.0 / denom;
 
     let mut sum_y = 0.0;
     let mut sum_xy = 0.0;
@@ -224,19 +289,26 @@ pub fn linreg_intercept(input: &[f64], period: usize) -> Result<Array1<f64>> {
         sum_y += val;
         sum_xy += j as f64 * val;
     }
-    let slope = (p * sum_xy - sum_x * sum_y) / denom;
+    let slope = (p * sum_xy - sum_x * sum_y) * inv_denom;
     output[warm_start + period - 1] = (sum_y - slope * sum_x) / p;
 
-    for i in warm_start + period..len {
-        let old_val = input[i - period];
-        let new_val = input[i];
-        sum_xy += (period - 1) as f64 * new_val - (sum_y - old_val);
+    let start = warm_start + period;
+    let new_vals = &input[start..];
+    let old_vals = &input[warm_start..len - period];
+    let out_tail = &mut output[start..];
+    let p1 = (period - 1) as f64;
+    for ((out, &new_val), &old_val) in out_tail
+        .iter_mut()
+        .zip(new_vals.iter())
+        .zip(old_vals.iter())
+    {
+        sum_xy += p1 * new_val - (sum_y - old_val);
         sum_y += new_val - old_val;
-        let slope = (p * sum_xy - sum_x * sum_y) / denom;
-        output[i] = (sum_y - slope * sum_x) / p;
+        let slope = (p * sum_xy - sum_x * sum_y) * inv_denom;
+        *out = (sum_y - slope * sum_x) / p;
     }
 
-    Ok(output)
+    Ok(Array1::from(output))
 }
 
 /// Calculate Linear Regression predicted value over a rolling window
@@ -282,6 +354,11 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let sum_x = p * (p - 1.0) / 2.0;
     let sum_x2 = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
     let denom = p * sum_x2 - sum_x * sum_x;
+    // Hoisted: the per-slot regression below is throughput-bound, and `divsd`
+    // costs ~4 cycles of throughput on its own port. A reciprocal multiply
+    // costs one extra rounding, which is far inside this family's 1e-8
+    // golden tolerance.
+    let inv_denom = 1.0 / denom;
     let last_x = (period - 1) as f64;
 
     let mut sum_y = 0.0;
@@ -290,18 +367,22 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
         sum_y += val;
         sum_xy += j as f64 * val;
     }
-    let slope = (p * sum_xy - sum_x * sum_y) / denom;
+    let slope = (p * sum_xy - sum_x * sum_y) * inv_denom;
     let intercept = (sum_y - slope * sum_x) / p;
     output[warm_start + period - 1] = slope * last_x + intercept;
 
-    for i in warm_start + period..len {
-        let old_val = input[i - period];
-        let new_val = input[i];
+    let start = warm_start + period;
+    let new_vals = &input[start..];
+    let old_vals = &input[warm_start..len - period];
+    // `linreg`'s output is an `Array1`, which has no `IndexMut<RangeFrom>`;
+    // skipping its iterator gets the same bound-free cursor.
+    let out_tail = output.iter_mut().skip(start);
+    for ((out, &new_val), &old_val) in out_tail.zip(new_vals.iter()).zip(old_vals.iter()) {
         sum_xy += last_x * new_val - (sum_y - old_val);
         sum_y += new_val - old_val;
-        let slope = (p * sum_xy - sum_x * sum_y) / denom;
+        let slope = (p * sum_xy - sum_x * sum_y) * inv_denom;
         let intercept = (sum_y - slope * sum_x) / p;
-        output[i] = slope * last_x + intercept;
+        *out = slope * last_x + intercept;
     }
 
     Ok(output)

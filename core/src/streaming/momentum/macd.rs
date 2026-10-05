@@ -146,8 +146,8 @@ impl StreamingIndicator<f64, MacdOutput> for StreamingMacd {
                 self.ema_seeded = true;
             } else {
                 // EMA 递推：FMA 精确匹配 TA-Lib 浮点舍入路径
-                self.fast_ema = (input - self.fast_ema).mul_add(self.fast_k, self.fast_ema);
-                self.slow_ema = (input - self.slow_ema).mul_add(self.slow_k, self.slow_ema);
+                self.fast_ema = (input - self.fast_ema) * self.fast_k + self.fast_ema;
+                self.slow_ema = (input - self.slow_ema) * self.slow_k + self.slow_ema;
             }
 
             let macd = self.fast_ema - self.slow_ema;
@@ -164,7 +164,7 @@ impl StreamingIndicator<f64, MacdOutput> for StreamingMacd {
                     return None;
                 }
             } else {
-                self.signal_ema = (macd - self.signal_ema).mul_add(self.signal_k, self.signal_ema);
+                self.signal_ema = (macd - self.signal_ema) * self.signal_k + self.signal_ema;
             }
 
             let signal = self.signal_ema;

@@ -191,13 +191,13 @@ fn fisher_core(
                 0.0
             };
 
-            let mut value = normalized.mul_add(FISHER_SMOOTH_NEW, value_prev * FISHER_SMOOTH_OLD);
+            let mut value = normalized * FISHER_SMOOTH_NEW + value_prev * FISHER_SMOOTH_OLD;
             value = value.clamp(-0.999, 0.999);
             value_prev = value;
 
             signal_out[i] = fisher_prev;
             let ratio = (1.0 + value) / (1.0 - value);
-            let fisher_val = ratio.ln().mul_add(FISHER_HALF, fisher_prev * FISHER_HALF);
+            let fisher_val = ratio.ln() * FISHER_HALF + fisher_prev * FISHER_HALF;
             fisher_prev = fisher_val;
             fisher_out[i] = fisher_val;
         }
@@ -629,7 +629,7 @@ fn stc_core(
                 ema_f = sum_f / fast_period as f64;
             }
         } else {
-            ema_f = v.mul_add(k_fast, ema_f * ok_fast);
+            ema_f = v * k_fast + ema_f * ok_fast;
         }
         if i < slow_period {
             sum_s += v;
@@ -637,7 +637,7 @@ fn stc_core(
                 ema_s = sum_s / slow_period as f64;
             }
         } else {
-            ema_s = v.mul_add(k_slow, ema_s * ok_slow);
+            ema_s = v * k_slow + ema_s * ok_slow;
         }
 
         if ema_f.is_nan() || ema_s.is_nan() {
@@ -681,7 +681,7 @@ fn stc_core(
             smooth1_prev = if smooth1_prev.is_nan() {
                 k1
             } else {
-                k1.mul_add(STC_SMOOTH_HALF, smooth1_prev * STC_SMOOTH_HALF)
+                k1 * STC_SMOOTH_HALF + smooth1_prev * STC_SMOOTH_HALF
             };
 
             let si = s1_count % cap;
@@ -720,7 +720,7 @@ fn stc_core(
                 smooth2_prev = if smooth2_prev.is_nan() {
                     k2
                 } else {
-                    k2.mul_add(STC_SMOOTH_HALF, smooth2_prev * STC_SMOOTH_HALF)
+                    k2 * STC_SMOOTH_HALF + smooth2_prev * STC_SMOOTH_HALF
                 };
                 output[i] = smooth2_prev;
             }

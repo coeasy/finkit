@@ -186,8 +186,8 @@ pub fn kdj(
                 50.0
             };
 
-            k_prev = (rsv - k_prev).mul_add(inv_m1, k_prev);
-            d_prev = (k_prev - d_prev).mul_add(inv_m2, d_prev);
+            k_prev = (rsv - k_prev) * inv_m1 + k_prev;
+            d_prev = (k_prev - d_prev) * inv_m2 + d_prev;
             let j_val = 3.0 * k_prev - 2.0 * d_prev;
 
             unsafe {

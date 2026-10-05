@@ -7,6 +7,183 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Changed - 2026-10-05 (thirteenth pass — last sub-1.0 TA-Lib gaps, one orphan kernel, one systemic codegen defect)
+
+Three rounds, every finding in a round fixed before the next started. Two
+questions drove the round: **are the remaining deficits algorithmic or
+constant-factor**, and **is there anything else in the tree that looks alive but
+is not**. The first answer is constant-factor throughout. The second turned up
+three things: an orphan SIMD kernel, a "deleted" file that was still tracked, and
+— found by auditing the tree rather than by profiling — a codegen defect that was
+silently taxing most of the hot loops in the crate.
+
+Measured against TA-Lib C on the paired Criterion suite (10k-bar OHLCV series);
+the whole suite was re-run each time, so both columns come from comparable
+conditions:
+
+| Indicator | before | after | TA-Lib C (after) | speedup before → after |
+|---|---:|---:|---:|---:|
+| `STOCHRSI_14_14_3_3` | 267.3 µs | 101.7 µs | 116.8 µs | 0.45x → **1.15x** |
+| `STOCHF_14_3` | 134.6 µs | 76.9 µs | 82.9 µs | 0.59x → **1.08x** |
+| `PERCENTRANK_30` | 498.8 µs | 295.4 µs | 318.1 µs | 0.74x → **1.08x** |
+| `ACOS` | 143.5 µs | 41.4 µs | 131.6 µs | 0.96x → **3.18x** |
+| `MACD_12_26_9` | 134.5 µs | 63.0 µs | 142.8 µs | 1.06x → **2.27x** |
+| `SAR` | 71.8 µs | 45.0 µs | 58.5 µs | 0.82x → **1.30x** |
+| `PPO_12_26` | 54.1 µs | 19.1 µs | 46.7 µs | 0.86x → **2.45x** |
+| `RSI_14` | 22.95 µs | 22.28 µs | 30.00 µs | 1.29x → **1.35x** |
+| `LN` | 64.4 µs | 47.2 µs | 44.5 µs | 0.75x → 0.94x |
+| `MIN_30` / `MAX_30` | 20.5 / 19.1 µs | 15.5 / 15.4 µs | 14.3 / 14.6 µs | 0.77x / 0.80x → 0.92x / 0.95x |
+| `LINREG_INTERCEPT_14` | 34.8 µs | 30.3 µs | 25.2 µs | 0.74x → 0.83x |
+| `LINREG_SLOPE_14` | 34.5 µs | 30.9 µs | 23.1 µs | 0.69x → 0.75x |
+| `AROONOSC_14` | 59.1 µs | 53.5 µs | 44.5 µs | 0.76x → 0.83x |
+
+Suite totals over the 90 paired benchmarks: **❌ 8 → 2 → 1, ⚠️ 15 → 17 → 14,
+✅ 67 → 71 → 75** (each arrow is one of the three rounds). The 1M-bar scaled
+rows moved with the same change: `MACD@1M` 0.94x → **1.64x**, `RSI@1M` 1.06x → 1.08x.
+
+**The systemic one: `f64::mul_add` outside an FMA target feature.** `mul_add`
+lowers to LLVM's `llvm.fma.f64`. On this crate's baseline target — x86-64
+*without* `+fma`, which is what Rust defaults to and what CI builds — LLVM cannot
+emit the instruction, so it emits a **call to libm's `fma()`**. A 20M-iteration
+loop-carried recurrence measures the cost directly: `(v - x) * k + x` runs
+2.6 ns/bar, `(v - x).mul_add(k, x)` runs 3.7 ns/bar — about 1.1 ns (~3.4 cycles)
+lost per call, per bar.
+
+Audited across `core/src`: **105 `mul_add` sites, 87 of them outside any
+`#[target_feature]` function**, i.e. paying that call. The hot ones are the EMA
+recurrences (MACD, MACDFIX, PPO, TRIX, KDJ, streaming MACD/MACDFIX), RSI's
+`avg_gain`/`avg_loss`, the SAR update, `variance`/`stddev` sum-of-squares, and
+the VIDYA/CMO/FISHER/STC cores. 74 of those were rewritten to the explicit
+`*` + `+` form — the same expression with one extra rounding, and the form
+TA-Lib itself produces, since TA-Lib is compiled without FMA. The sites that
+really are inside (or reachable from) a `#[target_feature(enable = "fma")]`
+function were left alone: there `mul_add` is one hardware instruction and is the
+faster form.
+
+**`PPO` (0.79x → 2.45x).** `ppo_with_ma_type` composed two whole `ma()` calls:
+two full-length allocations, two full-length store passes, then a third pass to
+divide — while the structurally identical `APO` was already fused at 2.59x. The
+SMA and EMA selectors (the two that are actually called: `ppo` is the formula
+shorthand `PPO:=(EMA(CLOSE,SHORT)-EMA(CLOSE,LONG))/EMA(CLOSE,LONG)*100`, and
+TA-Lib's default profile is `matype=0`/SMA) are now fused into one pass that
+never materialises either moving average. Both kernels are asserted
+**bit-identical** to the `ma()` composition they replaced
+(`ppo_fused_kernels_are_bit_identical_to_the_ma_composition`), because PPO feeds
+golden TA-Lib parity for `matype=0` and `matype=1` and "close enough" is not an
+acceptable bar for a recurrence.
+
+The first attempt at that fusion made PPO *slower* (58.4 → 87.7 µs): the fused
+EMA recurrence used `mul_add` in a plain function, i.e. two libm calls per bar.
+It now runs inside `#[target_feature(enable = "fma")]` with runtime detection,
+mirroring what `ema_inner` already does.
+
+**`SAR`'s `USE_FMA` knob was a false promise — removed.** `sar_default_into_impl`
+carried `const USE_FMA: bool` plus a `#[target_feature(enable = "fma")]` twin:
+the `true` instantiation got real hardware FMA, the `false` one the split
+multiply/add, chosen by a runtime feature check. Both halves failed here. The
+`false` instantiation was effectively unreachable on x86, and its split form is
+what every *other* SAR path (streaming `SarState`, general `sar_into`) uses — so
+the fused path returned different last bits, which is exactly what
+`incremental_state_matches_batch_exactly` and
+`single_output_matches_with_af_projection` assert against (they did fail, which
+is how this was caught). And the speedup was not there: on the paired 10k suite
+the fused default kernel ran 71.8 µs and the split form 45.0 µs on the same
+input. The knob was buying a cross-path inconsistency for a regression; every SAR
+path now uses the split form. (KAMA keeps its FMA dispatch — there the fused form
+really is faster, 24.7 vs 30.0 µs — and no test asserts cross-path bit-equality
+for it.)
+
+**`LINREG_*` main loops: index arithmetic → zipped cursors.** `input[i]`,
+`input[i - period]` and `output[i]` each carried a bounds check, while TA-Lib's C
+loop — same dependency chain, same one division per bar, *and* an extra `fabs`
+pair for its drift guard — was faster. The three cursors are now zipped, so they
+are in bounds by construction. Measured effect: none (31.03 → 31.11 µs). Kept
+because it removes work rather than adding it, but recorded honestly as a no-op,
+not a win.
+
+Fixes, with the defect that caused each:
+
+- **`stochf`** — the two monotonic `Vec<usize>` queues advanced a logical head
+  and never compacted, so they grew to the full series length every call
+  (10k bars → ~160 KiB and ~10 reallocations, each with a `memcpy`). That is the
+  whole explanation for the odd pair "`stoch` 1.15x but `stochf` 0.59x" — same
+  shape, different kernel. Now uses the cached-index arg-extreme kernel `stoch`
+  uses: one comparison per leg per bar, no allocation.
+- **`stochf` with `fastd_period == 0`** panicked: `vec![0.0; 0]` was indexed and
+  `d_start = fastk_start + 0 - 1` underflowed. Now rejected as
+  `InvalidParameter`.
+- **`stochrsi`** — the public entry built four full-length buffers and ran four
+  passes, while the zero-copy `stochrsi_into` already existed and nobody called
+  it. It now delegates: RSI parks in the %D buffer, %K is rewritten in place,
+  and one fused ring pass emits %K/%D.
+- **`percent_rank`** — three branchy `partition_point` calls per bar plus
+  `Vec::remove` + `Vec::insert` (two memmoves). Now: one branchless binary
+  search, two per bar instead of three (the insert position follows from
+  `count_less - (evicted < current)`, so the third search is gone), and a single
+  `copy_within` span move.
+- **`rescan_extreme_window`** (shared by AROONOSC / AROON / ULTOSC / STOCH /
+  STOCHF / STOCHRSI) — evaluated `!is_nan() && (!found || cmp)` per candidate.
+  Seeding with `NEG_INFINITY`/`INFINITY` folds the NaN skip into the comparison
+  itself. `>=`/`<=` are deliberately kept: ties must resolve to the *newest*
+  bar because AROONOSC reports the **index**, not just the value.
+- **`ln`** — validated and `push`ed in one loop, paying a capacity check and a
+  branch inside the transcendental loop. Since `ln` maps every invalid input to
+  a non-finite value, the domain check moved onto the result: one branchless
+  `map` plus a vectorizable scan. Error contract unchanged (first offending bar
+  still rejects the call).
+- **A full-length NaN fill pass removed** from `min`, `max`, `linreg_slope` and
+  `linreg_intercept`: `fill_rolling_extreme` now guarantees it writes every slot
+  from `window - 1` on (filling the leading-missing-run gap itself), so the
+  buffer only needs its warm-up prefix seeded.
+
+Orphan logic found and removed:
+
+- `math::simd_ops::{simd_linreg_slope, simd_linreg, simd_linreg_angle}` had no
+  production caller at all — the only reference in the tree was
+  `benches/simd_statistics_bench.rs`, which is why `dead_code` and
+  `check_orphan_modules.py` both stayed silent. They are now wired into
+  `linear::linreg_slope` for the `warm_start == 0` case (those kernels have no
+  leading-warmup concept, so forwarding unconditionally would change results).
+  Worth recording honestly: they only vectorize the O(period) seeding — the
+  O(len) recurrence is scalar in both paths, so the win is small; the point of
+  wiring them is that the promise `math::simd_ops` makes should be true.
+- `math::sar::sar_default_into_impl`'s `const USE_FMA: bool` — see above. After
+  the `mul_add` audit the two arms had become the same code, then restoring the
+  fused arm broke two cross-path bit-exactness tests, which is what proved the
+  knob had no remaining reason to exist.
+
+Repository state vs. documentation:
+
+- `visualization/frontend/index.html.template` — the twelfth pass CHANGELOG said
+  this was deleted, but `git ls-files` still listed it and it was still on disk.
+  Deleted for real this time (history keeps it: `git log --diff-filter=D --`
+  `visualization/frontend/index.html.template`). A deletion is not done until the
+  index says so.
+
+Not fixed, stated plainly: `LINREG_SLOPE` is now the **only** ❌ left (0.75x,
+30.9 µs vs 23.1 µs) and `LINREG_INTERCEPT` sits at 0.83x. The bottleneck is the
+`sum_xy` recurrence — `sum_xy[i]` depends on `sum_y[i-1]`, a loop-carried chain
+that sets an ~8-cycle floor per bar and that no amount of local cleanup removes.
+Two candidate fixes were measured this round and both were **no-ops**, which is
+the useful part of the result:
+
+- hoisting `1.0 / denom` so the per-bar slope is a multiply instead of a
+  division: 31.03 → 31.10 µs. The loop is latency-bound on the recurrence, not
+  throughput-bound on the divider, so the `divsd` was already hidden.
+- replacing the per-bar bounds checks with zipped cursors: 31.03 → 31.11 µs.
+
+TA-Lib's own `TA_LINEARREG_SLOPE` runs the same recurrence, carries one division
+per bar *and* an extra `fabs` pair for its drift guard, and is still faster — so
+the remaining gap is not the recurrence's shape. Breaking it needs a prefix-sum
+or a genuinely vectorized reformulation, which trades numerical drift for speed
+and deserves its own evaluation rather than being folded into this pass.
+
+Also unchanged and worth naming: `KAMA`'s fused (hardware-FMA) form is genuinely
+faster than the split form (24.7 vs 30.0 µs), so unlike SAR it keeps its runtime
+FMA dispatch — which means its last bits depend on the host CPU. That is a
+deliberate trade-off, not an oversight, and it is now documented at the call
+site.
+
 ### Changed - 2026-10-05 (twelfth pass — connectivity audit, orphan-asset cleanup, CI coverage holes)
 
 Audited "is every flow actually connected" with reproducible scans instead of

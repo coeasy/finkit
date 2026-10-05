@@ -121,7 +121,7 @@ pub fn ema_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
         let output_ptr = output.as_mut_ptr();
         for index in start + period..len {
             let value = *input_ptr.add(index);
-            previous = (value - previous).mul_add(k, previous);
+            previous = (value - previous) * k + previous;
             *output_ptr.add(index) = previous;
         }
     }
@@ -371,6 +371,12 @@ unsafe fn kama_kernel<
     const KAMA_PERIOD: usize,
     const KAMA_FAST: usize,
     const KAMA_SLOW: usize,
+    // `USE_FMA = true` is only instantiated from `kama_kernel_fma`, which is
+    // `#[target_feature(enable = "fma")]` — so `mul_add` there is a real
+    // hardware instruction. In any *other* function it lowers to a libm
+    // `fma()` call that is measurably slower than the split `*` + `+` form,
+    // which is why the `false` arm deliberately does not use it. Do not
+    // "unify" the two arms.
     const USE_FMA: bool,
 >(
     input: &[f64],

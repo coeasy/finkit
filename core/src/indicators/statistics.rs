@@ -269,18 +269,52 @@ pub fn percent_rank(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
 
     for i in timeperiod..len {
         let current = input[i];
-        let count_less = sorted.partition_point(|&x| x < current);
+        let count_less = lower_bound(&sorted, current);
         output[i] = (count_less as f64 / timeperiod as f64) * 100.0;
 
         // Advance the preceding-value window after producing this bar.
+        //
+        // `Vec::remove` + `Vec::insert` did two full memmoves and two length
+        // fixups here; one `copy_within` over the affected span does the same
+        // job in a single pass. The insert position also no longer costs a
+        // third search: dropping the evicted bar shifts everything after it
+        // left by one only when that bar sat below `current`, so
+        // `count_less - (evicted < current)` is exactly the target index.
         let evicted = input[i - timeperiod];
-        let pos = sorted.partition_point(|&x| x < evicted);
-        sorted.remove(pos);
-        let insert_pos = sorted.partition_point(|&x| x < current);
-        sorted.insert(insert_pos, current);
+        let evicted_pos = lower_bound(&sorted, evicted);
+        let insert_pos = count_less - usize::from(evicted < current);
+        if evicted_pos <= insert_pos {
+            sorted.copy_within(evicted_pos + 1..=insert_pos, evicted_pos);
+        } else {
+            sorted.copy_within(insert_pos..evicted_pos, insert_pos + 1);
+        }
+        sorted[insert_pos] = current;
     }
 
     Ok(output)
+}
+
+/// Index of the first entry at or above `value` in an ascending slice.
+///
+/// The classic branchless form: every step is an unconditional load plus a
+/// `cmov`, so a mispredicted comparison never stalls the pipeline.
+/// `slice::partition_point` expresses the same search as a data-dependent
+/// branch per step, which on a 30-element window costs more in mispredictions
+/// than the ~5 loads it saves.
+#[inline]
+fn lower_bound(sorted: &[f64], value: f64) -> usize {
+    let mut base = 0usize;
+    let mut remaining = sorted.len();
+    while remaining > 1 {
+        let half = remaining / 2;
+        base += if sorted[base + half - 1] < value {
+            half
+        } else {
+            0
+        };
+        remaining -= half;
+    }
+    base + usize::from(!sorted.is_empty() && sorted[base] < value)
 }
 
 /// Percent Rank (PR) — TA-Lib `TA_PERCENTRANK` compatible short alias.

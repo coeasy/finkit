@@ -208,19 +208,27 @@ pub fn minus(data: &[f64], period: usize) -> Result<Array1<f64>> {
 /// assert_eq!(r[4], 5.0); // max(4,1,5)
 /// assert_eq!(r[7], 9.0); // max(9,2,6)
 /// ```
+// The `expect` sits on the item because `uninit_vec` spans the
+// `with_capacity`/`set_len` pair, not just the `unsafe` block. CI denies
+// unfulfilled lint expectations, so a stale suppression fails the build
+// instead of silently rotting.
+#[expect(clippy::uninit_vec)]
 pub fn max(data: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_window(data, period)?;
 
-    let mut output = init_output(data.len());
-    // Share the cached-index kernel with the rest of the extrema family. The
-    // kernel leaves the `period - 1` warm-up slots alone, so the NaN fill above
-    // is what callers observe before the first full window.
-    crate::math::statistics::rolling_max_into(
-        data,
-        period,
-        output.as_slice_mut().expect("owned Array1 is contiguous"),
-    );
-    Ok(output)
+    // Only the `period - 1` warm-up slots need a fill: `fill_rolling_extreme`
+    // guarantees it writes every slot from `period - 1` on, so seeding the
+    // buffer uninitialized drops one full-length NaN store pass from a kernel
+    // whose own cost is barely two passes. That pass was ~15% of `MAX`'s time.
+    let mut output = Vec::<f64>::with_capacity(data.len());
+    // SAFETY: the kernel writes every slot from `period - 1` on.
+    unsafe {
+        output.set_len(data.len());
+    }
+    output[..period - 1].fill(f64::NAN);
+    // Share the cached-index kernel with the rest of the extrema family.
+    crate::math::statistics::rolling_max_into(data, period, &mut output);
+    Ok(Array1::from(output))
 }
 
 /// 滚动窗口最小值 MIN
@@ -246,17 +254,21 @@ pub fn max(data: &[f64], period: usize) -> Result<Array1<f64>> {
 /// assert_eq!(r[4], 1.0); // min(4,1,5)
 /// assert_eq!(r[7], 2.0); // min(9,2,6)
 /// ```
+// See [`max`] for why the suppression lives on the item.
+#[expect(clippy::uninit_vec)]
 pub fn min(data: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_window(data, period)?;
 
-    let mut output = init_output(data.len());
-    // See [`max`]: the warm-up slots stay NaN and the kernel rewrites the rest.
-    crate::math::statistics::rolling_min_into(
-        data,
-        period,
-        output.as_slice_mut().expect("owned Array1 is contiguous"),
-    );
-    Ok(output)
+    // See [`max`]: the kernel writes every slot from `period - 1` on, so only
+    // the warm-up prefix needs seeding and the full NaN fill can go.
+    let mut output = Vec::<f64>::with_capacity(data.len());
+    // SAFETY: the kernel writes every slot from `period - 1` on.
+    unsafe {
+        output.set_len(data.len());
+    }
+    output[..period - 1].fill(f64::NAN);
+    crate::math::statistics::rolling_min_into(data, period, &mut output);
+    Ok(Array1::from(output))
 }
 
 /// 滚动窗口求和 SUM

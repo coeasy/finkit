@@ -64,7 +64,7 @@ impl MovingAverageState {
                 if self.count == 0 {
                     self.ema = value;
                 } else {
-                    self.ema = alpha.mul_add(value - self.ema, self.ema);
+                    self.ema = alpha * (value - self.ema) + self.ema;
                 }
                 if !full {
                     self.count += 1;
