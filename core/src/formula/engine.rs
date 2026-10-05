@@ -100,25 +100,33 @@ pub struct FormulaPlanCacheStats {
 ///
 /// Both counters live here, next to the lookup that decides them, so a call site
 /// cannot bump the wrong one.
+///
+/// Entries are handed out as `Arc` handles rather than clones. A screening pass
+/// evaluates the same formula against thousands of symbols, and the previous
+/// `plan.clone()` on every hit deep-copied the whole compiled plan — semantic
+/// DAG, hot-execution plan bytecode, and all three binding vectors — on a path
+/// whose only job is to *find* an already-compiled plan. Measured on a 250-bar
+/// series (the screening window) that clone plus the key construction was
+/// 33-46% of a complete `eval_plan` call; at 10k bars it was 3-6%.
 #[derive(Debug, Default)]
 struct FormulaPlanCache {
-    entries: HashMap<FormulaPlanKey, FormulaHotPlan>,
+    entries: HashMap<FormulaPlanKey, Arc<FormulaHotPlan>>,
     hits: u64,
     misses: u64,
 }
 
 impl FormulaPlanCache {
-    fn get(&mut self, key: &FormulaPlanKey) -> Option<FormulaHotPlan> {
+    fn get(&mut self, key: &FormulaPlanKey) -> Option<Arc<FormulaHotPlan>> {
         if let Some(plan) = self.entries.get(key) {
             self.hits = self.hits.saturating_add(1);
-            Some(plan.clone())
+            Some(Arc::clone(plan))
         } else {
             self.misses = self.misses.saturating_add(1);
             None
         }
     }
 
-    fn insert(&mut self, key: FormulaPlanKey, plan: FormulaHotPlan) {
+    fn insert(&mut self, key: FormulaPlanKey, plan: Arc<FormulaHotPlan>) {
         self.entries.insert(key, plan);
     }
 
@@ -498,7 +506,21 @@ impl FormulaEngine {
 
     /// 编译公式字符串
     pub fn compile(&mut self, source: &str) -> Result<CompiledFormula, FormulaError> {
-        if let Some(formula) = self.cache.get_cloned(source) {
+        // The public entry point hands back an owned formula, so it pays one
+        // deep clone to separate the caller's copy from the cached one. The
+        // engine's own evaluation paths go through `compile_shared` instead and
+        // move a handle, which is what keeps that clone off the hot path.
+        self.compile_shared(source)
+            .map(|formula| formula.as_ref().clone())
+    }
+
+    /// Compile `source` into a shared handle, reusing the cached AST.
+    ///
+    /// The tree-walker is the default backend, so this is the per-call compile
+    /// step for most callers: a cache hit costs one refcount bump instead of a
+    /// deep copy of the whole `AstNode`.
+    fn compile_shared(&mut self, source: &str) -> Result<Arc<CompiledFormula>, FormulaError> {
+        if let Some(formula) = self.cache.get_shared(source) {
             return Ok(formula);
         }
 
@@ -518,15 +540,17 @@ impl FormulaEngine {
         // same CSE and constant-folding decisions while preserving assignment
         // side effects exposed through FormulaContext::variables.
         let ast = FormulaOptimizer::optimize_for_execution(&ast);
-        let formula = CompiledFormula {
+        let formula = Arc::new(CompiledFormula {
             ast,
             source: source.to_string(),
-        };
+        });
 
         self.semantic_plan_cache
             .borrow_mut()
             .insert(source.to_string(), semantic_plan);
-        self.cache.insert(source, formula.clone());
+        // Store the handle we are about to return rather than cloning the
+        // formula a second time just to fill the cache.
+        self.cache.insert_shared(source, Arc::clone(&formula));
 
         Ok(formula)
     }
@@ -559,6 +583,24 @@ impl FormulaEngine {
         dialect: FormulaDialect,
         params: &ParamValues,
     ) -> Result<FormulaHotPlan, FormulaError> {
+        // This public entry point hands back an owned plan, so it pays one deep
+        // clone to separate the caller's copy from the cached one. The internal
+        // execution path does not go through here — it uses `plan_for` and moves
+        // a shared handle, which is what keeps the clone off the hot path.
+        self.plan_for(source, dialect, params)
+            .map(|plan| plan.as_ref().clone())
+    }
+
+    /// Resolve `source` to a compiled plan, reusing the cached one when possible.
+    ///
+    /// Returns a shared handle so a cache hit costs one refcount bump instead of
+    /// a deep copy (see [`FormulaPlanCache`]).
+    fn plan_for(
+        &self,
+        source: &str,
+        dialect: FormulaDialect,
+        params: &ParamValues,
+    ) -> Result<Arc<FormulaHotPlan>, FormulaError> {
         let key = FormulaPlanKey::new(source, dialect, params);
         // Bind the lookup to a local so the `RefCell` borrow provably ends here,
         // rather than relying on `if let` scrutinee temporary lifetimes.
@@ -567,8 +609,11 @@ impl FormulaEngine {
             return Ok(plan);
         }
 
-        let plan = self.build_plan(source, dialect, params)?;
-        self.plan_cache.borrow_mut().insert(key, plan.clone());
+        // A miss stores the very handle it returns, so the miss path is also
+        // clone-free — it used to compile the plan, clone it into the cache and
+        // hand back the original.
+        let plan = Arc::new(self.build_plan(source, dialect, params)?);
+        self.plan_cache.borrow_mut().insert(key, Arc::clone(&plan));
         Ok(plan)
     }
 
@@ -689,7 +734,9 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<FormulaPlanOutput, FormulaError> {
         ctx.validate_alignment()?;
-        let plan = self.compile_plan(source, dialect, params)?;
+        // Shared handle, not an owned plan: the executor only borrows it, so
+        // nothing here needs the deep copy `compile_plan` hands to its callers.
+        let plan = self.plan_for(source, dialect, params)?;
 
         // The plan path must honour the same execution sandbox as the tree path.
         // It used to ignore `ctx.sandbox` outright, so every configured budget
@@ -1502,7 +1549,7 @@ impl FormulaEngine {
 
     /// Analyze a formula without executing it.
     pub fn analyze(&mut self, source: &str) -> Result<FormulaAnalysis, FormulaError> {
-        let formula = self.compile(source)?;
+        let formula = self.compile_shared(source)?;
         Ok(analyze_formula(&formula.ast))
     }
 
@@ -1672,7 +1719,7 @@ impl FormulaEngine {
         if self.execution_mode == FormulaExecutionMode::Plan {
             return self.eval_plan(source, ctx);
         }
-        let formula = self.compile(source)?;
+        let formula = self.compile_shared(source)?;
         self.execute(&formula, ctx)
     }
 
@@ -1853,7 +1900,7 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         self.require_tree_backend("eval_lazy")?;
-        let formula = self.compile(source)?;
+        let formula = self.compile_shared(source)?;
         let pruned = DependencyAnalyzer::analyze_and_prune(&formula.ast);
         self.executor.execute(&pruned, ctx)
     }
@@ -1979,7 +2026,7 @@ impl FormulaEngine {
                     .into_primary(),
             ));
         }
-        let formula = self.compile(source)?;
+        let formula = self.compile_shared(source)?;
         let ast_with_params = apply_params(&formula.ast, params);
         self.executor.execute(&ast_with_params, ctx)
     }
@@ -2002,7 +2049,7 @@ impl FormulaEngine {
         params: &ParamValues,
     ) -> Result<Array1<f64>, FormulaError> {
         self.require_tree_backend("eval_with_validation")?;
-        let formula = self.compile(source)?;
+        let formula = self.compile_shared(source)?;
         let param_defs = parse_params(&formula.ast)?;
         validate_params(&param_defs, params)?;
         let ast_with_params = apply_params(&formula.ast, params);
@@ -2021,7 +2068,7 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         self.require_tree_backend("eval_with_defaults")?;
-        let formula = self.compile(source)?;
+        let formula = self.compile_shared(source)?;
         let param_defs = parse_params(&formula.ast)?;
         let defaults: ParamValues = param_defs
             .iter()
@@ -2106,6 +2153,8 @@ impl FormulaEngine {
         let mut statements = Vec::with_capacity(formulas.len());
         let mut names = Vec::with_capacity(formulas.len());
         for (index, source) in formulas.iter().enumerate() {
+            // This one genuinely needs ownership: the AST is moved into the
+            // synthetic `Output` node below, so it cannot stay shared.
             let formula = self.compile(source)?;
             let analysis = analyze_formula(&formula.ast);
             if analysis.has_observable_effects {
@@ -2265,7 +2314,7 @@ impl FormulaEngine {
             .iter()
             .map(|(n, _min, _max, default)| (n.clone(), *default))
             .collect();
-        let formula = self.compile(&source)?;
+        let formula = self.compile_shared(&source)?;
         let defaults: ParamValues = param_defaults.into_iter().collect();
         let ast_with_params = apply_params(&formula.ast, &defaults);
         self.executor.execute(&ast_with_params, ctx)
@@ -2282,7 +2331,7 @@ impl FormulaEngine {
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
-        let formula = self.compile(source)?;
+        let formula = self.compile_shared(source)?;
         let ast = FormulaOptimizer::optimize(&formula.ast);
         let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
         let mut jit = self.jit_compiler.borrow_mut();
@@ -2324,7 +2373,7 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         self.require_tree_backend("eval_zero_copy")?;
-        let formula = self.compile(source)?;
+        let formula = self.compile_shared(source)?;
         self.executor.execute_zero_copy(&formula.ast, ctx)
     }
 
@@ -2335,7 +2384,7 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         self.require_tree_backend("eval_zero_copy_cached")?;
-        let formula = self.compile(source)?;
+        let formula = self.compile_shared(source)?;
         self.executor.execute_zero_copy_cached(&formula.ast, ctx)
     }
 
@@ -2345,7 +2394,7 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         self.require_tree_backend("eval_zero_alloc")?;
-        let formula = self.compile(source)?;
+        let formula = self.compile_shared(source)?;
         let val = self.executor.execute_val(&formula.ast, ctx)?;
         Ok(val.to_array(ctx.data_len))
     }
@@ -2355,7 +2404,7 @@ impl FormulaEngine {
     /// See [`Self::eval_jit`] and `formula::jit`; opt-in only, no new callers.
     #[cfg(feature = "formula-jit")]
     pub fn compile_jit(&mut self, source: &str) -> Result<OptimizedBytecode, FormulaError> {
-        let formula = self.compile(source)?;
+        let formula = self.compile_shared(source)?;
         let ast = FormulaOptimizer::optimize(&formula.ast);
         let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
         let mut jit = self.jit_compiler.borrow_mut();

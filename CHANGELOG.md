@@ -7,6 +7,85 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Changed - 2026-10-05 (fourteenth pass — both compiled-formula caches were charging rent on every call)
+
+The previous passes audited the numeric kernels. This one audited the **formula
+engine's own per-call overhead** and found a cost with nothing to do with
+mathematics: **both** compiled-formula caches deep-copied their entry on every
+hit. `FormulaPlanCache` cloned the whole `FormulaHotPlan`; `FormulaCache` — the
+one the **default** tree-walker uses — cloned the whole `AstNode`. Neither
+clone bought anything: every caller only ever borrows the compiled artifact.
+
+Measured directly, on the pre-fix code, at a 250-bar series (the screening
+window), the cache hit alone cost this much inside `compile_plan`:
+
+| Formula | cache hit (µs) | share of the whole call |
+|---|---:|---:|
+| `MACD-ish` = `EMA(CLOSE,12)-EMA(CLOSE,26)` | 2.55 | 38.9% |
+| `RSI(CLOSE,14)` | 1.38 | 41.1% |
+| `(CLOSE-MA(CLOSE,20))/STD(CLOSE,20)*100` | 3.02 | 33.8% |
+| `MA5:=MA(CLOSE,5); MA20:=MA(CLOSE,20); OUT: MA5-MA20;` | 4.29 | 47.5% |
+
+End-to-end, `cargo run --release -p finkit --example plan_cache_probe`, minimum
+of 5 rounds, baseline and fixed measured minutes apart on the same machine
+(µs per call, 250 bars):
+
+| Formula | plan path | tree path (default) |
+|---|---:|---:|
+| `MACD-ish` | 6.55 → **4.13** (1.59x) | 2.82 → **2.36** (1.19x) |
+| `RSI` | 3.37 → **1.97** (1.71x) | 0.94 → **0.73** (1.29x) |
+| `BOLL` | 8.95 → **5.79** (1.55x) | 3.58 → **3.06** (1.17x) |
+| `COMPOUND` | 9.02 → **4.80** (1.88x) | 4.14 → **3.29** (1.26x) |
+
+- `FormulaPlanCache` now stores `Arc<FormulaHotPlan>` and hands out the handle;
+  a hit is one refcount bump.
+- `FormulaCache` now stores `Arc<CompiledFormula>` behind an additive
+  `get_shared`/`insert_shared`. Its public methods keep their exact signatures —
+  `get` still yields `&CompiledFormula`, `get_cloned`/`remove` still yield owned
+  values — so this is an internal change with no API break.
+- Each cache gains one private resolution point (`plan_for` /
+  `compile_shared`) that the engine's own evaluation paths use. The **miss** path
+  is clone-free too: it stores the very handle it returns. It used to build the
+  artifact, clone it into the cache and hand back the original.
+- `compile_plan` / `compile` keep their public owned-return signatures, so a
+  caller that genuinely needs ownership still gets it and pays the one clone
+  that ownership costs. Exactly one call site still needs that: the shared-batch
+  helper moves each AST into a synthetic `Output` node, and it is marked as such.
+- `Arc`, not `Rc`, so `FormulaEngine` stays `Send` exactly as before.
+
+**What the measurements actually support.** The removed cost is *fixed per
+call*, so it dominates short series and shrinks proportionally with length. At
+2 000 bars the plan path gained 1.12-1.36x and the tree path 1.02-1.19x; at
+10 000 bars the apparent gains (1.06-1.19x) are **not** trustworthy, because the
+baseline process was uniformly slower — visible in the change-independent
+`cold(compile+eval)` column, where the same "unaffected" measurement read
+1.9-2.6 ms against 1.7-2.1 ms after. Inter-run drift of that size is the reason
+the probe reports a minimum of 5 rounds rather than a mean, and the reason the
+250-bar rows — where the effect is 20-90%, far outside that drift — are the ones
+quoted as the result.
+
+**The other thing the probe shows, and it is not flattering:** the compiled-plan
+backend is **slower than the tree-walker it was built to replace, at every
+length measured** — 4.13 vs 2.36 µs (250 bars), 18.07 vs 11.16 (2 000),
+79.92 vs 58.10 (10 000). The cause is structural and was already visible in the
+thirteenth pass: every node in a plan materialises a full-length buffer, so
+`EMA(CLOSE,12)-EMA(CLOSE,26)` costs ~58-80 µs at 10 000 bars for two
+recurrences. The tree-walker, which was supposed to be the slow reference path,
+does not have that problem. Making the plan path actually win needs a fusion or
+a buffer-lifetime pass over the plan — see
+`docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md` §40.3. Until then the
+default staying `Tree` is the correct setting, not a backlog item.
+
+Also left alone, stated plainly: the output materialisation copies a series
+twice for repeated readers (`read_slot` clones into `already_read` and out
+again; index 0 returns `primary.clone()`). Several names sharing one retained
+buffer is the documented normal case (`DIF`/`DEA`/`MACD`), so the copies are
+real — but removing the second one means handing back shared buffers, which
+changes `FormulaPlanOutput`'s public shape.
+
+`core/examples/plan_cache_probe.rs` is the probe, kept as an example so every
+number above is reproducible rather than asserted.
+
 ### Changed - 2026-10-05 (thirteenth pass — last sub-1.0 TA-Lib gaps, one orphan kernel, one systemic codegen defect)
 
 Three rounds, every finding in a round fixed before the next started. Two

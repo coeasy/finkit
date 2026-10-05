@@ -9,6 +9,7 @@ use lru::LruCache;
 use ndarray::Array1;
 use std::hash::{Hash, Hasher};
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 
 /// 编译后的公式
 #[derive(Debug, Clone)]
@@ -26,8 +27,19 @@ fn compute_hash(source: &str) -> u64 {
 }
 
 /// 公式缓存管理器（O(1) 真 LRU 策略）
+///
+/// Entries are stored behind `Arc` so a hit can be handed out without cloning
+/// the AST. The tree-walker is the **default** backend and every `eval*` entry
+/// point on it compiled through `get_cloned` before this, deep-copying the
+/// whole `AstNode` on each call. Measured at a 250-bar screening window that
+/// clone was a measurable share of a sub-microsecond evaluation (see
+/// `core/examples/plan_cache_probe.rs`).
+///
+/// The public methods keep their old signatures, so this is an internal change:
+/// `get` still yields `&CompiledFormula`, and `get_cloned`/`remove` still yield
+/// owned values for the callers that genuinely need one.
 pub struct FormulaCache {
-    cache: LruCache<u64, CompiledFormula>,
+    cache: LruCache<u64, Arc<CompiledFormula>>,
     counter: u64,
     max_size: usize,
 }
@@ -54,20 +66,39 @@ impl FormulaCache {
         }
     }
 
-    pub fn get_cloned(&mut self, source: &str) -> Option<CompiledFormula> {
+    /// Cache hit as a shared handle — one refcount bump, no deep copy.
+    ///
+    /// This is the lookup the engine's own evaluation paths use; `get_cloned`
+    /// remains for callers that must own the formula.
+    pub fn get_shared(&mut self, source: &str) -> Option<Arc<CompiledFormula>> {
         let hash = compute_hash(source);
         self.counter += 1;
         // Hash 只是索引；必须再次比较 source，避免返回碰撞项
         self.cache
             .get(&hash)
             .filter(|formula| formula.source == source)
-            .cloned()
+            .map(Arc::clone)
+    }
+
+    pub fn get_cloned(&mut self, source: &str) -> Option<CompiledFormula> {
+        self.get_shared(source).map(|formula| (*formula).clone())
     }
 
     pub fn insert(&mut self, source: &str, formula: CompiledFormula) {
         let hash = compute_hash(source);
         self.counter += 1;
         // LruCache::put 在超过容量时自动驱逐最久未使用的条目
+        self.cache.put(hash, Arc::new(formula));
+    }
+
+    /// Insert a formula the caller already holds behind an `Arc`.
+    ///
+    /// Lets the miss path of `FormulaEngine::compile_shared` store the very
+    /// handle it hands back, instead of building the formula and then cloning
+    /// it into the cache.
+    pub fn insert_shared(&mut self, source: &str, formula: Arc<CompiledFormula>) {
+        let hash = compute_hash(source);
+        self.counter += 1;
         self.cache.put(hash, formula);
     }
 
@@ -101,7 +132,7 @@ impl FormulaCache {
             .peek(&hash)
             .is_some_and(|formula| formula.source == source)
         {
-            self.cache.pop(&hash)
+            self.cache.pop(&hash).map(|formula| (*formula).clone())
         } else {
             None
         }
@@ -201,7 +232,9 @@ mod tests {
             ast: AstNode::Number(99.0),
             source: "different-source".to_string(),
         };
-        cache.cache.put(compute_hash(requested), collision);
+        cache
+            .cache
+            .put(compute_hash(requested), Arc::new(collision));
 
         assert!(cache.get(requested).is_none());
         assert!(cache.get_cloned(requested).is_none());
