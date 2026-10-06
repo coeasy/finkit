@@ -3742,3 +3742,258 @@ fn cci_period14_into_impl<const USE_AVX2: bool>(...) {
 两个 clippy 调用（`RUSTFLAGS="-D unfulfilled_lint_expectations"`）；`cargo test -p finkit --tests
 --no-fail-fast`；`cargo test -p finkit --doc`；rustdoc 策略门禁（§42.10 修的 8 条断链保持绿）；
 22 个 `scripts/check_*.py` 内务门禁。
+
+## 44. 第十八轮：把"哪一种写法"问成可测量的问题（2026-10-06）
+
+§43.9 留下的判断是"0.82–0.98 窄带里的 12 个内核有共同成因，下一步应先找算子级解释"。
+本轮先把 §43 自己的量具修到能回答这个问题（§44.1），再按它的读数动手。三处落地，一处被否决，
+并顺手把 LINREG 家族在仓内的**七份递推**收敛到同一方向（§44.5）。
+
+### 44.1 同进程探针的第二版：这次它先证明自己
+
+§43 的探针（`core/examples/kernel_hotspot_probe.rs`）把两侧放进同一二进制、交错运行，
+这一版（`core/examples/talib_gap_probe.rs`）保留该结构并做两处修正：
+
+1. **计时区间批量取块均值**，不再逐次调用取最小值。单次调用是 16–120 µs，与
+   `Instant::now()` 自身、一次中断、一次分配器慢路径同量级，取最小值等于取噪声下界。
+2. **空对照放在程序开头**和**结尾**各跑一次，让读者看到探针自己的漂移，而不是要求读者相信它。
+
+修正后的空对照：
+
+| 空对照 | 开头 | 结尾 | 分辨力 |
+|---|---:|---:|---|
+| `line slope`（同代码两侧，无分配） | **1.008x** | **0.996x** | **1%** |
+| `aroon`（同代码两侧，各两个缓冲） | 0.963x | 0.887x | 8 个点 |
+
+第二行本身就是结论的一半：**同一个函数测两次，差 8 个点**，而两行唯一的区别是分配形状。
+
+### 44.2 公开层（section C）会系统性低估"分配次数多"的实现 —— 本轮最重要的一条负面结论
+
+本轮唯一与 Criterion 冲突的读数是 `adx_14`：交错探针给 **0.742x**（我方 104.27 µs，
+C 77.40 µs），而 Criterion 给 **1.008x**（`FTA_ADX_14` 74.28 对 `TALib_ADX_14` 74.87 µs）。
+
+两者构不出"谁读错了"的简单解释：**两个工具构造 C 侧的方式完全相同**
+（都是 `vec![0.0; len]` + 一次 C 调用），空对照又证明 1% 分辨力。差别在**分配形状**：
+我方每次调用做三次分配，C 侧一次，而交错运行迫使分配器在两种 free-list 模式之间交替服务；
+Criterion 的长跑反复重复同一种请求模式，free list 保持热。
+
+**因此 section C 的比值只适用于两侧都能做成零分配的场合。** 该限制已写进探针的模块文档。
+公开层比值以 `docs/BENCHMARK_REPORT.md` 为准——这条规则在 §43.1 已用另一种方式教训过一次，
+本轮是第二次，所以这次把它写进代码而不是只写进文档。
+
+**顺带撤回一条上一轮的结论。** §43 记录"`FTA_AROON_14`/`FTA_ADX_14` 与报告错配"。
+本轮直接查 `target/criterion/directional_vs_talib/`：`fta_adx_14`、`talib_adx_14`、
+`fta_aroon_14`、`talib_aroon_14` 四者齐全，`aroon_14` 现场读 58.97 / 49.65 µs = 0.842x，
+与报告的 0.84x 一致。**报告不存在错配**；那条"发现"是有偏探针的第三个产物。
+
+### 44.3 `LINREG_SLOPE`：真因是权重方向，不是越界检查，也不是类型转换
+
+§43.5 用"索引 vs 指针游标"证明越界检查是**恰好中性**（1.000x），把成因从"已知"降级为"未知"。
+本轮把未知变成已知：
+
+| 对比 | 比值 | 读法 |
+|---|---:|---|
+| `previous vs cast-hoisted` | **1.000x** | 循环里的 `usize as f64` 早被 LLVM 提升 —— **不是成因** |
+| `hoisted vs new-shipped` | **0.678x** | 换方向后**快 1.47x** |
+| `new-shipped vs C` | **1.026x** | 用 Rust 写那个递推**反超 C 库**（上一轮同项读数 1.048x） |
+
+即：不是"补回差距"，而是"越过参照物"。公开层随之从 0.837x / 0.892x 变为
+**1.129x / 1.105x**（`line slope` / `line intercept`），`linear_reg` 从 1.714x 变为 **2.038x**。
+
+方向为什么载荷这么重：**最老 bar 带 `period - 1`** 时每 bar 的推进是
+
+```text
+sum_xy += sum_y - period * old          // 一次加法接进累加器
+```
+
+而相反方向需要
+
+```text
+sum_xy += (period - 1) * new - (sum_y - old)   // 两次相关减法夹在 sum_y 与累加器之间
+```
+
+同一个数，不同的**舍入与依赖图**。`Divisor = SumX*SumX - period*SumXSqr` 与旧 `denom` 互为
+相反数，分子权重同时反号，两处符号翻转抵消，所以 slope（以及由它导出的 intercept、
+`slope*last_x + intercept`）**值不变**：10 000 根上 `1e-12` 门限内 469 个槽有差，
+最大差 **1.18e-12**，而金标准容差 `1e-9`、TA-Lib 数值契约 `1e-8` —— 各差两到三个数量级。
+探针现在同时打印"超过门限的槽数"和"最大差"，就是不让读者只看计数。
+
+### 44.4 `MAX`/`MIN`：两块表从堆搬到栈
+
+探针 section B 的两个变体**逐语句相同**，唯一区别是 `vec![0.0; window]` 与 `[0.0; 64]`：
+
+| 对比 | 比值 |
+|---|---:|
+| `heap vs stack tables` | **0.870x**（栈快 15%） |
+| `ring vs stack tables` | **0.213x**（单调环慢 5 倍，**否决**） |
+| `stack vs C` | 0.957x |
+
+落地：`van_herk_extreme_into` 拆为"选表 + `van_herk_body`"，`window <= 64` 用栈数组，
+否则堆分配。否决的环与它的数字写进源码注释。
+
+### 44.5 历史遗留：LINREG 递推在仓内有 **七份**，方向不一致
+
+这是本轮最大的一处结构性发现。七份里五份是生产路径，两份只在基准里：
+
+| # | 位置 | 路径 | 原方向 |
+|---|---|---|---|
+| 1 | `math/linear.rs::linreg_slope` | 生产（含公式层两条后端） | 旧 |
+| 2 | `math/linear.rs::linreg_intercept` | 生产 | 旧 |
+| 3 | `math/linear.rs::linreg_angle` | 生产 | **已经是 TA-Lib 方向** |
+| 4 | `math/linear.rs::linreg`（`linear_reg` / `TSF`） | 生产 | 旧 |
+| 5 | `math/simd_ops.rs::linreg_slope_avx2` / `_scalar` | 生产 | 旧 |
+| 6 | `math/simd_ops.rs::linreg_avx2` / `linreg_scalar` | 仅基准 | 旧 |
+| 7 | `formula/simd.rs::SimdOps::linear_reg{_slope,_intercept,,_angle,_r2}` | 仅基准 | 旧 |
+
+**第 3 行是佐证，不是脚注。** `linreg_angle` 的注释写着 "Keep TA-Lib's sign and operation
+order for numerical parity"，它的每 bar 更新就是 `sum_xy += sum_y - p * trailing`，它的重播种用
+`let mut weight = (period - 1) as f64; weight -= 1.0` —— 与本轮写进 `linreg_slope` 的形状**逐字相同**。
+也就是说正确形状原本就在仓内，另外三个生产实现是异类。§44.3 的探针读数与这条源码内证据互相独立
+且方向一致。
+
+七份现已全部同一方向。公式层两条后端（树 `fn_linear_reg_slope`、计划
+`dispatch_linear_reg_slope_call`）都调用 `math::linear::linreg_slope`，因此
+`LINEARREG`/`LINEARREG_SLOPE`/`LINEARREG_INTERCEPT`/`LINEARREG_ANGLE`/`TSF` 一并受益 ——
+这是"核心公式引擎执行效率提升"在本轮的具体形态，`core/examples/plan_cache_probe.rs` 新增
+`LINEARREG_SLOPE(CLOSE,14)` 与 `TSF(CLOSE,14)` 两行作为端到端记录。
+
+第 6 行保留而不删除：`simd_linreg` 只在 `benches/simd_statistics_bench.rs` 里被调用，
+它的存在是为了回答"`LINREG` 值不值得做向量内核"。它给出的答案是**不值得**——
+只有 `period` 元素的播种能向量化（默认 period 14 只有 3 个 chunk），每 bar 的递推是标量算术。
+生产走标量是**决定**而非疏漏，这一点此前没有任何地方写明，现已写进 `simd_linreg` 的文档。
+
+### 44.6 历史遗留：`ADX` 递推有三份，其中两份在 NaN 上给不同答案
+
+`adx()` 原先经 `compute_adx_family`，而该函数**总是**填三列（`+DI`、`-DI`、`ADX`），
+调用方只取一列 —— 于是 `adx` 这个公开入口每次调用做三次分配、三股写流，另两列直接丢弃。
+TA-Lib 的 `TA_ADX` 只分配一列。
+
+- `adx()` 改走 `compute_adx_only`（一列）。
+- `compute_adx_family` 改名 `compute_di_pair`，删掉 `adx` 列与整条 ADX 平滑递推。
+  它唯一的消费者 `dx()` 只要 `+DI`/`-DI`，并**故意**用两列比值重算 `DX` 以对齐 TA-Lib 的舍入。
+  `AdxFamilyResult::adx` 因此变成 dead code —— `-D warnings` 门禁把这件事说了出来，而不是让
+  它继续以"看起来很完整"的样子存在。
+- 抽出 `di_pair_from_state`，`di_dx_from_state` 叠在其上：三路 guard 回到单一来源，
+  且只要两列的路径省掉每 bar 一次 `DX` 除法。
+
+**未改并说明理由**：`compute_adx_only` 与公开的 `adx_into` 是同一递推的两份手抄，
+它们在**含 NaN 的 OHLC** 上给不同答案 —— `adx_into` 用局部 `true_range_fast`
+（`if gap > range`，NaN 传播，与 TA-Lib C 的 `>` 一致），`compute_adx_only` 用
+`utils::true_range`（`f64::max` **忽略 NaN**）。`streaming/trend/adx.rs` 与
+`math/kernels/compat.rs` 都把 `adx_into` 当作 canonical（前者注释 "mirror `adx_into` step for
+step"，后者被测试断言相等），所以合并方向是"向 TA-Lib 靠拢"，即承认 `utils::true_range`
+在 ADX 上的行为需要改变。这**改变公开数值**，必须配一个覆盖 NaN 的新金标准测试，
+因此单独立轮，不在本轮夹带。
+
+### 44.7 被证伪的注释与被回退的文档
+
+- `aroon_into` 里"越界检查是 `AROON`/`ADX`/`MAX`/`MIN` 家族剩余差距"的注释**已被 §43.5 证伪**
+  （指针游标恰好 1.000x）。本轮改为陈述该循环的性质，并写明"剩余差距不是它"。
+- `docs/talib-efficiency-deep-dive-zh.md` 本轮出现 290 行"无内容"改动。以
+  `git diff --ignore-all-space` 判定全部是表格分隔线与下划线转义后，**确认是编辑器 markdown
+  格式化器的产物，并且已损坏内容**：把 `AVX2 Σ|x - mean|` 里的 `|` 当表格分隔符拆成四列、
+  把 `此` 转义为 `&#x6B64;`、把有序列表 `2./3.` 重编号为 `1./2.`。已 `git checkout --` 回退。
+  仓库无 prettier 配置、`.git/hooks` 只有 sample，故来源是 IDE 插件而非门禁。
+
+### 44.8 本机门禁的环境性失败（已在 HEAD 上复现，与改动无关）
+
+| 门禁 | 现象 | 结论 |
+|---|---|---|
+| `cargo test -p finkit --doc` | 241/254 失败，`Failed to spawn rustc.exe: Os { code: 231 }`（`ERROR_PIPE_BUSY`） | **在干净 HEAD 上同样 241 个**，`--test-threads=2` 无效（3.9 秒跑完，根本没编译） |
+| `cargo check --workspace --all-targets` | `pyo3-ffi` 构建脚本 `failed to run the Python interpreter at python: (os error 231)` | `-j 1` 与 `PYO3_PYTHON=<真解释器>` 均无效；PATH 里 `python` 首命中沙箱 shim，它在**从构建脚本派生进程**时耗尽命名管道。改动全在 `core/` 内，不触及 pyo3 |
+
+其余门禁（`cargo fmt --all --check`、`RUSTFLAGS="-D unfulfilled_lint_expectations" cargo clippy`、
+22 个 `scripts/check_*.py`、`cargo test -p finkit --release --tests`）为本轮实际执行的门禁，
+结果见 §44.9。
+
+### 44.9 工业级评估（第十八轮后）
+
+- **数值维度**：落地改动要么逐位相同（`MAX`/`MIN` 表存储、`adx` 单缓冲、`compute_di_pair`
+  去列），要么在 `1e-12` 下验证相等且最大差 1.18e-12（LINREG 方向重结合，
+  比金标准 `1e-9` 与契约 `1e-8` 宽裕两到三个数量级）。
+- **效率维度**：`linreg_slope_14` 0.795x → 探针 1.146x；`linreg_intercept_14` 0.823x → 1.107x；
+  `MAX`/`MIN` 断言栈表快 15%；`adx` 断言少两次分配与两股写流。全量 90 项配对见 §44.10。
+- **工程维度**：LINREG 七份递推统一方向；`adx` 家族从三列降到一列并消除死字段；
+  DI guard 回到单一来源；探针的两条限制（批量计时、分配形状偏差）写进模块文档；
+  一条被证伪的归因注释改正；一条被格式化器损坏的文档回退。
+- **仍未解决（已定位、已给方向）**：`compute_adx_only` 与 `adx_into` 的 NaN 分歧须单独立轮；
+  `formula/simd.rs::linear_reg_r2` 仍是每窗口 O(n·w) 全扫（仅基准路径）；
+  计划后端相对树解释器的结构性劣势（§40.5）不变，仍属计划级优化。
+
+### 44.11 历史遗留（新发现）：除法守卫用"固定带宽"而不是"精确零"
+
+修 `ULTOSC` 时顺手做了一次全仓扫描，发现一类**成规模的**历史遗留问题。它不是猜出来的：
+TA-Lib 0.8.1 已经把它写成源码里的一条政策，并且点名了两个 issue 号。
+
+```c
+/*  ta_CMO.c, TA-Lib 0.8.1
+ * prevGain+prevLoss is a sum of non-negative magnitudes, so it is zero only
+ * when every change since the seed was exactly zero -- test it exactly, never
+ * against a fixed band. A gain carries the quote unit, so a constant put
+ * against it zeroes a healthy oscillator for an instrument quoted below it
+ * (issue #253).
+ */
+if( tempValue1 > 0.0 ) { outReal[outIdx++] = 100.0 * ((prevGain - prevLoss) / tempValue1); }
+else                   { outReal[outIdx++] = 0.0; }
+```
+
+`ta_ULTOSC.c` 里同一政策以 `b1Total > 0.0` 出现三次，并配一套 `nullRun` 重播种机制；
+它的注释点名了另一条 issue：
+
+```c
+/* running totals ... are maintained by add-then-subtract, so once a window
+ * empties they hold rounding residue of arbitrary sign rather than zero, and
+ * v0.6.4 divides one residue by another there -- it returns -92.9 for an
+ * oscillator documented to run 0..100. (issue #244) */
+```
+
+所以**同一个错误有两种表现**：带宽相对"带单位的量"太大（#253，把健康指标清零），
+或带宽相对"累加残差"太小（#244，把残差当真值相除，输出跑到 0..100 之外）。
+我方代码的写法（`x.abs() > 1e-15`）同时具备这两种失效方式。
+
+#### 扫描结果
+
+| 范围 | `abs() > 1e-1x` 守卫处数 |
+|---|---:|
+| `core/src/indicators/` + `core/src/math/` | 109 |
+| 其中被守卫量**可证明非负**（真幅 / 成交量 / 资金流 / `\|Δ\|` 之和 / 绝对偏差） | **54** |
+| 上述 54 处分布 | 28 个文件 |
+| `core/src/streaming/` 另有 | 56（其中非负累加 22） |
+
+**"可证明非负"是关键判据**：只有这一类才同时吃到两个方向的失效。被守卫量带符号时
+（例如 `close[i-1].abs()` 用作"前收是否为零"）带宽的含义不同，必须逐处对照 TA-Lib 自己的写法，
+不能按同一条规则批量改。
+
+#### 本轮修掉的两处——同一指标的批量面与流式面
+
+| 面 | 原写法 | 现在 |
+|---|---|---|
+| 批量 `indicators::momentum::ultosc_into` | 三个 ring（每 bar 6 次写入）+ `abs() > 1e-15` | 单个 ring（每 bar 2 次写入）+ `> 0.0` + `null_run` 重播种 |
+| 流式 `StreamingUltOsc::next` | 每 bar 从缓冲重算三个窗口和 + `abs() > 1e-15` | 保留重算（因此空窗口**恰好**为 `0.0`），守卫改为 `> 0.0` |
+
+两面都改的理由是仓库自己那条规矩：**一个指标只能有一个答案**。流式面重算窗口和，所以它
+没有 #244 的残差问题，但它的带宽仍会触发 #253；批量面靠 add-then-subtract 维护总量，
+所以它必须补 `null_run`。改完之后两面在平坦段都恰好给出 `0.0`，
+`streaming/momentum/ult_osc.rs` 里新增的 `test_streaming_ult_osc_agrees_with_the_batch_face`
+把这条一致性钉住（含平坦段断言）。
+
+#### 为什么金标准一直没有抓到
+
+带宽只在被守卫的**和**落在 `(0, 1e-15]` 时才咬人，而真幅之和带报价单位——也就是说，
+只有当窗口内的真幅和小于 `1e-15` 时才发作。金标准夹具用的是正常价格量级，
+所以这个缺陷一直是**可达但未被覆盖**的。这同时说明扫描本身低风险（真实数据上两种写法等价），
+但**每一族仍然需要自己的测试**：只有测试能证明"在带了单位的输入上行为真的变了"。
+
+#### 入队（第十九轮）
+
+其余 **52 处非负累加守卫**按族处理，每族做法固定，避免逐处即兴发挥：
+
+1. 找到 TA-Lib 对应实现，抄它的守卫（`> 0.0` / `== 0.0`），不自己发明；
+2. 若该量由 add-then-subtract 维护，补 `null_run` 重播种（否则空窗口会被当残差相除）；
+3. 配一个"平坦尾巴"测试，断言输出恰好为 `0.0` 且不越出指标定义域；
+4. 若存在流式面，两个面一起改，并加一条两面一致的测试。
+
+按文件数排序的入口是 `indicators/momentum.rs`（12 处）、`indicators/volume_ext.rs`（6 处）、
+`math/moving_avg.rs`（4 处）——其中 `moving_avg.rs` 的 `cmo_factor` 与
+`indicators/momentum.rs::cmo_fast_into` 是同一条 CMO 递推的两份手抄，两处的带宽都要按上面
+`ta_CMO.c` 的写法对齐，属于"一处政策、多处实现"的典型。

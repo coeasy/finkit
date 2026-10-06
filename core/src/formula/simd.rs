@@ -2478,23 +2478,26 @@ impl SimdOps {
         }
 
         let p = period as f64;
-        let sum_x = p * (p - 1.0) / 2.0;
-        let sum_x2 = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
-        let denom = p * sum_x2 - sum_x * sum_x;
+        let p1 = (period - 1) as f64;
+        let sum_x = p * p1 / 2.0;
+        let sum_x2 = p * p1 * (2.0 * p - 1.0) / 6.0;
+        let divisor = sum_x * sum_x - p * sum_x2;
 
         let mut sum_y: f64 = data[..period].iter().sum();
         let mut sum_xy: f64 = 0.0;
-        for (j, &val) in data[..period].iter().enumerate() {
-            sum_xy += j as f64 * val;
+        let mut weight = p1;
+        for &val in data[..period].iter() {
+            sum_xy += weight * val;
+            weight -= 1.0;
         }
-        result[period - 1] = (p * sum_xy - sum_x * sum_y) / denom;
+        result[period - 1] = (p * sum_xy - sum_x * sum_y) / divisor;
 
         for i in period..len {
             let old_val = data[i - period];
             let new_val = data[i];
-            sum_xy += (period - 1) as f64 * new_val - (sum_y - old_val);
+            sum_xy += sum_y - p * old_val;
             sum_y += new_val - old_val;
-            result[i] = (p * sum_xy - sum_x * sum_y) / denom;
+            result[i] = (p * sum_xy - sum_x * sum_y) / divisor;
         }
 
         for r in result.iter_mut().take(period - 1) {
@@ -2519,24 +2522,27 @@ impl SimdOps {
         }
 
         let p = period as f64;
-        let sum_x = p * (p - 1.0) / 2.0;
-        let sum_x2 = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
-        let denom = p * sum_x2 - sum_x * sum_x;
+        let p1 = (period - 1) as f64;
+        let sum_x = p * p1 / 2.0;
+        let sum_x2 = p * p1 * (2.0 * p - 1.0) / 6.0;
+        let divisor = sum_x * sum_x - p * sum_x2;
 
         let mut sum_y: f64 = data[..period].iter().sum();
         let mut sum_xy: f64 = 0.0;
-        for (j, &val) in data[..period].iter().enumerate() {
-            sum_xy += j as f64 * val;
+        let mut weight = p1;
+        for &val in data[..period].iter() {
+            sum_xy += weight * val;
+            weight -= 1.0;
         }
-        let slope = (p * sum_xy - sum_x * sum_y) / denom;
+        let slope = (p * sum_xy - sum_x * sum_y) / divisor;
         result[period - 1] = (sum_y - slope * sum_x) / p;
 
         for i in period..len {
             let old_val = data[i - period];
             let new_val = data[i];
-            sum_xy += (period - 1) as f64 * new_val - (sum_y - old_val);
+            sum_xy += sum_y - p * old_val;
             sum_y += new_val - old_val;
-            let slope = (p * sum_xy - sum_x * sum_y) / denom;
+            let slope = (p * sum_xy - sum_x * sum_y) / divisor;
             result[i] = (sum_y - slope * sum_x) / p;
         }
 
@@ -2562,26 +2568,28 @@ impl SimdOps {
         }
 
         let p = period as f64;
-        let sum_x = p * (p - 1.0) / 2.0;
-        let sum_x2 = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
-        let denom = p * sum_x2 - sum_x * sum_x;
-        let last_x = (period - 1) as f64;
-
+        let p1 = (period - 1) as f64;
+        let sum_x = p * p1 / 2.0;
+        let sum_x2 = p * p1 * (2.0 * p - 1.0) / 6.0;
+        let divisor = sum_x * sum_x - p * sum_x2;
+        let last_x = p1;
         let mut sum_y: f64 = data[..period].iter().sum();
         let mut sum_xy: f64 = 0.0;
-        for (j, &val) in data[..period].iter().enumerate() {
-            sum_xy += j as f64 * val;
+        let mut weight = p1;
+        for &val in data[..period].iter() {
+            sum_xy += weight * val;
+            weight -= 1.0;
         }
-        let slope = (p * sum_xy - sum_x * sum_y) / denom;
+        let slope = (p * sum_xy - sum_x * sum_y) / divisor;
         let intercept = (sum_y - slope * sum_x) / p;
         result[period - 1] = slope * last_x + intercept;
 
         for i in period..len {
             let old_val = data[i - period];
             let new_val = data[i];
-            sum_xy += last_x * new_val - (sum_y - old_val);
+            sum_xy += sum_y - p * old_val;
             sum_y += new_val - old_val;
-            let slope = (p * sum_xy - sum_x * sum_y) / denom;
+            let slope = (p * sum_xy - sum_x * sum_y) / divisor;
             let intercept = (sum_y - slope * sum_x) / p;
             result[i] = slope * last_x + intercept;
         }
@@ -2630,9 +2638,10 @@ impl SimdOps {
         }
 
         let p = period as f64;
-        let sum_x = p * (p - 1.0) / 2.0;
-        let sum_x2 = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
-        let denom = p * sum_x2 - sum_x * sum_x;
+        let p1 = (period - 1) as f64;
+        let sum_x = p * p1 / 2.0;
+        let sum_x2 = p * p1 * (2.0 * p - 1.0) / 6.0;
+        let divisor = sum_x * sum_x - p * sum_x2;
 
         for val in result.iter_mut().take(period - 1) {
             *val = f64::NAN;
@@ -2646,11 +2655,13 @@ impl SimdOps {
             let mean_y = sum_y / p;
 
             let mut sum_xy: f64 = 0.0;
-            for (j, &val) in window.iter().enumerate() {
-                sum_xy += j as f64 * val;
+            let mut weight = p1;
+            for &val in window.iter() {
+                sum_xy += weight * val;
+                weight -= 1.0;
             }
 
-            let slope = (p * sum_xy - sum_x * sum_y) / denom;
+            let slope = (p * sum_xy - sum_x * sum_y) / divisor;
             let intercept = (sum_y - slope * sum_x) / p;
 
             let ss_tot: f64 = window.iter().map(|yi| (yi - mean_y).powi(2)).sum();

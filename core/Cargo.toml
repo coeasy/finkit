@@ -50,6 +50,14 @@ harness = false
 name = "factor_library_bench"
 harness = false
 
+# The in-process reference probe: links the C library and times it next to our
+# kernel in the same binary, so a gap can be attributed to code and not to
+# which process happened to run when. Declared explicitly because it needs the
+# `talib-c` feature to link.
+[[example]]
+name = "talib_gap_probe"
+required-features = ["talib-c"]
+
 [[bench]]
 name = "trend_bench"
 harness = false

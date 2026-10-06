@@ -7,6 +7,176 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Changed - 2026-10-06 (eighteenth pass — the question is "which recurrence shape", and it is measurable)
+
+The seventeenth pass left one open sentence: the twelve kernels sitting in a 0.82–0.98 band
+"probably share a cause, but nobody knows what it is yet". This pass answers it for the largest
+member of that band, retracts a claim the previous pass made about the report, and turns up a
+structural finding in the `LINREG` family.
+
+#### 1. The probe had to be repaired before it could be believed — again
+
+`core/examples/talib_gap_probe.rs` keeps the previous probe's shape (both sides in one binary,
+interleaved) and fixes the thing that made the previous one produce wrong verdicts: the timed
+region is now a **batch of 16 calls reporting the block mean**, not a single call taking the
+minimum of 100. A single call is 16–120 µs — the same order as `Instant::now()` itself, one
+interrupt, or one allocator slow path — so min-of-100 was measuring the noise floor.
+
+The null controls now run **first and last**, so the reader can see the harness's own drift:
+
+| null control | opening | closing | meaning |
+|---|---:|---:|---|
+| `line slope` (same code both sides, no allocation) | **1.008x** | **0.996x** | 1% resolution |
+| `aroon` (same code both sides, two buffers each) | 0.963x | 0.887x | 8 points apart |
+
+The second row is half the result already: **the same function measured twice, 8 points apart**,
+and the only difference between the two rows is the allocation shape.
+
+#### 2. The `public tier` section systematically understates implementations that allocate more
+
+This is the pass's most important negative result. The one reading that disagrees with Criterion is
+`adx_14`: interleaved, the probe says **0.742x** (ours 104.27 µs, C 77.40 µs); Criterion says
+**1.008x** (`FTA_ADX_14` 74.28 against `TALib_ADX_14` 74.87 µs). Both harnesses build the C side
+**identically** — a `vec![0.0; len]` and one call — so this is not a wrapper difference, and the
+null controls rule out drift.
+
+The difference is the allocation *shape*. Our side made three allocations per call where C makes
+one, and the interleaved rounds force the allocator to service two different free-list patterns
+alternately; Criterion's long run repeats one pattern and stays hot. **So `public tier` ratios are
+only meaningful when both sides can be made allocation-free**, and that limit is now written into
+the probe's module docs rather than only into a report.
+
+**Retraction.** The seventeenth pass recorded that `FTA_AROON_14`/`FTA_ADX_14` were paired against
+the wrong C column in `docs/BENCHMARK_REPORT.md`. They are not. `target/criterion/directional_vs_talib/`
+contains all four of `fta_adx_14`, `talib_adx_14`, `fta_aroon_14`, `talib_aroon_14`, and
+`aroon_14` reads 58.97 / 49.65 µs = 0.842x on the spot, matching the report's 0.84x. There is no
+mispairing; the "finding" was the third artefact of the biased probe.
+
+#### 3. `LINREG_SLOPE`: the cause is the weight orientation, not bounds checks and not the cast
+
+The seventeenth pass proved that bounds checks are **exactly neutral** here (index arithmetic
+against pointer cursors, same seeding, same allocation: 1.000x) and left the cause unknown. This
+pass isolates it:
+
+| comparison | ratio | reading |
+|---|---:|---|
+| `previous vs cast-hoisted` | **1.000x** | the in-loop `usize as f64` was already hoisted — **not** the cause |
+| `hoisted vs new-shipped` | **0.678x** | the other weight orientation is **1.47x faster** |
+| `new-shipped vs C` | **1.026x** | writing that recurrence in Rust **beats the C library** (1.048x on the previous run) |
+
+Not a gap closed — a reference passed. The public tier moves from 0.837x / 0.892x to
+**1.129x / 1.105x** (`line slope` / `line intercept`), and `linear_reg` from 1.714x to **2.038x**.
+
+Weighting the **oldest** bar with `period - 1` makes the per-bar advance
+
+```text
+sum_xy += sum_y - period * old          // one add into the accumulator
+```
+
+where the other orientation needs
+
+```text
+sum_xy += (period - 1) * new - (sum_y - old)   // two dependent subtractions
+```
+
+The same number, a different dependency graph and different rounding. `Divisor` is the negative of
+the old `denom` and the numerator's weights reverse with it, so the two sign flips cancel and the
+slope — and therefore the intercept and the emitted value — is unchanged: 469 of 10,000 slots
+differ by more than `1e-12`, **worst case 1.18e-12**, against a golden tolerance of `1e-9` and a
+TA-Lib numeric contract of `1e-8` — three orders of magnitude of headroom. The probe now prints both
+the count and the worst difference, so a count alone cannot be mistaken for agreement.
+
+#### 4. `MAX`/`MIN`: the block tables move from the heap to the stack
+
+The probe's two variants are identical statement for statement; the only difference is
+`vec![0.0; window]` against `[0.0; 64]`. `heap vs stack tables` = **0.870x**. A monotonic index
+ring was tried as a third tier and **rejected** at 0.213x — five times slower — and the rejection
+and its number are recorded in the source so nobody rebuilds it. `van_herk_extreme_into` is now a
+dispatcher over a shared `van_herk_body`, so the two tiers cannot drift.
+
+#### 5. Legacy: the `LINREG` recurrence exists **seven times** in this repository, in two orientations
+
+Five are production paths, two are benchmark-only. The finding that makes this more than
+housekeeping is row 3: **`linreg_angle` already used the correct orientation**, and said so in a
+comment ("Keep TA-Lib's sign and operation order for numerical parity"), with the per-bar update
+`sum_xy += sum_y - p * trailing` and a reseed loop using `let mut weight = (period - 1) as f64;
+weight -= 1.0` — character for character the shape this pass wrote into `linreg_slope`. The correct
+shape was already in the repository; the other three production kernels were the outliers. That
+source-level evidence is independent of the probe measurement above and points the same way.
+
+| # | location | path | was |
+|---|---|---|---|
+| 1 | `math/linear.rs::linreg_slope` | production (both formula backends) | old |
+| 2 | `math/linear.rs::linreg_intercept` | production | old |
+| 3 | `math/linear.rs::linreg_angle` | production | **already correct** |
+| 4 | `math/linear.rs::linreg` (`linear_reg` / `TSF`) | production | old |
+| 5 | `math/simd_ops.rs::linreg_slope_avx2` / `_scalar` | production | old |
+| 6 | `math/simd_ops.rs::linreg_avx2` / `linreg_scalar` | **benchmark-only** | old |
+| 7 | `formula/simd.rs::SimdOps::linear_reg{_slope,_intercept,,_angle,_r2}` | **benchmark-only** | old |
+
+All seven now share one orientation. **This is where the formula engine gains**: the tree path
+(`fn_linear_reg_slope`) and the plan path (`dispatch_linear_reg_slope_call`) both call
+`math::linear::linreg_slope`, so `LINEARREG`, `LINEARREG_SLOPE`, `LINEARREG_INTERCEPT`,
+`LINEARREG_ANGLE` and `TSF` all inherit it at once. `core/examples/plan_cache_probe.rs` grew
+`LINEARREG_SLOPE(CLOSE,14)` and `TSF(CLOSE,14)` rows so the end-to-end formula cost is on record.
+
+Row 6 is kept rather than deleted, and `simd_linreg` now carries a doc comment explaining why
+production does not use it: it exists to answer "is a vector kernel worth it for `LINREG`", and
+the answer is **no** — only the `period`-element priming scan vectorises (three chunks at the
+default period of 14) while the per-bar recurrence is scalar. Production using the scalar loop is a
+decision, not an oversight, and nothing in the tree said so before.
+
+#### 6. Legacy: the `ADX` recurrence exists three times, and two of them disagree on `NaN`
+
+`adx()` used to route through `compute_adx_family`, which **always** filled three columns
+(`+DI`, `-DI`, `ADX`) for a caller that wants one — three allocations and three write streams per
+call, two of them discarded, where `TA_ADX` allocates one.
+
+- `adx()` now goes through `compute_adx_only` (one column).
+- `compute_adx_family` is renamed `compute_di_pair` and loses the `adx` column and the whole ADX
+  smoothing recurrence with it. Its one consumer, `dx()`, wants only the `±DI` pair and
+  deliberately rebuilds `DX` from the two columns to match TA-Lib's rounding.
+  `AdxFamilyResult::adx` consequently became dead code — the `-D warnings` gate surfaced that
+  rather than letting it keep looking complete.
+- `di_pair_from_state` is extracted with `di_dx_from_state` layered on it: one source for the
+  three-way guard, and the pair-only path skips a division per bar.
+
+**Deliberately not changed, with the reason recorded**: `compute_adx_only` and the public
+`adx_into` are two hand-copies of the same recurrence that **differ on `NaN` OHLC input**.
+`adx_into` uses a local `true_range_fast` (`if gap > range`, NaN-propagating, matching TA-Lib C's
+`>`); `compute_adx_only` uses `utils::true_range`, whose `f64::max` **ignores NaN**. Both
+`streaming/trend/adx.rs` ("mirror `adx_into` step for step") and `math/kernels/compat.rs`
+(asserted equal by test) treat `adx_into` as canonical, so merging means moving `adx()`/`adxr()`
+toward TA-Lib — a **public numeric change** that needs its own NaN-covering golden test. It gets
+its own pass rather than riding along in this one.
+
+#### 7. A falsified comment, and a corrupted document
+
+- `aroon_into` claimed that per-bar bounds checks "are what §42.8 identified as the remaining gap
+  for the `AROON`/`ADX`/`MAX`/`MIN` family". The seventeenth pass falsified that (pointer cursors:
+  exactly 1.000x). The comment now states what the `zip` loop does and explicitly that the
+  remaining gap is *not* this.
+- `docs/talib-efficiency-deep-dive-zh.md` picked up 290 lines of "no content" changes. A
+  `git diff --ignore-all-space` showed only table separators and escaped underscores — an editor
+  markdown formatter, not a gate — and it had **damaged** the file: the `|` in `AVX2 Σ|x - mean|`
+  was read as a table separator and split the cell across four columns, `此` became `&#x6B64;`, and
+  ordered list items `2.`/`3.` were renumbered to `1.`/`2.`. Reverted. There is no prettier config
+  and `.git/hooks` holds only samples, so the source is an IDE plugin.
+
+#### 8. Environment-limited gates (reproduced on clean HEAD, so not caused by these changes)
+
+Two gates cannot run in this sandbox, and both were confirmed to fail identically with the working
+tree stashed:
+
+| gate | symptom | evidence |
+|---|---|---|
+| `cargo test -p finkit --doc` | 241 of 254 failed, `Failed to spawn rustc.exe: Os { code: 231 }` (`ERROR_PIPE_BUSY`) | **the same 241 on clean HEAD**; `--test-threads=2` changes nothing and the run finishes in 3.9 s, i.e. nothing was ever compiled |
+| `cargo check --workspace --all-targets` | `pyo3-ffi`'s build script: `failed to run the Python interpreter at python: (os error 231)` | `-j 1` and `PYO3_PYTHON=<real interpreter>` both fail the same way; `python` resolves through the sandbox `safe-bin` shim, which exhausts named pipes when spawning from a build script. Every change here is inside `core/` and touches no pyo3-dependent crate |
+
+Gates that did run and passed: `cargo fmt --all --check`; `RUSTFLAGS="-D unfulfilled_lint_expectations"
+cargo clippy`; all 22 `scripts/check_*.py`; and `cargo test -p finkit --release --tests` —
+**62 targets, 3965 passed, 0 failed**.
+
 ### Changed - 2026-10-06 (seventeenth pass — measured, reverted, and one number that did not move)
 
 This pass was asked to (a) stop comparing, (b) actually optimize what is slow, (c) fix the remaining

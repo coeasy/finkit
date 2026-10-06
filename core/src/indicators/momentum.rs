@@ -930,25 +930,44 @@ pub fn adx_from_di_into(
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn adx(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
-    let family = compute_adx_family(high, low, close, period)?;
-    Ok(Array1::from_vec(family.adx))
+    // `ADX` needs the smoothed DX chain and nothing else. Going through
+    // `compute_di_pair` would also materialise a full-length `+DI` and a
+    // full-length `-DI` and then drop both on return: three allocations and
+    // three write streams where one suffices. `compute_adx_only` runs the
+    // identical recurrence — same warm-up kernel, same operation order, same
+    // `di_dx_from_state` — and writes only the ADX column, so the values are
+    // unchanged. `dx()` is the one public entry point that genuinely wants the
+    // `±DI` pair, and it still calls the family.
+    Ok(Array1::from_vec(compute_adx_only(
+        high, low, close, period,
+    )?))
+}
+
+/// The `+DI` / `-DI` pair for one Wilder-smoothed DM/TR state.
+///
+/// The single source of the `tr ≈ 0` guard: the two callers used to carry
+/// separate hand-copied versions of it, which is exactly the kind of duplication
+/// that lets one copy drift from the other. [`di_dx_from_state`] layers the `DX`
+/// ratio on top.
+#[inline(always)]
+fn di_pair_from_state(plus_dm: f64, minus_dm: f64, tr: f64) -> (f64, f64) {
+    if tr.abs() <= 1e-15 {
+        return (0.0, 0.0);
+    }
+    (plus_dm / tr * 100.0, minus_dm / tr * 100.0)
 }
 
 /// The `+DI` / `-DI` / `DX` triple for one Wilder-smoothed DM/TR state.
 ///
-/// Shared by [`compute_adx_family`] (which needs all three) and
-/// [`compute_adx_only`] (which needs `DX` alone for ADXR). The two callers used
-/// to carry separate hand-copied implementations of the same three-way guard —
-/// `tr ≈ 0`, `±DI sum ≈ 0`, otherwise the ratio — which is exactly the kind of
-/// duplication that lets one copy drift from the other. The arithmetic and the
-/// `1e-15` thresholds are unchanged.
+/// Shared by [`compute_adx_only`] (which needs the `DX` chain) and
+/// [`compute_single_di`]-style callers. `DX` costs a division and a pair of
+/// subtractions per bar that [`compute_di_pair`] — and therefore `dx()`, which
+/// deliberately rebuilds `DX` from the two columns to match TA-Lib's rounding —
+/// has no use for, so that path calls [`di_pair_from_state`] directly. The
+/// arithmetic and the `1e-15` thresholds are unchanged.
 #[inline(always)]
 fn di_dx_from_state(plus_dm: f64, minus_dm: f64, tr: f64) -> (f64, f64, f64) {
-    if tr.abs() <= 1e-15 {
-        return (0.0, 0.0, 0.0);
-    }
-    let plus_di = plus_dm / tr * 100.0;
-    let minus_di = minus_dm / tr * 100.0;
+    let (plus_di, minus_di) = di_pair_from_state(plus_dm, minus_dm, tr);
     let sum = plus_di + minus_di;
     let dx = if sum.abs() > 1e-15 {
         (plus_di - minus_di).abs() / sum * 100.0
@@ -958,27 +977,30 @@ fn di_dx_from_state(plus_dm: f64, minus_dm: f64, tr: f64) -> (f64, f64, f64) {
     (plus_di, minus_di, dx)
 }
 
-/// Shared ADX family intermediate results.
+/// The `+DI` / `-DI` pair, computed in one pass over the bars.
 ///
-/// Computed once by [`compute_adx_family`] and consumed by the individual
-/// public indicator functions (`adx`, `adxr`, `plus_di`, `minus_di`, etc.).
-struct AdxFamilyResult {
+/// Produced by [`compute_di_pair`] and consumed by [`dx`], which needs both
+/// columns to rebuild `DX` from their ratio. Nothing else wants a pair: `adx`
+/// and `adxr` want the DX chain alone and go through [`compute_adx_only`], while
+/// `plus_di` and `minus_di` each want a single column and go through
+/// [`compute_single_di`].
+///
+/// This struct used to carry a third `adx` column as well, and its producer
+/// (then named `compute_adx_family`) wrote it on every call. Once `adx` stopped
+/// routing through the family, that column had no reader left — it was a
+/// full-length allocation, a full-length write stream, and the whole ADX
+/// smoothing recurrence, all discarded on return by the one remaining caller.
+struct DiPair {
     plus_di: Vec<f64>,
     minus_di: Vec<f64>,
-    adx: Vec<f64>,
 }
 
-/// Single-pass computation of +DM, -DM, TR, +DI, -DI, DX, and ADX.
+/// Single-pass computation of `+DM`, `-DM`, `TR`, `+DI` and `-DI`.
 ///
-/// All ADX-family indicators share the same True Range and Directional
-/// Movement values. This function computes them once and derives all
-/// intermediate series in a single scan, avoiding redundant TR/DM passes.
-fn compute_adx_family(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    period: usize,
-) -> Result<AdxFamilyResult> {
+/// The DI family shares the same True Range and Directional Movement values, so
+/// computing both columns in one scan avoids a redundant TR/DM pass that
+/// [`compute_single_di`] pays once per column.
+fn compute_di_pair(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<DiPair> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),
@@ -1026,29 +1048,24 @@ fn compute_adx_family(
     }
 
     // Only the warm-up prefix needs seeding. `validate_input` above already
-    // guaranteed `len >= 2*period`, so the `period..adx_start` loop and the
-    // `adx_start..len` loop between them write every `±DI` slot from `period`
-    // on; `adx` starts one slot earlier, at `adx_start - 1`. Three full-length
-    // NaN fills used to precede them — 240 KB of stores on a 10k-bar series that
-    // the loops overwrote immediately, and 24 MB on a million-bar one.
-    let adx_start = 2 * period;
-    let adx_warm = if adx_start < len { adx_start - 1 } else { len };
-    // Every slot is written below: the warm-up prefixes here, the rest by the
-    // two loops; when `adx_start == len` the whole ADX buffer is that prefix.
-    // See `utils::uninit_output`.
+    // guaranteed `len >= 2*period`, so the `period..dx_start` loop and the
+    // `dx_start..len` loop between them write every `±DI` slot from `period`
+    // on. Two full-length NaN fills used to precede them — 160 KB of stores on
+    // a 10k-bar series that the loops overwrote immediately, and 16 MB on a
+    // million-bar one. A third fill covered the `adx` column, which this
+    // function no longer produces.
+    let dx_start = 2 * period;
+    // Every slot from `period` on is written by the two loops below; this fill
+    // is the warm-up prefix. See `utils::uninit_output`.
     let mut plus_di_out = crate::utils::uninit_output(len);
     let mut minus_di_out = crate::utils::uninit_output(len);
-    let mut adx_out = crate::utils::uninit_output(len);
     plus_di_out[..period].fill(f64::NAN);
     minus_di_out[..period].fill(f64::NAN);
-    adx_out[..adx_warm].fill(f64::NAN);
 
-    // TA-Lib Phase 2: Wilder 平滑 + DX 累积（period 次迭代）。
-    // 每次：先 Wilder 平滑 DM/TR（prevDM -= prevDM/period; prevDM += newDM），
-    // 再计算 DI/DX 并累积 DX。
-    let mut dx_sum = 0.0;
-
-    for i in period..adx_start.min(len) {
+    // TA-Lib Phase 2: Wilder 平滑 DM/TR 迭代 `period` 次，把状态坐实，
+    // 之后交给稳态循环。每次：先 `prevDM -= prevDM/period; prevDM += newDM`，
+    // 再取 DI 两列。
+    for i in period..dx_start.min(len) {
         let up_move = high[i] - high[i - 1];
         let down_move = low[i - 1] - low[i];
         let tr = crate::utils::true_range(high[i], low[i], close[i - 1]);
@@ -1067,48 +1084,37 @@ fn compute_adx_family(
         smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
         smooth_tr = smooth_tr - smooth_tr / p + tr;
 
-        let (pdi, mdi, dx) = di_dx_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr);
+        let (pdi, mdi) = di_pair_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr);
         plus_di_out[i] = pdi;
         minus_di_out[i] = mdi;
-        dx_sum += dx;
     }
 
-    if adx_start < len {
-        // TA-Lib: prevADX = sumDX / period
-        let mut adx_val = dx_sum / p;
-        adx_out[adx_start - 1] = adx_val;
+    for i in dx_start..len {
+        let up_move = high[i] - high[i - 1];
+        let down_move = low[i - 1] - low[i];
+        let tr = crate::utils::true_range(high[i], low[i], close[i - 1]);
+        let pdm = if up_move > down_move && up_move > 0.0 {
+            up_move
+        } else {
+            0.0
+        };
+        let mdm = if down_move > up_move && down_move > 0.0 {
+            down_move
+        } else {
+            0.0
+        };
+        smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
+        smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
+        smooth_tr = smooth_tr - smooth_tr / p + tr;
 
-        for i in adx_start..len {
-            let up_move = high[i] - high[i - 1];
-            let down_move = low[i - 1] - low[i];
-            let tr = crate::utils::true_range(high[i], low[i], close[i - 1]);
-            let pdm = if up_move > down_move && up_move > 0.0 {
-                up_move
-            } else {
-                0.0
-            };
-            let mdm = if down_move > up_move && down_move > 0.0 {
-                down_move
-            } else {
-                0.0
-            };
-            smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
-            smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
-            smooth_tr = smooth_tr - smooth_tr / p + tr;
-
-            let (pdi, mdi, dx) = di_dx_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr);
-            plus_di_out[i] = pdi;
-            minus_di_out[i] = mdi;
-            // TA-Lib: prevADX = (prevADX * (period - 1) + DX) / period
-            adx_val = (adx_val * (p - 1.0) + dx) / p;
-            adx_out[i] = adx_val;
-        }
+        let (pdi, mdi) = di_pair_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr);
+        plus_di_out[i] = pdi;
+        minus_di_out[i] = mdi;
     }
 
-    Ok(AdxFamilyResult {
+    Ok(DiPair {
         plus_di: plus_di_out,
         minus_di: minus_di_out,
-        adx: adx_out,
     })
 }
 
@@ -1154,7 +1160,7 @@ fn compute_adx_only(high: &[f64], low: &[f64], close: &[f64], period: usize) -> 
         }
     }
 
-    // Only the warm-up prefix needs seeding; see `compute_adx_family`.
+    // Only the warm-up prefix needs seeding; see `compute_di_pair`.
     let adx_start = 2 * period;
     let adx_warm = if adx_start < len { adx_start - 1 } else { len };
     // Every slot is written below: the warm-up prefix here, the rest by the two
@@ -1652,9 +1658,12 @@ pub fn aroon_into(
     let mut highs = ExtremeTracker::<true>::new();
     let mut lows = ExtremeTracker::<false>::new();
     // The `zip` walk over all four slices keeps `high[i]`, `low[i]` and the two
-    // output slots free of per-bar bounds checks. Bounds checks on exactly
-    // these loads are what §42.8 identified as the remaining gap for the
-    // `AROON`/`ADX`/`MAX`/`MIN` family, where C has no equivalent.
+    // output slots free of per-bar bounds checks. That is a property of this
+    // loop, not an explanation of the gap to C: §43.5 tested the bounds-check
+    // hypothesis directly on `LINREG_SLOPE` (index arithmetic against pointer
+    // cursors, same seeding, same allocation) and measured it at exactly
+    // 1.000x — LLVM had already elided the checks. Whatever still separates the
+    // `AROON`/`ADX`/`MAX`/`MIN` band from C, it is not the checks.
     for (i, (((&high_bar, &low_bar), up_slot), down_slot)) in high
         .iter()
         .zip(low.iter())
@@ -2629,12 +2638,12 @@ pub fn dx(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Arr
     }
 
     if high.len() >= period * 2 {
-        let family = compute_adx_family(high, low, close, period)?;
+        let pair = compute_di_pair(high, low, close, period)?;
         let len = close.len();
         let mut dx_vals = init_output(len);
         for i in 0..len {
-            let pdi = family.plus_di[i];
-            let mdi = family.minus_di[i];
+            let pdi = pair.plus_di[i];
+            let mdi = pair.minus_di[i];
             if !pdi.is_nan() && !mdi.is_nan() {
                 let sum = pdi + mdi;
                 if sum.abs() > 1e-15 {
@@ -4389,8 +4398,24 @@ pub fn ultosc(
     Ok(output)
 }
 
-/// Zero-copy Ultimate Oscillator variant. The default periods use fixed-size
-/// rings so the hot path avoids three full-length scratch arrays.
+/// Ring length at or below which [`ultosc_into`] keeps the two term rings on the
+/// stack. 32 covers the 7/14/28 default, whose longest window needs
+/// `next_power_of_two(29) == 32` slots.
+const ULTOSC_STACK_RING: usize = 32;
+
+/// Zero-copy Ultimate Oscillator variant.
+///
+/// The three oscillator windows consume the *same* two per-bar terms
+/// (`close - min(low, prevClose)` and the true range); only the age of the value
+/// leaving each window differs. Storing each term once, in a ring as long as the
+/// longest window, and reading it back at three offsets costs two stores per bar
+/// where a ring per window costs six. TA-Lib 0.8.1's `ta_ULTOSC.c` is built the
+/// same way (`local_term_closeMinusTrueLow[32]` with one write cursor and three
+/// trailing cursors), so this is not a trick we are gambling on.
+///
+/// The rings are backed by the stack for the default periods and by the heap for
+/// anything longer; both tiers run the same [`ultosc_body`], so they cannot give
+/// two answers for the same periods.
 pub fn ultosc_into(
     high: &[f64],
     low: &[f64],
@@ -4415,141 +4440,156 @@ pub fn ultosc_into(
     let max_period = period1.max(period2).max(period3);
     validate_input(high.len(), max_period + 1)?;
     output.fill(f64::NAN);
-    if period1 == 7 && period2 == 14 && period3 == 28 {
-        return ultosc_default_7_14_28_into(high, low, close, output);
+
+    // One slot more than the longest window, rounded up to a power of two so the
+    // slot holding bar `i - k` is `(i - k) & (ring - 1)`. That removes both the
+    // modulo and the three wrap counters a ring of exactly `period3` needs.
+    let ring = (max_period + 1).next_power_of_two();
+    if ring <= ULTOSC_STACK_RING {
+        let mut bp_ring = [0.0f64; ULTOSC_STACK_RING];
+        let mut tr_ring = [0.0f64; ULTOSC_STACK_RING];
+        ultosc_body(
+            high,
+            low,
+            close,
+            period1,
+            period2,
+            period3,
+            output,
+            &mut bp_ring[..ring],
+            &mut tr_ring[..ring],
+        )
+    } else {
+        let mut bp_ring = vec![0.0f64; ring];
+        let mut tr_ring = vec![0.0f64; ring];
+        ultosc_body(
+            high,
+            low,
+            close,
+            period1,
+            period2,
+            period3,
+            output,
+            &mut bp_ring,
+            &mut tr_ring,
+        )
     }
-
-    let len = high.len();
-    let mut bp = vec![0.0; len];
-    let mut tr = vec![0.0; len];
-    simd_ops::simd_bp_tr(high, low, close, &mut bp, &mut tr);
-
-    let mut bp1_sum: f64 = bp[max_period + 1 - period1..=max_period].iter().sum();
-    let mut tr1_sum: f64 = tr[max_period + 1 - period1..=max_period].iter().sum();
-    let mut bp2_sum: f64 = bp[max_period + 1 - period2..=max_period].iter().sum();
-    let mut tr2_sum: f64 = tr[max_period + 1 - period2..=max_period].iter().sum();
-    let mut bp3_sum: f64 = bp[max_period + 1 - period3..=max_period].iter().sum();
-    let mut tr3_sum: f64 = tr[max_period + 1 - period3..=max_period].iter().sum();
-
-    let avg1 = if tr1_sum.abs() > 1e-15 {
-        bp1_sum / tr1_sum
-    } else {
-        0.0
-    };
-    let avg2 = if tr2_sum.abs() > 1e-15 {
-        bp2_sum / tr2_sum
-    } else {
-        0.0
-    };
-    let avg3 = if tr3_sum.abs() > 1e-15 {
-        bp3_sum / tr3_sum
-    } else {
-        0.0
-    };
-    output[max_period] = 100.0 * (4.0 * avg1 + 2.0 * avg2 + avg3) / 7.0;
-
-    for i in max_period + 1..len {
-        bp1_sum += bp[i] - bp[i - period1];
-        tr1_sum += tr[i] - tr[i - period1];
-        bp2_sum += bp[i] - bp[i - period2];
-        tr2_sum += tr[i] - tr[i - period2];
-        bp3_sum += bp[i] - bp[i - period3];
-        tr3_sum += tr[i] - tr[i - period3];
-
-        let avg1 = if tr1_sum.abs() > 1e-15 {
-            bp1_sum / tr1_sum
-        } else {
-            0.0
-        };
-        let avg2 = if tr2_sum.abs() > 1e-15 {
-            bp2_sum / tr2_sum
-        } else {
-            0.0
-        };
-        let avg3 = if tr3_sum.abs() > 1e-15 {
-            bp3_sum / tr3_sum
-        } else {
-            0.0
-        };
-
-        output[i] = 100.0 * (4.0 * avg1 + 2.0 * avg2 + avg3) / 7.0;
-    }
-
-    Ok(())
 }
 
+/// The one Ultimate Oscillator recurrence.
+///
+/// `bp_ring` and `tr_ring` are scratch storage, not inputs: each must be a power
+/// of two long and longer than the longest window, and their contents on entry
+/// are irrelevant. Callers choose the tier and this function is the only place
+/// the running totals and the empty-window reseed are written.
 #[inline(always)]
-fn ultosc_default_7_14_28_into(
+fn ultosc_body(
     high: &[f64],
     low: &[f64],
     close: &[f64],
+    period1: usize,
+    period2: usize,
+    period3: usize,
     output: &mut [f64],
+    bp_ring: &mut [f64],
+    tr_ring: &mut [f64],
 ) -> Result<()> {
-    let mut bp1 = [0.0; 7];
-    let mut tr1 = [0.0; 7];
-    let mut bp2 = [0.0; 14];
-    let mut tr2 = [0.0; 14];
-    let mut bp3 = [0.0; 28];
-    let mut tr3 = [0.0; 28];
+    let ring = bp_ring.len();
+    let mask = ring - 1;
+    debug_assert!(ring.is_power_of_two());
+    debug_assert!(tr_ring.len() == ring);
+    let max_period = period1.max(period2).max(period3);
+    debug_assert!(ring > max_period);
+
     let mut bp1_sum = 0.0;
     let mut tr1_sum = 0.0;
     let mut bp2_sum = 0.0;
     let mut tr2_sum = 0.0;
     let mut bp3_sum = 0.0;
     let mut tr3_sum = 0.0;
-    // Ring positions increment by exactly one per bar, so wrap counters replace
-    // three `%` divisions on the hot path.
-    let mut pos1 = 0usize;
-    let mut pos2 = 0usize;
-    let mut pos3 = 0usize;
+    // Consecutive bars whose two terms are both exactly zero. A running total
+    // cannot be asked whether its window is empty: the totals are maintained by
+    // add-then-subtract, so a window that has just emptied holds rounding residue
+    // of either sign rather than 0.0. Reseeding on this count is what lets the
+    // divides below be guarded exactly (`> 0.0`) instead of against a fixed band.
+    let mut null_run = 0usize;
+    // No window shorter than this can be empty, so one compare covers all three
+    // in the common case and the exact per-window checks only run once a run
+    // that long has actually happened. `ta_ULTOSC.c` nests its three checks for
+    // the same reason. Skipping a check when `null_run < shortest <= period` is
+    // sound: the check it skips would have been false anyway.
+    let shortest = period1.min(period2).min(period3);
 
-    for i in 0..high.len() {
-        let (bp, tr) = if i == 0 {
-            (0.0, 0.0)
+    // Bar 0 has no previous close, so both of its terms are 0.0 and the slot for
+    // it reads back as the 0.0 the ring was initialised with -- which is exactly
+    // what writing bar 0 would have stored. That is what lets an age older than
+    // the first bar (`i - period < 0`) read a slot that is still 0.0, so the
+    // warm-up needs no separate phase and no branch.
+    for i in 1..high.len() {
+        let write = i & mask;
+        let t1 = i.wrapping_sub(period1) & mask;
+        let t2 = i.wrapping_sub(period2) & mask;
+        let t3 = i.wrapping_sub(period3) & mask;
+
+        let true_low = low[i].min(close[i - 1]);
+        let bp = close[i] - true_low;
+        let tr = high[i].max(close[i - 1]) - true_low;
+
+        bp1_sum += bp - bp_ring[t1];
+        tr1_sum += tr - tr_ring[t1];
+        bp2_sum += bp - bp_ring[t2];
+        tr2_sum += tr - tr_ring[t2];
+        bp3_sum += bp - bp_ring[t3];
+        tr3_sum += tr - tr_ring[t3];
+        bp_ring[write] = bp;
+        tr_ring[write] = tr;
+
+        if bp == 0.0 && tr == 0.0 {
+            null_run += 1;
         } else {
-            let tl = low[i].min(close[i - 1]);
-            (close[i] - tl, high[i].max(close[i - 1]) - tl)
-        };
-        let idx1 = pos1;
-        let idx2 = pos2;
-        let idx3 = pos3;
-        bp1_sum += bp - bp1[idx1];
-        tr1_sum += tr - tr1[idx1];
-        bp2_sum += bp - bp2[idx2];
-        tr2_sum += tr - tr2[idx2];
-        bp3_sum += bp - bp3[idx3];
-        tr3_sum += tr - tr3[idx3];
-        bp1[idx1] = bp;
-        tr1[idx1] = tr;
-        bp2[idx2] = bp;
-        tr2[idx2] = tr;
-        bp3[idx3] = bp;
-        tr3[idx3] = tr;
-        pos1 += 1;
-        if pos1 == 7 {
-            pos1 = 0;
+            null_run = 0;
         }
-        pos2 += 1;
-        if pos2 == 14 {
-            pos2 = 0;
-        }
-        pos3 += 1;
-        if pos3 == 28 {
-            pos3 = 0;
+        if null_run >= shortest {
+            // A run at least as long as a window means every slot that window
+            // spans is exactly 0.0, so its residue can be dropped.
+            if null_run >= period1 {
+                bp1_sum = 0.0;
+                tr1_sum = 0.0;
+            }
+            if null_run >= period2 {
+                bp2_sum = 0.0;
+                tr2_sum = 0.0;
+            }
+            if null_run >= period3 {
+                bp3_sum = 0.0;
+                tr3_sum = 0.0;
+            }
         }
 
-        if i >= 28 {
-            let avg1 = if tr1_sum.abs() > 1e-15 {
+        if i >= max_period {
+            // `> 0.0`, not `abs() > 1e-15`. A true-range total carries the quote
+            // unit, so a fixed band zeroes the oscillator for an instrument
+            // quoted below it and -- because a just-emptied window holds residue
+            // rather than 0.0 -- divides one residue by another for an
+            // instrument quoted above it. TA-Lib 0.8.1 carries the same exact
+            // test and the reseed above; it added both for its issues #244 and
+            // #253, and the band this replaces is the shape #253 describes.
+            //
+            // The select form is deliberate: `if .. { a / b } else { 0.0 }`
+            // compiles to a divide plus a conditional move, where branching into
+            // a `value += ..` accumulator cost 28% when it was measured
+            // (`core/examples/talib_gap_probe.rs` section D).
+            let avg1 = if tr1_sum > 0.0 {
                 bp1_sum / tr1_sum
             } else {
                 0.0
             };
-            let avg2 = if tr2_sum.abs() > 1e-15 {
+            let avg2 = if tr2_sum > 0.0 {
                 bp2_sum / tr2_sum
             } else {
                 0.0
             };
-            let avg3 = if tr3_sum.abs() > 1e-15 {
+            let avg3 = if tr3_sum > 0.0 {
                 bp3_sum / tr3_sum
             } else {
                 0.0
@@ -5498,6 +5538,122 @@ mod tests {
         let result = ultosc(&high, &low, &close, 7, 14, 28).unwrap();
         assert_eq!(result.len(), 40);
         assert!(result.iter().skip(28).any(|&x| !x.is_nan()));
+    }
+
+    /// Independent O(n * period) evaluation of the Ultimate Oscillator
+    /// definition, sharing no code with the kernel. Both ring tiers are pinned
+    /// against this because a mask slip reads the wrong bar and the golden
+    /// fixtures only exercise the default periods.
+    fn ultosc_reference(
+        high: &[f64],
+        low: &[f64],
+        close: &[f64],
+        p1: usize,
+        p2: usize,
+        p3: usize,
+    ) -> Vec<f64> {
+        let n = high.len();
+        let max_period = p1.max(p2).max(p3);
+        let mut bp = vec![0.0; n];
+        let mut tr = vec![0.0; n];
+        for i in 1..n {
+            let true_low = low[i].min(close[i - 1]);
+            bp[i] = close[i] - true_low;
+            tr[i] = high[i].max(close[i - 1]) - true_low;
+        }
+        let mut out = vec![f64::NAN; n];
+        for i in max_period..n {
+            let mut acc = 0.0;
+            for (weight, period) in [(4.0, p1), (2.0, p2), (1.0, p3)] {
+                let start = i + 1 - period;
+                let b: f64 = bp[start..=i].iter().sum();
+                let t: f64 = tr[start..=i].iter().sum();
+                if t > 0.0 {
+                    acc += weight * (b / t);
+                }
+            }
+            out[i] = 100.0 * acc / 7.0;
+        }
+        out
+    }
+
+    #[test]
+    fn test_ultosc_matches_definition_on_both_ring_tiers() {
+        // 7/14/28 and 2/3/5 need a 32-slot ring (stack tier); 9/18/36 needs 64
+        // (heap tier). Both tiers must agree with the definition.
+        let n = 400;
+        let high: Vec<f64> = (0..n)
+            .map(|i| 100.0 + (i as f64 * 0.37).sin() * 3.0 + i as f64 * 0.01)
+            .collect();
+        let low: Vec<f64> = high.iter().map(|h| h - 1.5 - (h * 0.01).fract()).collect();
+        let close: Vec<f64> = high
+            .iter()
+            .zip(low.iter())
+            .map(|(h, l)| l + (h - l) * 0.6)
+            .collect();
+
+        for (p1, p2, p3) in [(7, 14, 28), (9, 18, 36), (2, 3, 5)] {
+            let expected = ultosc_reference(&high, &low, &close, p1, p2, p3);
+            let actual = ultosc(&high, &low, &close, p1, p2, p3).unwrap();
+            assert_eq!(actual.len(), n);
+            for i in 0..n {
+                let (e, a) = (expected[i], actual[i]);
+                if e.is_nan() {
+                    assert!(
+                        a.is_nan(),
+                        "({p1},{p2},{p3}) index {i}: expected NaN, got {a}"
+                    );
+                } else {
+                    assert!(
+                        (e - a).abs() < 1e-9,
+                        "({p1},{p2},{p3}) index {i}: definition {e} vs kernel {a}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_ultosc_empty_window_is_zero_not_accumulator_residue() {
+        // A window whose true ranges are all exactly zero makes every divide
+        // 0/0. The totals are maintained by add-then-subtract, so a window that
+        // has just emptied holds rounding residue of either sign rather than
+        // 0.0 -- which is why the guard has to be exact instead of a fixed band.
+        // The band form divided one residue by another and returned values far
+        // outside the oscillator's 0..100 range (TA-Lib's issues #244 / #253).
+        // Move first, so the accumulators are genuinely non-zero when the flat
+        // stretch arrives and the residue is not trivially zero.
+        let n = 80;
+        let mut high = vec![0.0; n];
+        let mut low = vec![0.0; n];
+        let mut close = vec![0.0; n];
+        let mut price = 100.0;
+        for i in 0..n {
+            if i < 30 {
+                price += if i % 2 == 0 { 0.7 } else { -0.4 };
+                high[i] = price + 1.1;
+                low[i] = price - 1.3;
+                close[i] = price + 0.2;
+            } else {
+                // H == L == previous close, so both terms are exactly zero.
+                high[i] = price;
+                low[i] = price;
+                close[i] = price;
+            }
+        }
+
+        let result = ultosc(&high, &low, &close, 7, 14, 28).unwrap();
+        for (i, &v) in result.iter().enumerate().skip(28) {
+            // A weighted average of three `bp / tr` ratios, each in 0..1.
+            assert!(
+                (0.0..=100.0).contains(&v),
+                "index {i} left the oscillator range: {v}"
+            );
+            if i >= 30 + 27 {
+                // The longest window now spans only flat bars.
+                assert_eq!(v, 0.0, "index {i} should be an exact zero, got {v}");
+            }
+        }
     }
 
     #[test]

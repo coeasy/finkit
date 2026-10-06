@@ -171,55 +171,59 @@ pub fn linreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
     }
     output[..warm_start + period - 1].fill(f64::NAN);
     let p = period as f64;
-    // For x = 0..period-1: sum_x = p*(p-1)/2, sum_x2 = p*(p-1)*(2p-1)/6
-    let sum_x = p * (p - 1.0) / 2.0;
-    let sum_x2 = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
-    let denom = p * sum_x2 - sum_x * sum_x;
+    let p1 = (period - 1) as f64;
+    // Weights run oldest-first (the oldest bar of the window carries
+    // `period - 1`), which is `simd_ops::linreg_slope_avx2`'s orientation and
+    // TA-Lib's. See that kernel for why the direction is load-bearing rather
+    // than cosmetic; this tail has to match it or the two paths stop agreeing.
+    let sum_x = p * p1 / 2.0;
+    let sum_x2 = p * p1 * (2.0 * p - 1.0) / 6.0;
+    let divisor = sum_x * sum_x - p * sum_x2;
     // Hoisted: the per-slot regression below is throughput-bound, and `divsd`
     // costs ~4 cycles of throughput on its own port. A reciprocal multiply
     // costs one extra rounding, which is far inside this family's 1e-8
     // golden tolerance.
-    let inv_denom = 1.0 / denom;
+    let inv_divisor = 1.0 / divisor;
 
     let mut sum_y = 0.0;
     let mut sum_xy = 0.0;
+    let mut weight = p1;
+    for &val in input[warm_start..warm_start + period].iter() {
+        sum_y += val;
+        sum_xy += weight * val;
+        weight -= 1.0;
+    }
     let reseed_interval = 32 * period;
     let mut since_reseed = 0usize;
-    for (j, &val) in input[warm_start..warm_start + period].iter().enumerate() {
-        sum_y += val;
-        sum_xy += j as f64 * val;
-    }
-    output[warm_start + period - 1] = (p * sum_xy - sum_x * sum_y) * inv_denom;
+    output[warm_start + period - 1] = (p * sum_xy - sum_x * sum_y) * inv_divisor;
 
-    // Zipped iteration instead of index arithmetic. `input[i]`,
-    // `input[i - period]` and `output[i]` each carried a bounds check, and
-    // TA-Lib's C loop — which runs the same dependency chain, one division per
-    // bar, *and* an extra `fabs` pair for its drift guard — still beat this
-    // kernel. The three cursors below are in bounds by construction, so the
-    // per-bar checks go away without touching the arithmetic.
+    // Three cursors instead of index arithmetic: `input[i]`, `input[i - period]`
+    // and `output[i]` each carried a bounds check, and all three are in bounds by
+    // construction here.
     let start = warm_start + period;
     let new_vals = &input[start..];
     let old_vals = &input[warm_start..len - period];
     let out_tail = &mut output[start..];
-    let p1 = (period - 1) as f64;
     let mut index = start;
     for ((out, &new_val), &old_val) in out_tail
         .iter_mut()
         .zip(new_vals.iter())
         .zip(old_vals.iter())
     {
-        sum_xy += p1 * new_val - (sum_y - old_val);
+        sum_xy += sum_y - p * old_val;
         sum_y += new_val - old_val;
-        *out = (p * sum_xy - sum_x * sum_y) * inv_denom;
+        *out = (p * sum_xy - sum_x * sum_y) * inv_divisor;
         since_reseed += 1;
         if since_reseed == reseed_interval {
             if index + 1 < len {
                 let reseed_at = index + 1 - period;
                 sum_y = 0.0;
                 sum_xy = 0.0;
-                for (j, &value) in input[reseed_at..=index].iter().enumerate() {
+                let mut weight = p1;
+                for &value in &input[reseed_at..=index] {
                     sum_y += value;
-                    sum_xy += j as f64 * value;
+                    sum_xy += weight * value;
+                    weight -= 1.0;
                 }
             }
             since_reseed = 0;
@@ -274,41 +278,46 @@ pub fn linreg_intercept(input: &[f64], period: usize) -> Result<Array1<f64>> {
     }
     output[..warm_start + period - 1].fill(f64::NAN);
     let p = period as f64;
-    let sum_x = p * (p - 1.0) / 2.0;
-    let sum_x2 = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
-    let denom = p * sum_x2 - sum_x * sum_x;
+    let p1 = (period - 1) as f64;
+    // Same oldest-first weight orientation as [`linreg_slope`] — the intercept
+    // needs the slope, and the slope is computed with `sum_xy`, so the two
+    // kernels have to accumulate it the same way.
+    let sum_x = p * p1 / 2.0;
+    let sum_x2 = p * p1 * (2.0 * p - 1.0) / 6.0;
+    let divisor = sum_x * sum_x - p * sum_x2;
     // Hoisted: the per-slot regression below is throughput-bound, and `divsd`
     // costs ~4 cycles of throughput on its own port. A reciprocal multiply
     // costs one extra rounding, which is far inside this family's 1e-8
     // golden tolerance.
-    let inv_denom = 1.0 / denom;
+    let inv_divisor = 1.0 / divisor;
     // The intercept divides by the window length on every slot as well. Same
-    // reasoning as `inv_denom`: `1/period` is loop-invariant and the reciprocal
+    // reasoning as `inv_divisor`: `1/period` is loop-invariant and the reciprocal
     // multiply is one rounding, not a divider round trip.
     let inv_p = 1.0 / p;
 
     let mut sum_y = 0.0;
     let mut sum_xy = 0.0;
-    for (j, &val) in input[warm_start..warm_start + period].iter().enumerate() {
+    let mut weight = p1;
+    for &val in input[warm_start..warm_start + period].iter() {
         sum_y += val;
-        sum_xy += j as f64 * val;
+        sum_xy += weight * val;
+        weight -= 1.0;
     }
-    let slope = (p * sum_xy - sum_x * sum_y) * inv_denom;
+    let slope = (p * sum_xy - sum_x * sum_y) * inv_divisor;
     output[warm_start + period - 1] = (sum_y - slope * sum_x) * inv_p;
 
     let start = warm_start + period;
     let new_vals = &input[start..];
     let old_vals = &input[warm_start..len - period];
     let out_tail = &mut output[start..];
-    let p1 = (period - 1) as f64;
     for ((out, &new_val), &old_val) in out_tail
         .iter_mut()
         .zip(new_vals.iter())
         .zip(old_vals.iter())
     {
-        sum_xy += p1 * new_val - (sum_y - old_val);
+        sum_xy += sum_y - p * old_val;
         sum_y += new_val - old_val;
-        let slope = (p * sum_xy - sum_x * sum_y) * inv_denom;
+        let slope = (p * sum_xy - sum_x * sum_y) * inv_divisor;
         *out = (sum_y - slope * sum_x) * inv_p;
     }
 
@@ -355,27 +364,41 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
         return Ok(output);
     }
     let p = period as f64;
-    let sum_x = p * (p - 1.0) / 2.0;
-    let sum_x2 = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
-    let denom = p * sum_x2 - sum_x * sum_x;
+    let last_x = (period - 1) as f64;
+    // Weights run **oldest first** (the oldest bar of the window carries
+    // `period - 1`), matching [`linreg_slope`], [`linreg_intercept`],
+    // [`linreg_angle`] and TA-Lib. The per-bar advance in this orientation is
+    //
+    //     sum_xy += sum_y - period * old
+    //
+    // where the other orientation needs `(period-1)*new - (sum_y - old)`: same
+    // number, but two dependent subtractions between `sum_y` and the
+    // accumulator instead of one addition. See [`linreg_slope`] for the
+    // measurement. `divisor` is the negative of the other orientation's
+    // denominator and the numerator's weights reverse with it, so the slope —
+    // and therefore the intercept and the emitted value — are unchanged.
+    let sum_x = p * last_x / 2.0;
+    let sum_x2 = p * last_x * (2.0 * p - 1.0) / 6.0;
+    let divisor = sum_x * sum_x - p * sum_x2;
     // Hoisted: the per-slot regression below is throughput-bound, and `divsd`
     // costs ~4 cycles of throughput on its own port. A reciprocal multiply
     // costs one extra rounding, which is far inside this family's 1e-8
     // golden tolerance.
-    let inv_denom = 1.0 / denom;
+    let inv_divisor = 1.0 / divisor;
     // Same loop-invariant reciprocal as [`linreg_intercept`]: the per-slot
     // intercept is divided by the window length, and a reciprocal multiply is
     // one rounding instead of a divider round trip.
     let inv_p = 1.0 / p;
-    let last_x = (period - 1) as f64;
 
     let mut sum_y = 0.0;
     let mut sum_xy = 0.0;
-    for (j, &val) in input[warm_start..warm_start + period].iter().enumerate() {
+    let mut weight = last_x;
+    for &val in input[warm_start..warm_start + period].iter() {
         sum_y += val;
-        sum_xy += j as f64 * val;
+        sum_xy += weight * val;
+        weight -= 1.0;
     }
-    let slope = (p * sum_xy - sum_x * sum_y) * inv_denom;
+    let slope = (p * sum_xy - sum_x * sum_y) * inv_divisor;
     let intercept = (sum_y - slope * sum_x) * inv_p;
     output[warm_start + period - 1] = slope * last_x + intercept;
 
@@ -386,9 +409,9 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
     // skipping its iterator gets the same bound-free cursor.
     let out_tail = output.iter_mut().skip(start);
     for ((out, &new_val), &old_val) in out_tail.zip(new_vals.iter()).zip(old_vals.iter()) {
-        sum_xy += last_x * new_val - (sum_y - old_val);
+        sum_xy += sum_y - p * old_val;
         sum_y += new_val - old_val;
-        let slope = (p * sum_xy - sum_x * sum_y) * inv_denom;
+        let slope = (p * sum_xy - sum_x * sum_y) * inv_divisor;
         let intercept = (sum_y - slope * sum_x) * inv_p;
         *out = slope * last_x + intercept;
     }

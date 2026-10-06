@@ -394,6 +394,26 @@ pub fn kurtosis(data: &[f64]) -> Result<f64> {
 /// thing that selects a path.
 const EXTREMA_CACHE_LIMIT: usize = 512;
 
+/// Window size at or below which the block kernel's two tables live on the
+/// stack instead of the heap.
+///
+/// The block algorithm needs a suffix table and a prefix table, each `window`
+/// entries, and both are written and read strictly inside one call. Every
+/// catalogue window is small, so a fixed stack buffer covers the common case
+/// and removes two allocator round trips per call.
+///
+/// Measured, not assumed. `core/examples/talib_gap_probe.rs` section B duels
+/// the two tiers directly — same body, `vec![0.0; window]` against
+/// `[0.0; 64]` — at window 30 over 10,000 bars and reads the stack tier at
+/// **0.870x the heap tier's time**. The same section also tried a monotonic
+/// index ring as a third tier and **rejected** it at 0.213x: each bar pays a
+/// data-dependent inner loop that the block kernel amortises away. Do not
+/// rebuild the ring.
+///
+/// The cap is a table-size choice, not a correctness one: the heap tier is the
+/// same body over a `window`-sized allocation.
+const VAN_HERK_STACK_TABLES: usize = 64;
+
 /// Index of the first finite bar, `None` when the series holds no finite bar.
 ///
 /// The warm-up contract of the extrema family is "the window must be fully
@@ -558,12 +578,45 @@ pub(crate) fn van_herk_extreme_into<const WANT_MAX: bool>(
         return;
     }
 
-    let mut suffix = vec![0.0f64; window];
-    let mut prefix = vec![0.0f64; window];
+    // See `VAN_HERK_STACK_TABLES`: every catalogue window fits the stack tier,
+    // so the heap tier is the long tail rather than the common case.
+    if window <= VAN_HERK_STACK_TABLES {
+        let mut suffix = [0.0f64; VAN_HERK_STACK_TABLES];
+        let mut prefix = [0.0f64; VAN_HERK_STACK_TABLES];
+        van_herk_body::<WANT_MAX>(data, window, output, &mut suffix, &mut prefix);
+    } else {
+        let mut suffix = vec![0.0f64; window];
+        let mut prefix = vec![0.0f64; window];
+        van_herk_body::<WANT_MAX>(data, window, output, &mut suffix, &mut prefix);
+    }
+}
+
+/// The block body, shared by both table tiers.
+///
+/// Split out so the stack and heap tiers cannot drift: they differ only in
+/// where `suffix`/`prefix` come from, and the measured win (0.870x) is produced
+/// by the storage alone — the probe's two variants are otherwise identical
+/// statement for statement.
+fn van_herk_body<const WANT_MAX: bool>(
+    data: &[f64],
+    window: usize,
+    output: &mut [f64],
+    suffix: &mut [f64],
+    prefix: &mut [f64],
+) {
+    let len = data.len();
+    debug_assert!(
+        suffix.len() >= window && prefix.len() >= window,
+        "block tables must hold at least `window` entries"
+    );
 
     // SAFETY: every indexed read stays within `data` (offsets are bounded by
     // `len` checks in the loop) and every write stays within `output`, which
-    // has the same length; both slices outlive the loop.
+    // has the same length; both slices outlive the loop. `suffix[o]` and
+    // `prefix[o]` are indexed with `o < window`, and both tables hold at least
+    // `window` entries — the assertion above covers the stack tier, where the
+    // buffer is `VAN_HERK_STACK_TABLES` long, and the heap tier allocates
+    // exactly `window`.
     let source = data.as_ptr();
     let target = output.as_mut_ptr();
 

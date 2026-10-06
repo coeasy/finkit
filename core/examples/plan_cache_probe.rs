@@ -85,6 +85,15 @@ fn main() {
             "COMPOUND",
             "MA5:=MA(CLOSE,5); MA20:=MA(CLOSE,20); OUT: MA5-MA20;",
         ),
+        // The linear-regression family is here because it is the one place
+        // where both formula backends delegate to the *same* kernel
+        // (`math::linear::linreg*`) rather than carrying their own copy: the
+        // tree path through `fn_linear_reg_slope`, the plan path through
+        // `dispatch_linear_reg_slope_call`. A change to that kernel therefore
+        // shows up end-to-end here, in both backends at once, and these two
+        // rows are the record of it.
+        ("LINREG_SLOPE", "LINEARREG_SLOPE(CLOSE,14)"),
+        ("TSF", "TSF(CLOSE,14)"),
     ];
 
     for &len in &[250usize, 2_000, 10_000] {
