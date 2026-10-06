@@ -209,6 +209,35 @@ also benefits the cached rolling-extreme path (`MAX`/`MIN` for NaN-bearing input
 `rescan_extreme_window`.
 
 
+### Changed - 2026-10-06 (twenty-second pass — adxr single-buffer public path, ultosc prefix-fill)
+
+Both candidates named at the end of the twenty-first pass, handled; kernel
+algorithms still untouched.
+
+- `adxr` public fn: was `compute_adx_only` (its own Vec) plus a full-length
+  `vec![NAN; len]` and a forward walk - two allocations and one full fill.
+  Now `uninit_output` + `adxr_into` (materialize ADX in place, walk
+  backwards so lower-index ADX history survives until consumed). Output is
+  bit-identical: first ADXR value still lands at `3 * period - 2`, and slots
+  without both operands finite go from implicit NaN retention to explicit
+  NaN stores. Bonus: `adx_into` is the raw-pointer fast path, dropping the
+  bounds-checked indexed access of `compute_adx_only`. `compute_adx_only`
+  keeps its one remaining caller (`adx`), so it is not dead code.
+- `ultosc_into`: filled the whole output with NaN, but `ultosc_body` writes
+  every slot from `max_period` onward - only `[0..max_period)` needs the
+  fill (TA-Lib writes the prefix only). Correct by construction, no
+  regression; the saving sits below the warm-baseline noise floor.
+
+Warm-baseline A/B (controls var -1.5% / max_30 -5..6% noise band):
+**adxr ours -18.6% net (91.3 -> 74.4 µs), now 1.07x vs C in-session**
+(0.90x -> ahead of TA-Lib); ultosc +0.4% (noise). The remaining ~10 µs
+ultosc gap (70.0 vs 59.7 µs @ 10k) lives inside the ring-buffer kernel -
+six ring reads, six accumulator chains, null-run bookkeeping and three
+guarded divides per bar - and needs a dedicated probe before the kernel
+is touched (probe-first discipline).
+
+Tests: 3054 lib + 53 golden parity + 28 differential, all pass.
+
 ### Changed - 2026-10-06 (twenty-first pass — the §C public-path allocation shape is real, and two indicators reached parity because of it)
 
 The twentieth pass ended with a claim: the remaining 15 ⚠️ pairs are "public-path allocation  

@@ -3112,22 +3112,19 @@ pub fn trix_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()>
 /// assert_eq!(result.len(), 20);
 /// ```
 pub fn adxr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
-    let adx_vals = compute_adx_only(high, low, close, period)?;
-    let len = adx_vals.len();
-    let mut output = vec![f64::NAN; len];
-
-    for i in period..len {
-        let cur = adx_vals[i];
-        // TA-Lib's ADXR consumes the internal ADX value one bar after the
-        // public ADX lookback.  This is why the first ADXR value appears at
-        // 3 * period - 2 rather than 3 * period - 1.
-        let prev = adx_vals[i + 1 - period];
-        if !cur.is_nan() && !prev.is_nan() {
-            output[i] = (cur + prev) * 0.5;
-        }
-    }
-
-    Ok(Array1::from_vec(output))
+    // Single buffer end to end: `adxr_into` materializes ADX in place and
+    // then walks backwards, so the previous public path's extra full-length
+    // `vec![NAN; len]` allocation (on top of `compute_adx_only`'s own Vec)
+    // bought nothing.
+    let mut output = Array1::from(crate::utils::uninit_output(high.len()));
+    adxr_into(
+        high,
+        low,
+        close,
+        period,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    )?;
+    Ok(output)
 }
 
 /// Write ADXR directly into a caller-owned buffer.
@@ -4442,7 +4439,10 @@ pub fn ultosc_into(
     }
     let max_period = period1.max(period2).max(period3);
     validate_input(high.len(), max_period + 1)?;
-    output.fill(f64::NAN);
+    // Only the warm-up prefix stays NaN: `ultosc_body` writes every slot from
+    // `max_period` onward, so a full-length fill would rewrite ~len slots the
+    // loop immediately overwrites (TA-Lib's own path writes the prefix only).
+    output[..max_period.min(high.len())].fill(f64::NAN);
 
     // One slot more than the longest window, rounded up to a power of two so the
     // slot holding bar `i - k` is `(i - k) & (ring - 1)`. That removes both the
