@@ -48,7 +48,9 @@ pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<Ar
     }
     validate_input(high.len(), 1)?;
 
-    let mut output = Array1::<f64>::zeros(high.len());
+    // `ad_into` writes every slot (cumulative AD, no warm-up), so an
+    // uninitialized buffer avoids the full zero-fill pass `zeros` would add.
+    let mut output = Array1::from(crate::utils::uninit_output(high.len()));
     crate::math::volume_kernels::ad_into(
         high,
         low,

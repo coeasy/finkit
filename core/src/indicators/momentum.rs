@@ -4385,7 +4385,10 @@ pub fn ultosc(
     validate_input(high.len(), max_period + 1)?;
 
     let len = high.len();
-    let mut output = init_output(len);
+    // Allocate uninitialized: `ultosc_into` fills the warm-up prefix with NaN
+    // itself, so the `init_output` zeros + SIMD-NaN double fill here would be
+    // two wasted full-length passes before compute (TA-Lib does one).
+    let mut output = Array1::from(crate::utils::uninit_output(len));
     ultosc_into(
         high,
         low,

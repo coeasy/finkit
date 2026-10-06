@@ -209,6 +209,52 @@ also benefits the cached rolling-extreme path (`MAX`/`MIN` for NaN-bearing input
 `rescan_extreme_window`.
 
 
+### Changed - 2026-10-06 (twenty-first pass — the §C public-path allocation shape is real, and two indicators reached parity because of it)
+
+The twentieth pass ended with a claim: the remaining 15 ⚠️ pairs are "public-path allocation  
+shape, not kernel gaps". That claim was a hypothesis. This pass converted three of them into  
+code, with a warm-baseline A/B protocol that survives the drift the cold protocol suffered.
+
+#### 1. Three public-path changes (kernels untouched)
+
+- `acos`/`asin` (`math_transform.rs`) — dropped the separate serial O(n) domain pre-scan. New  
+  `map_finite_checked` helper: one parallel `map_expensive` pass (rayon ≥8192) plus one  
+  `simd_first_non_finite` SIMD post-scan. Out-of-domain inputs map to NaN outputs, so scanning  
+  the result is equivalent to scanning the domain, and position preservation keeps the  
+  "first offending index" error contract bit-identical.
+- `ultosc` (public fn in `momentum.rs`) — `init_output` (zeros + SIMD NaN) followed by  
+  `ultosc_into`'s own `output.fill(NAN)` was three full-length fill passes before compute;  
+  the public fn now hands `_into` an uninitialized buffer and the single `_into` fill remains.  
+  The `_into` contract for external callers is unchanged.
+- `ad` (`volume.rs`) — `Array1::zeros` was a full memset in front of a kernel that writes every  
+  slot (cumulative AD has no warm-up); now `uninit_output`.
+
+#### 2. The measuring protocol had to be fixed first — again
+
+A cold Criterion baseline (first run after a fresh `talib-c` build) made the *unchanged*  
+controls (`var`, `max_30`) "improve" 14–15% — pure drift, the same artifact class the  
+eighteenth pass documented for allocation shape. The comparison below uses a warm baseline  
+(`--save-baseline warm_old` on the stashed tree, then `--baseline warm_old` on the restored  
+tree). Under that protocol the controls move ±3%, which is the noise band.
+
+| pair                            | ours net vs same-source C drift | same-session ratio        |
+| ------------------------------- | ------------------------------- | ------------------------- |
+| `ad`                            | **−22.5%** (far outside band)   | 0.76× → **0.99×**         |
+| `acos`                          | **−4.0%** (just outside band)   | 0.95× → **0.995×**        |
+| `ultosc`                        | −3.1% (at the band edge)        | 0.82× → 0.85×             |
+| `var` (control, untouched)      | +1.6%                           | unchanged ✓               |
+| `max_30` (control, untouched)   | −3.0%                           | unchanged ✓               |
+
+`ad`'s −22.5% matches theory exactly: the removed 10k-element zero fill (~80 KB memset) is  
+~4 µs against a 12–16 µs function. Correctness: 3054 lib tests, 53 golden parity tests and  
+28 formula differential tests pass unchanged.
+
+So "§C allocation shape" was not a variance excuse: two of the 15 ⚠️ reached parity from the  
+API layer alone, and the batch report refresh (pending) will move them. Remaining candidates  
+in the same family: `adxr` (two public allocations, single-buffer-able via `adxr_into` once  
+`compute_adx_only` loses its last caller) and `ultosc_body`'s ring-buffer internals.
+
+
 ### Changed - 2026-10-06 (seventeenth pass — measured, reverted, and one number that did not move)
 
 This pass was asked to (a) stop comparing, (b) actually optimize what is slow, (c) fix the remaining  

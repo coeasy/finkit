@@ -34,6 +34,27 @@ where
     data.iter().map(|&value| function(value)).collect()
 }
 
+/// Element-wise transform whose out-of-domain/non-finite input maps to a
+/// non-finite *output* (e.g. `acos`/`asin` outside `[-1, 1]`). The domain is
+/// validated by scanning the computed result with a SIMD pass and rejecting the
+/// first offending bar — one parallel compute pass plus one SIMD scan, replacing
+/// the separate serial pre-scan the naive form performs. The reported index
+/// equals the first out-of-domain input because the map is position preserving.
+#[inline]
+fn map_finite_checked<F>(data: &[f64], function: F, constraint: &'static str) -> Result<Array1<f64>>
+where
+    F: Fn(f64) -> f64 + Sync + Send,
+{
+    let output = map_expensive(data, function);
+    if let Some(index) = simd_ops::simd_first_non_finite(&output) {
+        return Err(TaError::InvalidParameter {
+            name: format!("data[{}]", index),
+            constraint: constraint.to_string(),
+        });
+    }
+    Ok(Array1::from_vec(output))
+}
+
 /// Element-wise rounding transform (`FLOOR` / `CEIL`) through a SIMD kernel.
 ///
 /// `f64::floor` and `f64::ceil` are out-of-line `libm` calls on the baseline
@@ -103,18 +124,7 @@ where
 /// ```
 pub fn acos(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    for (i, &x) in data.iter().enumerate() {
-        if !x.is_finite() || x < -1.0 || x > 1.0 {
-            return Err(TaError::InvalidParameter {
-                name: format!("data[{}]", i),
-                constraint: "value in [-1, 1]".to_string(),
-            });
-        }
-    }
-    // The binding enables the rayon feature for large independent math
-    // transforms; the helper keeps the small-input path allocation-light.
-    let output = map_expensive(data, f64::acos);
-    Ok(Array1::from_vec(output))
+    map_finite_checked(data, f64::acos, "value in [-1, 1] and finite")
 }
 
 /// 反正弦 (Vector Arc Sine)
@@ -140,16 +150,7 @@ pub fn acos(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn asin(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    for (i, &x) in data.iter().enumerate() {
-        if !x.is_finite() || x < -1.0 || x > 1.0 {
-            return Err(TaError::InvalidParameter {
-                name: format!("data[{}]", i),
-                constraint: "value in [-1, 1]".to_string(),
-            });
-        }
-    }
-    let output = map_expensive(data, f64::asin);
-    Ok(Array1::from_vec(output))
+    map_finite_checked(data, f64::asin, "value in [-1, 1] and finite")
 }
 
 /// 反正切 (Vector Arc Tangent)
