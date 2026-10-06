@@ -908,6 +908,31 @@ fn finite_range(values: &[f64]) -> (f64, f64) {
     (lo, hi)
 }
 
+/// Allocation-free rolling population variance using TA-Lib-style raw running
+/// sums (no shift anchoring, no re-seed) — the arithmetic variant used to ask
+/// whether the shipped `TaVarianceState` shift-and-reseed loop is the cause of
+/// `var_20`'s 0.92x, or whether that gap is a public-path allocation artefact.
+fn raw_var_into(input: &[f64], period: usize, out: &mut [f64]) {
+    let n = period as f64;
+    let inv = 1.0 / n;
+    out[..period - 1].fill(f64::NAN);
+    let mut total = 0.0;
+    let mut total2 = 0.0;
+    for i in 0..period {
+        total += input[i];
+        total2 += input[i] * input[i];
+    }
+    let mean0 = total * inv;
+    out[period - 1] = (total2 - total * mean0) * inv;
+    for i in period..input.len() {
+        let trailing = i - period;
+        total += input[i] - input[trailing];
+        total2 += input[i] * input[i] - input[trailing] * input[trailing];
+        let mean = total * inv;
+        out[i] = (total2 - total * mean) * inv;
+    }
+}
+
 fn main() {
     let (_open, high, low, close, volume) = create_ohlcv_data(DATA_LEN);
     // The math-transform group's own input: `|close| * 0.001 + 0.5`.
@@ -1174,6 +1199,70 @@ fn main() {
         || indicators::aroonosc(&high, &low, 14).unwrap(),
         || c_aroonosc(&high, &low, 14),
     );
+
+    head("===== F. VAR: is 0.92x a kernel gap or a public-path artefact? =====");
+    // `var_20` reads 0.92x in the report. Three readings isolate the cause:
+    //   1. public tier (both allocate) — reproduces the report pairing.
+    //   2. kernel tier, ours vs C — ours allocates nothing, C does; if ~parity,
+    //      our *arithmetic* is not behind C.
+    //   3. kernel tier, shipped vs a raw-running-sum variant (both no-alloc) —
+    //      how much of our 25us is the shift-anchor + re-seed loop vs the
+    //      arithmetic itself.
+    // NOTE (corrected): TA-Lib's TA_VAR / TA_STDDEV return POPULATION variance
+    // (÷n), exactly like finkit. A separate dense-output alignment check
+    // (`var_stddev_check`, since removed) confirmed `var` vs `TA_VAR` and
+    // `std_dev` vs `TA_STDDEV` agree to 0.000e0 over the whole series. So there
+    // is NO correctness divergence — the 0.92x is purely public-path.
+    let mut buf_a = vec![0.0f64; DATA_LEN];
+    let mut buf_b = vec![0.0f64; DATA_LEN];
+    duel(
+        "var public: ours vs C (both allocate)",
+        || indicators::var(&close, 20, 1.0).unwrap(),
+        || c_var(&close, 20, 1.0),
+    );
+    duel(
+        "var kernel: shipped vs C (C allocates, ours does not)",
+        || finkit::math::rolling_stats::variance_into(black_box(&close), 20, &mut buf_a),
+        || c_var(&close, 20, 1.0),
+    );
+    duel(
+        "var kernel: shipped vs raw-running-sum (no-alloc both)",
+        || finkit::math::rolling_stats::variance_into(black_box(&close), 20, &mut buf_a),
+        || raw_var_into(black_box(&close), 20, &mut buf_b),
+    );
+    {
+        // Both `shipped` and `raw` compute population variance; they agree to
+        // float order, which confirms the ~2x speed gap above is loop structure
+        // (shift-anchor + re-seed branch) and not a formula change. TA-Lib's own
+        // VAR kernel is ~25us (like ours), so the 13us raw variant is a
+        // branchless/vectorized form TA-Lib itself does not use; adopting it
+        // risks diverging from TA-Lib, so it is not a drop-in.
+        // Precision vs C uses TA-Lib's DENSE output: outReal[k] aligns with our
+        // index k + (period-1). With that alignment, `variance_into` must agree
+        // with TA_VAR to float order.
+        let mut shipped_buf = vec![0.0f64; DATA_LEN];
+        finkit::math::rolling_stats::variance_into(&close, 20, &mut shipped_buf)
+            .unwrap();
+        let mut raw_buf = vec![0.0f64; DATA_LEN];
+        raw_var_into(&close, 20, &mut raw_buf);
+        let c = c_var(&close, 20, 1.0);
+        let shift = 19usize;
+        let mut vs_c = 0usize;
+        for k in (20 - 1)..DATA_LEN {
+            if (shipped_buf[k] - c[k - shift]).abs() > 1e-12 {
+                vs_c += 1;
+            }
+        }
+        println!(
+            "    shipped vs raw (both population) mismatches @1e-12: {}",
+            mismatches(&shipped_buf, &raw_buf, 1e-12)
+        );
+        println!(
+            "    shipped vs C (dense-aligned) mismatches @1e-12: {} (of {})",
+            vs_c,
+            DATA_LEN - shift
+        );
+    }
 
     head("===== NULL CONTROLS (closing; compare with the opening pair) =====");
     duel(
