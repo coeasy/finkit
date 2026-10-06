@@ -90,6 +90,34 @@ pub fn init_output(len: usize) -> Array1<f64> {
     arr
 }
 
+/// Allocate an output buffer of `len` uninitialized `f64` values.
+///
+/// **Contract: the caller must write every slot before reading it.**
+///
+/// The kernel conventions in this crate make that the normal case. A rolling
+/// kernel writes `lookback..len` and seeds `..lookback` itself, so allocating
+/// with `vec![f64::NAN; len]` only to have the kernel overwrite it adds a
+/// full-length store pass for nothing — 8 MB per buffer on a million-bar series,
+/// which on `BBANDS` (three buffers) was ~19% of the whole call.
+///
+/// Use [`init_output`] instead when the buffer may be read before it is fully
+/// written (an early-return path that leaves part of it untouched).
+///
+/// Kept as `expect` (not `allow`): CI denies unfulfilled lint expectations, so
+/// the annotation fails the build if the `set_len` it grants ever goes away.
+#[inline]
+#[expect(clippy::uninit_vec)]
+pub(crate) fn uninit_output(len: usize) -> Vec<f64> {
+    let mut output = Vec::with_capacity(len);
+    // SAFETY: `with_capacity` has just reserved at least `len` slots, so
+    // `set_len(len)` stays inside the allocation. `f64` has no drop glue and no
+    // invalid bit patterns, so the uninitialized elements are well-defined (if
+    // unspecified) values. Whether they are ever read is the caller's contract,
+    // stated above.
+    unsafe { output.set_len(len) };
+    output
+}
+
 /// SIMD-accelerated NaN fill: writes `f64::NAN` to every element of `buf`.
 ///
 /// On x86_64 with AVX2, fills 4 f64s per iteration. Falls back to a scalar

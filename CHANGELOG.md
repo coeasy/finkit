@@ -7,6 +7,243 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Changed - 2026-10-06 (sixteenth pass — "no kernel changed" was a wrong turn)
+
+The fifteenth pass closed on this sentence: *"this pass and the previous one changed no indicator
+kernel under `core/src/math/`, so the ratio movement can only be measurement noise."* That was
+half right. It was right that the `linreg_slope` recurrence sits a few percent from C and resists
+the rewrites that were tried. It was wrong about `floor`, and wrong in a way worth recording: the
+conclusion was derived from *what had been edited*, not from *what was being measured*.
+
+#### 1. `FLOOR` / `CEIL` — `f64::floor` is a function call, and `vroundpd` is 16x faster
+
+`llvm.floor.f64` does not become an instruction on the baseline x86-64 target. It lowers to an
+out-of-line `libm` call, one per element. `FLOOR` and `CEIL` are pure element-wise transforms, so
+that call *is* the indicator. Measured on a 10k-bar series with the shipped kernel
+(`cargo run --release -p finkit --example rounding_kernel_probe`):
+
+| kernel | µs/call |
+|---|---:|
+| `data.iter().map(|&x| x.floor()).collect()` — what the crate did | 24.95 |
+| AVX2 `_mm256_floor_pd` (new `simd_floor`) | 1.37 |
+| `data.iter().map(|&x| x.ceil()).collect()` — what the crate did | 26.61 |
+| AVX2 `_mm256_ceil_pd` (new `simd_ceil`) | 1.39 |
+
+AVX2's `vroundpd` performs the identical IEEE operation four lanes at a time and keeps every
+corner case — `NaN` propagates, `±inf` is fixed, `±0` keeps its sign — so this is a bit-identical
+kernel, not an approximation. The probe asserts that equality rather than arguing it, including on
+`NaN`, `±inf`, `±0`, `-0.5` and `1e300`.
+
+The two outputs go through `utils::uninit_output`, so the kernel writes into an uninitialized
+buffer instead of a zero-filled one that is then overwritten — on a 10k-bar series the zero-fill
+alone was about half the cost of the new kernel.
+
+Before this the sixteenth-pass benchmark said `floor` was **0.75x** TA-Lib. The fifteenth pass read
+that as "TA-Lib's sample landed on a fast iteration". It did — TA-Lib's `TA_FLOOR` calls `floor()`
+too, so both sides were paying for a libm call, and the 8%/20% asymmetry between `floor` and `ceil`
+on each side really was layout. But the conclusion "therefore nothing to fix" was only available to
+someone who never asked *why* a one-line element-wise loop costs 25 µs.
+
+#### 2. Input validation was a serial scan, and `WMA`/`EMA`/`DEMA` paid it every call
+
+`math::simd_ops::simd_first_non_finite` is the vector form of "is there a `NaN` or an `±inf`
+anywhere in this series?": four lanes per compare, with a scalar probe only when a lane comes back
+dirty. It replaces three separate serial `iter().position(|v| !v.is_finite())` scans:
+
+| site | cost before |
+|---|---|
+| `math::moving_avg::reject_if_non_finite` (`EMA`, `WMA`, `DEMA`, `ema_multi_periods`) | a full serial pass on every call |
+| `math::fast_moving_avg::reject_if_non_finite` | a full serial pass, then a **second** pass from the warm-up boundary |
+| `indicators::math_transform::ln` | a full serial pass over the *result* |
+
+`WMA` was the visible one at 0.906x; the scan was a full extra pass over the input on a kernel
+whose own work is two passes.
+
+#### 3. One rule, three implementations — the duplicates are gone
+
+The non-finite rule above existed three times with three different shapes. It now exists once, as
+`math::moving_avg::reject_if_non_finite` (`pub(crate)`), and `fast_moving_avg` delegates to it.
+Delegating also fixes its warm-up behaviour: the old copy scanned from index 0, found index 0
+non-finite, then rescanned from the warm-up boundary — two full passes for one answer.
+
+The same consolidation was applied to two other copies:
+
+- `indicators::momentum` carried `calc_di_dx` and `dx_from_state`, two hand-copied versions of the
+  same `+DI`/`-DI`/`DX` three-way guard, one per ADX entry point. Now one `di_dx_from_state`.
+- `indicators::math_transform` had `ln` validating its **output** and `log10` validating its
+  **input** — the same domain, the same error contract, two dialects. Both now use `map_positive`,
+  and `log10`'s per-element input loop is gone.
+
+#### 4. Full-length NaN fills the kernel immediately overwrote
+
+Five sites allocated `vec![f64::NAN; len]` (or `Array1::from_elem(len, NaN)`) and then wrote every
+slot from `lookback` on. The fill is not free: it is a full-length store pass over memory the
+kernel discards. `utils::uninit_output` states the "caller writes every slot" contract once, with
+the `unsafe` and its SAFETY note in one place instead of five.
+
+| site | buffers × length | what the fill cost |
+|---|---|---|
+| `overlap::bbands` | 3 × len | 24 MB on the 1M-bar benchmark |
+| `momentum::compute_adx_family` | 3 × len | 240 KB at 10k, 24 MB at 1M |
+| `momentum::compute_adx_only` (ADXR) | 1 × len | 8 MB at 1M |
+| `momentum::aroon_into` | 2 × len | 160 KB at 10k |
+| `math::moving_avg::sma_inner`'s validation | — | replaced by the vectorised probe (§2) |
+
+`overlap::bbands` is the one that moved a benchmark: 0.874x at 1M bars.
+
+#### 5. Loop-invariant divisions in the LINREG family
+
+`linearslope` / `linreg_intercept` / `linreg` each divided by a loop-invariant quantity on every
+slot — `denom` for the slope, the window length for the intercept. Both become reciprocal
+multiplies. That is one extra rounding, six orders of magnitude inside this family's 1e-8 golden
+tolerance, and it is exactly what `linear.rs::linreg_slope`'s scalar tail already did — the two
+paths were the only place in the crate where the same kernel divided *and* multiplied for the same
+quantity. `simd_ops::simd_linreg_slope` / `linreg_slope_scalar` / `linreg_scalar` / `linreg_avx2`
+are now consistent with it, and `linreg_avx2` no longer allocates a `Vec<f64>` of lane indices on
+every call.
+
+#### 6. Measured result
+
+Full re-run, 90 paired benchmarks against TA-Lib C 0.8.x, same suite and thresholds as the last two
+passes (`✅ ratio <= 1.0`, `⚠️ <= 1.25`, `❌` beyond):
+
+**✅ 75 / ⚠️ 12 / ❌ 3** (was ✅72 / ⚠️16 / ❌2)
+
+Status transitions, 90 paired benchmarks:
+
+| indicator | before | after |
+|---|---|---|
+| `floor` | 0.75x ❌ | **12.64x ✅** |
+| `ceil` | 0.97x ⚠️ | **17.79x ✅** |
+| `ln` | 0.97x ⚠️ | 1.63x ✅ |
+| `bbands_20@1000000` | 0.87x ⚠️ | 1.28x ✅ |
+| `sma_20@1000000` | 0.98x ⚠️ | 1.14x ✅ |
+| `ad` | 1.02x ✅ | 0.99x ⚠️ |
+| `aroonosc_14` | 0.84x ⚠️ | 0.71x ❌ |
+| `tanh` | 1.46x ✅ | 0.77x ❌ |
+
+Wall-clock, our side (TA-Lib's own column is unchanged within 1%):
+
+| indicator | finkit before → after | wall |
+|---|---|---:|
+| `ceil` | 31.19 → **1.54** µs | 20.3x |
+| `floor` | 33.66 → **2.16** µs | 15.6x |
+| `ln` | 48.42 → 27.58 µs | 1.76x |
+| `bbands_20@1000000` | 12712.75 → 7485.53 µs | 1.70x |
+| `exp` | 34.97 → 23.77 µs | 1.47x |
+| `sma_20@1000000` | 3322.32 → 2620.41 µs | 1.27x |
+
+`exp` and `sma_20@10k` were not edited in this pass; they moved because they sit behind the
+same `map_expensive` / warm-up path. Everything above is in the direction the code change
+predicts, which is the test that separates it from §6.1.
+
+##### 6.1 The two new ❌ do not survive re-measurement — and this box is the reason
+
+The three `❌` are `aroonosc_14`, `linreg_slope_14` and `tanh`. The first and third were `⚠️`
+and `✅` before this pass, and **no kernel they call was edited**. Rather than argue it from
+the diff again — the mistake §42.1 exists to record — the 15 non-✅ indicators were re-measured
+on their own with a longer warm-up and window (3 s / 6 s against the suite's default), which is
+the same code, same flags, quiet machine:
+
+| indicator | full suite | dedicated re-run | note |
+|---|---|---|---|
+| `tanh` | 0.77 ❌ | **0.82 ⚠️** | also 0.53 in an earlier dedicated run |
+| `aroonosc_14` | 0.71 ❌ | **1.25 ⚠️** | |
+| `linreg_slope_14` | 0.76 ❌ | **1.30 ❌** | slower in *both* — the one real ❌ |
+| `ultosc_7_14_28` | 0.80 ⚠️ | 1.22 ⚠️ | |
+| `linreg_intercept_14` | 0.83 ⚠️ | 1.19 ⚠️ | |
+| `aroon_14` | 0.88 ⚠️ | 1.14 ⚠️ | |
+| `var_20` | 0.89 ⚠️ | 1.15 ⚠️ | |
+| `linreg_angle_14` | 0.95 ⚠️ | 1.10 ⚠️ | |
+| `min_30` | 0.92 ⚠️ | 1.09 ⚠️ | |
+| `max_30` | 0.95 ⚠️ | 1.06 ⚠️ | |
+| `adxr_14` | 0.94 ⚠️ | 1.06 ⚠️ | |
+| `adx_14` | 0.98 ⚠️ | 1.05 ⚠️ | |
+| `wma_20` | 0.98 ⚠️ | 1.04 ⚠️ | |
+| `trima_20` | 0.98 ⚠️ | 1.01 ⚠️ | |
+| `ad` | 0.99 ⚠️ | 1.01 ⚠️ | |
+
+Two findings, and they point in opposite directions:
+
+1. **The re-measurement is not a rescue.** In the dedicated run the whole remainder sits at
+   1.0–1.3x rather than 0.7–1.0x, i.e. the honest reading of "how far behind TA-Lib is the
+   `ADX`/`AROON`/`VAR`/`LINREG` group" is 0–30%, not "already at parity". The full-suite
+   ratios for those eleven indicators were flattering, and §8's "still open" list is the
+   correct frame, not the full-suite column.
+2. **`tanh` and `aroonosc_14` are noise, and provably so.** Our `tanh` measured 59.23 / 37.15
+   / 24.20 µs on three runs of identical code while TA-Lib's `TANH` measured 45.83 / 45.56 /
+   45.62 µs — a 0.2% spread against our 145%. Criterion's own confidence intervals are tight
+   *within* each run (e.g. `[35.274, 40.395]`), so this is between-process drift, not sampling
+   error, and it is one-sided: our number moves, TA-Lib's does not. `tanh` is therefore
+   faster than TA-Lib in every dedicated run (0.82x and 0.53x) and slower only in the suite
+   run that produced the ❌. `aroonosc_14` moves the same way (0.71 → 1.25).
+
+So the pass's real shape is: five status transitions earned by code, and three that are
+artefacts of measuring 90 benchmarks back-to-back on a shared box. The `❌` that is real is
+`linreg_slope_14`, and it is real in both columns.
+
+
+#### 7. A red gate that predates this pass: eight broken intra-doc links
+
+Running the *whole* gate matrix rather than only the gates the previous passes happened to
+touch turned up `scripts/check_rustdoc.sh` failing on eight unresolved intra-doc links.
+`git blame` puts all eight on 2026-10-04 (`db78064`, `ca6d3f16`) — two passes before this one —
+so the `doc` CI job has been red since then and nothing noticed.
+
+The pattern is specific: every failure is in a **module-level (`//!`) doc comment**. The very
+same `NodeKind` link written in an ordinary `///` comment one screen away
+(`core/src/semantic_graph.rs:394`) resolves correctly, so the defect is not the link text but the
+scope rustdoc resolves module docs in. Each link is now an explicit crate-rooted path — a bare
+`NodeKind` becomes `crate::semantic_graph::NodeKind`, and so on — which is unambiguous in either
+scope.
+
+`core/src/compute.rs:162` was a different mistake: `[`Self::FixedLookback(0)`]` tries to link a
+*variant instantiation*, which is not an item. It is now a plain code span, matching the
+surrounding style that already writes `` `FixedLookback(_)` `` unlinked.
+
+| file | links fixed |
+|---|---|
+| `core/src/semantic_graph.rs` | `NodeKind`, `ArtifactHash`, `SemanticGraph::content_hash`, `SemanticNode::inputs` |
+| `core/src/runtime_context.rs` | `BufferArena`, `StateArena`, `RuntimeContext` |
+| `core/src/formula/compute_ir.rs` | `SemanticGraph::content_hash` |
+| `core/src/compute.rs` | `Self::FixedLookback(0)` demoted to a code span |
+
+Documentation only: no runtime behaviour, no API surface, no measurable cost.
+
+#### 8. Industrial-grade assessment (after the sixteenth pass)
+
+- **Numerical dimension**: unchanged and still industrial-grade. Every edit in this pass either
+  preserves arithmetic bit-for-bit (`floor`/`ceil` are asserted bit-equal to `f64::floor`/`ceil`;
+  the reciprocal changes are one rounding inside a 1e-8 tolerance) or is a pure memory-management
+  change. Validated by the full suite: **3965 tests, 0 failures, 62 targets**, including
+  `golden_talib_tests`' value-by-value fixtures against TA-Lib.
+- **Efficiency dimension**: improved, and the *reason* is now written down. Two indicators went
+  from slower-than to 12–18x faster, one from 0.97x to 1.63x, and the mega-scale `BBANDS`/`SMA`
+  gaps closed. The list of indicators slower than TA-Lib C is the shortest it has been, and
+  §6.1 now attaches an honest magnitude to what is left instead of a run-specific one.
+- **Engineering dimension**: improved. Three duplicated implementations of two rules were
+  collapsed into one each, and the `unsafe` in the "write every slot" allocation pattern now lives
+  in a single place with its SAFETY argument.
+- **Still open**: after §6.1, the reproducible gap is
+  `ADX`/`ADXR`/`AROON`/`AROONOSC`/`ULTOSC`/`MAX`/`MIN`/`VAR`/`LINREG*` at **0–30%** off TA-Lib
+  with their kernels *already* hand-optimized (monotonic queues, van Herk–Gil–Werman block scans,
+  cached indices), with `linreg_slope_14` (1.30x) the only one beyond 1.25x. What is left there is
+  not an algorithmic gap — it is the per-bar bounds checks on `high[i]`/`low[i]`/`out[i]` that
+  have no counterpart in C, and closing it means rewriting each loop around zipped cursors the way
+  `linreg_slope` was. That is a per-loop job with a per-loop risk, so it is scoped as its own pass
+  rather than smuggled into this one.
+- **Measurement caveat, now on the record**: on this box, single-run ratios for the sub-1.25x
+  band are not trustworthy to better than about ±20–25%, and the drift is one-sided (our column
+  moves, TA-Lib's does not). Ratios near 1.0 should be read from a dedicated re-run, and the
+  `docs/BENCHMARK_REPORT.md` table should be read as a *screening* artifact, not a verdict.
+- **Gate matrix**: green, for the first time in three passes. `cargo fmt --check`;
+  `RUSTFLAGS="-D warnings" cargo check --workspace --all-targets --locked`; both clippy
+  invocations under `RUSTFLAGS="-D unfulfilled_lint_expectations"`; `cargo test -p finkit
+  --tests --no-fail-fast` (**62 targets, 3965 passed, 0 failed, 3 ignored**); the rustdoc policy
+  gate (§7); and 21 `scripts/check_*.py` housekeeping gates. The rustdoc gate is the one that was
+  red before this pass, and §7 is the only place in this changelog where a fix was made to code
+  the pass did not otherwise need to touch.
+
 ### Changed - 2026-10-06 (fifteenth pass — one formula source, five answers)
 
 The previous four passes optimized *how fast* each path runs. This one asked a

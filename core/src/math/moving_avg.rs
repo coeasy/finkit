@@ -39,17 +39,24 @@ pub enum EmaSeed {
 /// upstream rolling indicator and is handled by offsetting the kernel (see
 /// [`leading_warmup`]); a non-finite value in the middle of the data is still a
 /// hard error, which is what R-1 requires.
+///
+/// The scan itself is [`crate::math::simd_ops::simd_first_non_finite`], not a
+/// serial `iter().position()`: `WMA` pays this validation on every invocation
+/// and the vector form is worth double digits there.
+///
+/// `pub(crate)` because this is the single implementation of the rule. The
+/// hot-path kernels in [`crate::math::fast_moving_avg`] used to carry their own
+/// copy, which scanned from index 0 and then rescanned from the warm-up
+/// boundary — two passes over warm-up-prefixed input for one answer.
 #[inline]
 #[allow(unused_variables)]
-fn reject_if_non_finite(name: &'static str, input: &[f64]) -> Result<()> {
+pub(crate) fn reject_if_non_finite(name: &'static str, input: &[f64]) -> Result<()> {
     let started = leading_warmup(input);
     if started == input.len() {
         // The whole series is warm-up; the kernel will emit an all-NaN result.
         return Ok(());
     }
-    let invalid = input[started..]
-        .iter()
-        .position(|v| !v.is_finite())
+    let invalid = crate::math::simd_ops::simd_first_non_finite(&input[started..])
         .map(|offset| offset + started);
     if let Some(idx) = invalid {
         #[cfg(feature = "metrics")]
@@ -113,40 +120,29 @@ pub fn sma(input: &[f64], period: usize) -> Result<Array1<f64>> {
 fn sma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let len = input.len();
 
-    // One fused scan replaces the old three passes: `reject_if_non_finite`
-    // walked the series twice (leading_warmup + position) and the old
-    // `sma_inner` walked it a third time for the warm-up start. On a
-    // million-bar series those memory-bound passes rivalled the actual O(len)
-    // sliding sum. Same rejection semantics: a leading run is warm-up, any
-    // non-finite value after the series starts is a hard error, and an
-    // all-NaN series emits all-NaN.
-    // `leading_warmup` skips a leading run of *any* non-finite value (NaN and
-    // ±inf alike), so the start scan must test `is_finite()` rather than
-    // `is_nan()` — a leading `inf` is warm-up, not bad input.
-    let mut start = len;
-    let mut invalid = None;
-    for (i, &value) in input.iter().enumerate() {
-        if start == len {
-            if !value.is_finite() {
-                continue;
-            }
-            start = i;
-            continue;
+    // Validation: a leading run of non-finite values is the warm-up prefix of an
+    // upstream rolling indicator and is skipped (see `leading_warmup`), while a
+    // non-finite value *after* the series has started is a hard error.
+    //
+    // This used to be a hand-rolled single loop that found the warm-up start and
+    // the first bad index at the same time. Fusing them was not worth it: the
+    // loop could not be vectorised (it breaks early), so on a million-bar series
+    // the serial pass cost more than the vectorised probe plus an O(1)
+    // `leading_warmup` — and it duplicated, in a second dialect, the rule that
+    // `reject_if_non_finite` already states once for the whole crate.
+    let start = leading_warmup(input);
+    if start < len {
+        if let Some(offset) = crate::math::simd_ops::simd_first_non_finite(&input[start..]) {
+            let idx = start + offset;
+            #[cfg(feature = "metrics")]
+            crate::metrics::input_rejected("sma", "non_finite");
+            #[cfg(feature = "tracing")]
+            crate::warn!(indicator = "sma", idx, "rejected non-finite input");
+            return Err(TaError::InvalidParameter {
+                name: "input".to_string(),
+                constraint: format!("non-finite value at index {idx}"),
+            });
         }
-        if !value.is_finite() {
-            invalid = Some(i);
-            break;
-        }
-    }
-    if let Some(idx) = invalid {
-        #[cfg(feature = "metrics")]
-        crate::metrics::input_rejected("sma", "non_finite");
-        #[cfg(feature = "tracing")]
-        crate::warn!(indicator = "sma", idx, "rejected non-finite input");
-        return Err(TaError::InvalidParameter {
-            name: "input".to_string(),
-            constraint: format!("non-finite value at index {idx}"),
-        });
     }
 
     validate_input(len, period)?;

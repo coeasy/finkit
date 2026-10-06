@@ -15,6 +15,7 @@
 //! - 输入值超出函数定义域时返回 [`TaError::InvalidParameter`] 或 [`TaError::ComputationError`]
 
 use crate::error::{Result, TaError};
+use crate::math::simd_ops;
 use crate::utils::validate_input;
 use ndarray::Array1;
 
@@ -31,6 +32,52 @@ where
         return data.par_iter().map(|&value| function(value)).collect();
     }
     data.iter().map(|&value| function(value)).collect()
+}
+
+/// Element-wise rounding transform (`FLOOR` / `CEIL`) through a SIMD kernel.
+///
+/// `f64::floor` and `f64::ceil` are out-of-line `libm` calls on the baseline
+/// x86-64 target, so the scalar `map` form pays one call per element. The
+/// `vroundpd` kernels in [`simd_ops`] implement the identical IEEE operation
+/// four lanes at a time — see `math::simd_ops::simd_floor` for the equivalence
+/// argument — so the result is unchanged bit for bit while the pass gets a
+/// double-digit speedup.
+///
+/// The buffer is allocated uninitialized because the kernel covers every slot —
+/// a `vec![0.0; len]` would add a full zero-fill pass, about half the cost of
+/// the kernel itself on a 10k-bar series. See `utils::uninit_output` for the
+/// write-every-slot contract, which `simd_floor`/`simd_ceil` both satisfy
+/// (`data.len().min(output.len())` slots, and the two lengths are equal here).
+#[inline]
+fn map_rounding(data: &[f64], kernel: fn(&[f64], &mut [f64])) -> Vec<f64> {
+    let mut output = crate::utils::uninit_output(data.len());
+    kernel(data, &mut output);
+    output
+}
+
+/// Element-wise transform whose domain is "finite and strictly positive".
+///
+/// `ln`/`log10` are their own validators: every in-domain value maps to a finite
+/// result and every out-of-domain value maps to a `NaN` or an infinity. That
+/// turns the domain check into a *scan of the result*, which the vectorised
+/// [`simd_ops::simd_first_non_finite`] handles in a quarter of the compares of
+/// the per-element branch it replaces.
+///
+/// The error contract is unchanged: the first offending bar still rejects the
+/// whole call at the same index, because the map is monotone in position.
+#[inline]
+fn map_positive<F>(data: &[f64], function: F) -> Result<Array1<f64>>
+where
+    F: Fn(f64) -> f64 + Sync + Send,
+{
+    let output = map_expensive(data, function);
+    if let Some(index) = simd_ops::simd_first_non_finite(&output) {
+        return Err(TaError::InvalidParameter {
+            name: format!("data[{index}]"),
+            constraint: "value > 0".to_string(),
+        });
+    }
+    Ok(Array1::from_vec(output))
 }
 
 /// 反余弦 (Vector Arc Cosine)
@@ -146,7 +193,7 @@ pub fn atan(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn ceil(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    Ok(Array1::from_vec(map_expensive(data, f64::ceil)))
+    Ok(Array1::from_vec(map_rounding(data, simd_ops::simd_ceil)))
 }
 
 /// 余弦 (Vector Cosine)
@@ -237,7 +284,7 @@ pub fn exp(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn floor(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    Ok(Array1::from_vec(map_expensive(data, f64::floor)))
+    Ok(Array1::from_vec(map_rounding(data, simd_ops::simd_floor)))
 }
 
 /// 自然对数 (Vector Natural Logarithm)
@@ -263,20 +310,7 @@ pub fn floor(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn ln(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    // `ln` is its own validator: a non-positive, `NaN`, or infinite input maps
-    // to a `NaN` or an infinity, while every finite positive input maps to a
-    // finite value. So the domain check becomes a scan of the *result*, which
-    // is a plain vectorizable pass, instead of a branch on every input element
-    // inside the transcendental's loop. The error contract is unchanged — the
-    // first offending bar still rejects the whole call.
-    let output: Vec<f64> = data.iter().map(|&x| x.ln()).collect();
-    if let Some(index) = output.iter().position(|value| !value.is_finite()) {
-        return Err(TaError::InvalidParameter {
-            name: format!("data[{index}]"),
-            constraint: "value > 0".to_string(),
-        });
-    }
-    Ok(Array1::from_vec(output))
+    map_positive(data, f64::ln)
 }
 
 /// 常用对数 (Vector Base-10 Logarithm)
@@ -302,16 +336,14 @@ pub fn ln(data: &[f64]) -> Result<Array1<f64>> {
 /// ```
 pub fn log10(data: &[f64]) -> Result<Array1<f64>> {
     validate_input(data.len(), 1)?;
-    for (i, &x) in data.iter().enumerate() {
-        if !x.is_finite() || x <= 0.0 {
-            return Err(TaError::InvalidParameter {
-                name: format!("data[{}]", i),
-                constraint: "value > 0".to_string(),
-            });
-        }
-    }
-    let output = map_expensive(data, f64::log10);
-    Ok(Array1::from_vec(output))
+    // Same "the transform is its own validator" contract as [`ln`]: `log10`
+    // maps every in-domain value to a finite result and every out-of-domain
+    // value to a `NaN` or an infinity, so the domain check is a scan of the
+    // result. That also removes the duplicate per-element input loop this
+    // function used to carry — one of the two logarithms validated its input
+    // and the other validated its output, for the same domain and the same
+    // error contract.
+    map_positive(data, f64::log10)
 }
 
 /// 正弦 (Vector Sine)

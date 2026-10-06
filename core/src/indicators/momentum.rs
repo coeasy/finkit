@@ -934,6 +934,30 @@ pub fn adx(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Ar
     Ok(Array1::from_vec(family.adx))
 }
 
+/// The `+DI` / `-DI` / `DX` triple for one Wilder-smoothed DM/TR state.
+///
+/// Shared by [`compute_adx_family`] (which needs all three) and
+/// [`compute_adx_only`] (which needs `DX` alone for ADXR). The two callers used
+/// to carry separate hand-copied implementations of the same three-way guard —
+/// `tr ≈ 0`, `±DI sum ≈ 0`, otherwise the ratio — which is exactly the kind of
+/// duplication that lets one copy drift from the other. The arithmetic and the
+/// `1e-15` thresholds are unchanged.
+#[inline(always)]
+fn di_dx_from_state(plus_dm: f64, minus_dm: f64, tr: f64) -> (f64, f64, f64) {
+    if tr.abs() <= 1e-15 {
+        return (0.0, 0.0, 0.0);
+    }
+    let plus_di = plus_dm / tr * 100.0;
+    let minus_di = minus_dm / tr * 100.0;
+    let sum = plus_di + minus_di;
+    let dx = if sum.abs() > 1e-15 {
+        (plus_di - minus_di).abs() / sum * 100.0
+    } else {
+        0.0
+    };
+    (plus_di, minus_di, dx)
+}
+
 /// Shared ADX family intermediate results.
 ///
 /// Computed once by [`compute_adx_family`] and consumed by the individual
@@ -1001,32 +1025,28 @@ fn compute_adx_family(
         }
     }
 
-    let mut plus_di_out = vec![f64::NAN; len];
-    let mut minus_di_out = vec![f64::NAN; len];
-    let mut adx_out = vec![f64::NAN; len];
-
-    #[inline(always)]
-    fn calc_di_dx(s_pdm: f64, s_mdm: f64, s_tr: f64) -> (f64, f64, f64) {
-        if s_tr.abs() > 1e-15 {
-            let pdi = s_pdm / s_tr * 100.0;
-            let mdi = s_mdm / s_tr * 100.0;
-            let sum = pdi + mdi;
-            let dx = if sum.abs() > 1e-15 {
-                (pdi - mdi).abs() / sum * 100.0
-            } else {
-                0.0
-            };
-            (pdi, mdi, dx)
-        } else {
-            (0.0, 0.0, 0.0)
-        }
-    }
+    // Only the warm-up prefix needs seeding. `validate_input` above already
+    // guaranteed `len >= 2*period`, so the `period..adx_start` loop and the
+    // `adx_start..len` loop between them write every `±DI` slot from `period`
+    // on; `adx` starts one slot earlier, at `adx_start - 1`. Three full-length
+    // NaN fills used to precede them — 240 KB of stores on a 10k-bar series that
+    // the loops overwrote immediately, and 24 MB on a million-bar one.
+    let adx_start = 2 * period;
+    let adx_warm = if adx_start < len { adx_start - 1 } else { len };
+    // Every slot is written below: the warm-up prefixes here, the rest by the
+    // two loops; when `adx_start == len` the whole ADX buffer is that prefix.
+    // See `utils::uninit_output`.
+    let mut plus_di_out = crate::utils::uninit_output(len);
+    let mut minus_di_out = crate::utils::uninit_output(len);
+    let mut adx_out = crate::utils::uninit_output(len);
+    plus_di_out[..period].fill(f64::NAN);
+    minus_di_out[..period].fill(f64::NAN);
+    adx_out[..adx_warm].fill(f64::NAN);
 
     // TA-Lib Phase 2: Wilder 平滑 + DX 累积（period 次迭代）。
     // 每次：先 Wilder 平滑 DM/TR（prevDM -= prevDM/period; prevDM += newDM），
     // 再计算 DI/DX 并累积 DX。
     let mut dx_sum = 0.0;
-    let adx_start = 2 * period;
 
     for i in period..adx_start.min(len) {
         let up_move = high[i] - high[i - 1];
@@ -1047,7 +1067,7 @@ fn compute_adx_family(
         smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
         smooth_tr = smooth_tr - smooth_tr / p + tr;
 
-        let (pdi, mdi, dx) = calc_di_dx(smooth_plus_dm, smooth_minus_dm, smooth_tr);
+        let (pdi, mdi, dx) = di_dx_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr);
         plus_di_out[i] = pdi;
         minus_di_out[i] = mdi;
         dx_sum += dx;
@@ -1076,7 +1096,7 @@ fn compute_adx_family(
             smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
             smooth_tr = smooth_tr - smooth_tr / p + tr;
 
-            let (pdi, mdi, dx) = calc_di_dx(smooth_plus_dm, smooth_minus_dm, smooth_tr);
+            let (pdi, mdi, dx) = di_dx_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr);
             plus_di_out[i] = pdi;
             minus_di_out[i] = mdi;
             // TA-Lib: prevADX = (prevADX * (period - 1) + DX) / period
@@ -1134,23 +1154,14 @@ fn compute_adx_only(high: &[f64], low: &[f64], close: &[f64], period: usize) -> 
         }
     }
 
-    #[inline(always)]
-    fn dx_from_state(plus_dm: f64, minus_dm: f64, tr: f64) -> f64 {
-        if tr.abs() <= 1e-15 {
-            return 0.0;
-        }
-        let plus_di = plus_dm / tr * 100.0;
-        let minus_di = minus_dm / tr * 100.0;
-        let sum = plus_di + minus_di;
-        if sum.abs() > 1e-15 {
-            (plus_di - minus_di).abs() / sum * 100.0
-        } else {
-            0.0
-        }
-    }
-
-    let mut output = vec![f64::NAN; len];
+    // Only the warm-up prefix needs seeding; see `compute_adx_family`.
     let adx_start = 2 * period;
+    let adx_warm = if adx_start < len { adx_start - 1 } else { len };
+    // Every slot is written below: the warm-up prefix here, the rest by the two
+    // loops; when `adx_start == len` the whole buffer is that prefix. See
+    // `utils::uninit_output`.
+    let mut output = crate::utils::uninit_output(len);
+    output[..adx_warm].fill(f64::NAN);
     let mut dx_sum = 0.0;
     for i in period..adx_start.min(len) {
         let up_move = high[i] - high[i - 1];
@@ -1169,7 +1180,7 @@ fn compute_adx_only(high: &[f64], low: &[f64], close: &[f64], period: usize) -> 
         smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
         smooth_tr =
             smooth_tr - smooth_tr / p + crate::utils::true_range(high[i], low[i], close[i - 1]);
-        dx_sum += dx_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr);
+        dx_sum += di_dx_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr).2;
     }
     if adx_start < len {
         let mut adx_value = dx_sum / p;
@@ -1191,7 +1202,7 @@ fn compute_adx_only(high: &[f64], low: &[f64], close: &[f64], period: usize) -> 
             smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
             smooth_tr =
                 smooth_tr - smooth_tr / p + crate::utils::true_range(high[i], low[i], close[i - 1]);
-            let dx = dx_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr);
+            let dx = di_dx_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr).2;
             adx_value = (adx_value * (p - 1.0) + dx) / p;
             output[i] = adx_value;
         }
@@ -1616,8 +1627,12 @@ pub fn aroon_into(
         });
     }
     validate_input(high.len(), period + 1)?;
-    aroon_up.fill(f64::NAN);
-    aroon_down.fill(f64::NAN);
+    // The loop below writes every slot from `period` on, so only the warm-up
+    // prefix needs seeding. Filling the whole buffer first was two extra
+    // full-length store passes over both outputs — 160 KB on a 10k-bar series —
+    // for values the loop overwrites immediately.
+    aroon_up[..period].fill(f64::NAN);
+    aroon_down[..period].fill(f64::NAN);
 
     // A bounded circular deque is enough because a monotonic queue contains
     // at most one index per bar in the lookback window.  This avoids the

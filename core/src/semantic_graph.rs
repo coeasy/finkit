@@ -13,7 +13,8 @@
 //! ```
 //!
 //! with `Formula`, `Factor`, `Feature`, and `Composite` reduced to a
-//! [`NodeKind`] — a *label on a node*, not a separate graph type. Everything
+//! [`NodeKind`](crate::semantic_graph::NodeKind) — a *label on a node*, not a
+//! separate graph type. Everything
 //! below the frontend therefore operates on one structure, and every
 //! graph-level optimization has exactly one implementation site.
 //!
@@ -23,14 +24,17 @@
 //! graphs that compute the same values but were declared by different
 //! frontends are the same graph for every purpose this module serves: they
 //! lower to identical plans, schedule into identical levels, and hash to the
-//! same [`ArtifactHash`]. That is why [`SemanticGraph::content_hash`] excludes
+//! same [`ArtifactHash`](crate::unified_runtime::ArtifactHash). That is why
+//! [`SemanticGraph::content_hash`](crate::semantic_graph::SemanticGraph::content_hash)
+//! excludes
 //! the kind. If the kind leaked into artifact identity, a formula and a factor
 //! computing the same series could never share a cached result, which is
 //! precisely the duplication §16 exists to remove.
 //!
 //! # Ordering is a contract
 //!
-//! [`SemanticNode::inputs`] is an **ordered operand list**, not a set. Kernels
+//! [`SemanticNode::inputs`](crate::semantic_graph::SemanticNode::inputs) is an
+//! **ordered operand list**, not a set. Kernels
 //! are dispatched positionally, so `A - B` and `B - A`, and `X + X` versus
 //! `X`, are different graphs. Every transformation here preserves operand
 //! order and operand multiplicity.

@@ -208,9 +208,12 @@ pub fn bbands(
             lower: pad(lower),
         });
     }
-    let mut upper = vec![f64::NAN; len];
-    let mut middle = vec![f64::NAN; len];
-    let mut lower = vec![f64::NAN; len];
+    // `bbands_sma_into` writes every slot of all three buffers: it fills the
+    // `period - 1`-long warm-up prefix itself and its fused scan covers
+    // `period - 1..len`. See `utils::uninit_output`.
+    let mut upper = crate::utils::uninit_output(len);
+    let mut middle = crate::utils::uninit_output(len);
+    let mut lower = crate::utils::uninit_output(len);
     bbands_sma_into(
         input,
         period,
@@ -2351,9 +2354,15 @@ pub fn bbands_into(
     validate_input(len, period)?;
 
     if start > 0 {
-        middle.fill(f64::NAN);
-        upper.fill(f64::NAN);
-        lower.fill(f64::NAN);
+        // The recursive call below writes every slot from `start + period - 1`
+        // on and NaN-fills its own warm-up prefix, so this fill only has to
+        // cover `[..start]`. When the valid tail is shorter than one window the
+        // recursion does not run at all and the whole buffer has to read back
+        // NaN, so the fill widens to `len` in that case only.
+        let warm_end = if start + period <= len { start } else { len };
+        middle[..warm_end].fill(f64::NAN);
+        upper[..warm_end].fill(f64::NAN);
+        lower[..warm_end].fill(f64::NAN);
         if start + period <= len {
             let (input_tail, middle_tail) = (&input[start..], &mut middle[start..]);
             let (upper_tail, lower_tail) = (&mut upper[start..], &mut lower[start..]);

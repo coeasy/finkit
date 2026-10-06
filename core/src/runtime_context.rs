@@ -1,14 +1,16 @@
 //! One execution context shared by every numeric executor.
 //!
 //! Before this module, an executor needed four unrelated things to run: a
-//! [`BufferArena`] for scratch buffers, a [`StateArena`] for persistent kernel
+//! [`BufferArena`](crate::buffer_arena::BufferArena) for scratch buffers, a
+//! [`StateArena`](crate::state_arena::StateArena) for persistent kernel
 //! state, a plan for the numeric program, and — for anything that wanted to
 //! report or bound its work — a set of ad-hoc fields or parameters. Nothing
 //! carried limits, nothing carried counters, and nothing carried diagnostics,
 //! so a backend could not say "this plan needs more memory than I am allowed to
 //! use" and no test could assert how many kernels a plan actually dispatched.
 //!
-//! [`RuntimeContext`] is that one object (§19 of the V4 plan). It owns:
+//! [`RuntimeContext`](crate::runtime_context::RuntimeContext) is that one
+//! object (§19 of the V4 plan). It owns:
 //!
 //! * `buffers` — the scratch allocation arena the plan reuses;
 //! * `states` — the persistent state arena streaming kernels update;

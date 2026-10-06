@@ -282,6 +282,10 @@ pub fn linreg_intercept(input: &[f64], period: usize) -> Result<Array1<f64>> {
     // costs one extra rounding, which is far inside this family's 1e-8
     // golden tolerance.
     let inv_denom = 1.0 / denom;
+    // The intercept divides by the window length on every slot as well. Same
+    // reasoning as `inv_denom`: `1/period` is loop-invariant and the reciprocal
+    // multiply is one rounding, not a divider round trip.
+    let inv_p = 1.0 / p;
 
     let mut sum_y = 0.0;
     let mut sum_xy = 0.0;
@@ -290,7 +294,7 @@ pub fn linreg_intercept(input: &[f64], period: usize) -> Result<Array1<f64>> {
         sum_xy += j as f64 * val;
     }
     let slope = (p * sum_xy - sum_x * sum_y) * inv_denom;
-    output[warm_start + period - 1] = (sum_y - slope * sum_x) / p;
+    output[warm_start + period - 1] = (sum_y - slope * sum_x) * inv_p;
 
     let start = warm_start + period;
     let new_vals = &input[start..];
@@ -305,7 +309,7 @@ pub fn linreg_intercept(input: &[f64], period: usize) -> Result<Array1<f64>> {
         sum_xy += p1 * new_val - (sum_y - old_val);
         sum_y += new_val - old_val;
         let slope = (p * sum_xy - sum_x * sum_y) * inv_denom;
-        *out = (sum_y - slope * sum_x) / p;
+        *out = (sum_y - slope * sum_x) * inv_p;
     }
 
     Ok(Array1::from(output))
@@ -359,6 +363,10 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
     // costs one extra rounding, which is far inside this family's 1e-8
     // golden tolerance.
     let inv_denom = 1.0 / denom;
+    // Same loop-invariant reciprocal as [`linreg_intercept`]: the per-slot
+    // intercept is divided by the window length, and a reciprocal multiply is
+    // one rounding instead of a divider round trip.
+    let inv_p = 1.0 / p;
     let last_x = (period - 1) as f64;
 
     let mut sum_y = 0.0;
@@ -368,7 +376,7 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
         sum_xy += j as f64 * val;
     }
     let slope = (p * sum_xy - sum_x * sum_y) * inv_denom;
-    let intercept = (sum_y - slope * sum_x) / p;
+    let intercept = (sum_y - slope * sum_x) * inv_p;
     output[warm_start + period - 1] = slope * last_x + intercept;
 
     let start = warm_start + period;
@@ -381,7 +389,7 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
         sum_xy += last_x * new_val - (sum_y - old_val);
         sum_y += new_val - old_val;
         let slope = (p * sum_xy - sum_x * sum_y) * inv_denom;
-        let intercept = (sum_y - slope * sum_x) / p;
+        let intercept = (sum_y - slope * sum_x) * inv_p;
         *out = slope * last_x + intercept;
     }
 

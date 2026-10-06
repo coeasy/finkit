@@ -37,7 +37,8 @@ pub struct FormulaComputePlan {
     /// node is pushed into a [`SemanticGraphBuilder`], the graph is validated,
     /// and the plan is [`SemanticGraph::lower`]ed from it. Keeping the graph
     /// beside the plan is what makes the graph-level services —
-    /// [`SemanticGraph::content_hash`], CSE eligibility, dependency cones,
+    /// [`SemanticGraph::content_hash`](crate::semantic_graph::SemanticGraph::content_hash),
+    /// CSE eligibility, dependency cones,
     /// scheduling levels — reachable for a formula without re-lowering it.
     graph: SemanticGraph,
     plan: ComputePlan,

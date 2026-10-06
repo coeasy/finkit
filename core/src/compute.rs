@@ -159,7 +159,7 @@ impl DependencyShape {
 
     /// Combine a whole dependency cone, as a node plus all of its ancestors.
     ///
-    /// An empty cone is [`Self::FixedLookback(0)`] — a node with nothing under
+    /// An empty cone is `Self::FixedLookback(0)` — a node with nothing under
     /// it depends on no history at all.
     pub fn combine_all(shapes: impl IntoIterator<Item = Self>) -> Self {
         let mut shapes = shapes.into_iter();

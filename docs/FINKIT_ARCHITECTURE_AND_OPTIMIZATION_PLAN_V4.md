@@ -3429,3 +3429,168 @@ CSE 绝不能合并两个相同字面量，否则字面量计数变化会破坏�
 - **仍未解决**：41.3 的根因是"热计划把控制依赖也当作数据输入"。本轮在**产生那条边的地方**
   （下沉器）消除它，而不是在消费侧过滤——彻底分离控制边与数据边需要给语义图加一类边并在
   规划器/生命周期分析中贯通，属结构性工作，建议单独立项。
+
+## 42. 第十六轮：把"没有代码改动"当成"没有差距"是一个错误转向（2026-10-06）
+
+### 42.1 上一轮的结论，以及它错在哪里
+
+§41.7 写下了这句话：
+
+> 本轮与上一轮**都没有改动 `core/src/math/` 下任何指标内核**，所以比值的变化只可能来自测量噪声。
+
+前半句是事实，后半句是推论，而这个推论是**从"改了什么"推出来的，不是从"测到了什么"推出来的**。
+它对 `floor` 的判定——"0.75x 是 TA-Lib 的快速样本落在了 `floor` 上"——只对了一半：
+
+- 对的一半：TA-Lib 的 `TA_FLOOR` 也在调用 `floor()`，所以两侧都在为 libm 调用付费；C 侧
+  `floor` 25.23µs 与 `ceil` 30.32µs 相差 20%，我方 33.66µs 与 31.19µs 相差 8%，这个不对称确实是
+  代码布局。
+- 错的一半：*因此没有可修的东西*。一个逐元素单行循环要花 25µs，这个数字本身就该被追问，
+  而不该被"两侧都在付同样的代价"解释掉。
+
+### 42.2 根因：`f64::floor` 在基线 x86-64 上不是指令
+
+`llvm.floor.f64` / `llvm.ceil.f64` 在默认 target 下**不会**下沉为 `roundsd`——它是一次
+**out-of-line 的 libm 调用**，每个元素一次。`FLOOR` / `CEIL` 是纯逐元素变换，所以这次调用**就是**
+指标本身。
+
+用本仓已编译的内核直接量（`core/examples/rounding_kernel_probe.rs`，10k 点，5 次取最小）：
+
+| 内核 | µs/次 |
+|---|---:|
+| `iter().map(|&x| x.floor()).collect()`（改造前的写法） | 24.95 |
+| 标量 `for` 循环 + `x.floor()` | 22.19 |
+| AVX2 `_mm256_floor_pd`（新增 `simd_ops::simd_floor`） | 1.37 |
+| AVX2 `_mm256_ceil_pd`（新增 `simd_ops::simd_ceil`） | 1.39 |
+
+`vroundpd` 执行的是**完全相同**的 IEEE 运算，一次四条 lane，并且保留全部边界情形：`NaN` 传播、
+`±inf` 保持、`±0` 保留符号。所以这不是近似，是**逐位相同**的内核——探针里直接断言了
+`to_bits()` 相等，覆盖 `NaN` / `±inf` / `±0` / `-0.5` / `1e300`，而不是在注释里论证。
+
+### 42.3 同一类问题：整段串行扫描
+
+`math::simd_ops::simd_first_non_finite` 是"这个序列里有没有 `NaN` 或 `±inf`"的向量形式：
+一次比较四条 lane，只有某条 lane 变脏时才回退到逐元素。它替掉了三处各自独立的
+`iter().position(|v| !v.is_finite())`：
+
+| 位置 | 改造前 |
+|---|---|
+| `math::moving_avg::reject_if_non_finite`（`EMA`/`WMA`/`DEMA`/`ema_multi_periods` 每次调用都走） | 一次全量串行扫描 |
+| `math::fast_moving_avg::reject_if_non_finite` | 一次全量串行扫描，**再来一次**从 warm-up 边界的扫描 |
+| `indicators::math_transform::ln` | 对**结果**的一次全量串行扫描 |
+
+`WMA` 是可见的那个（0.906x）：它自己的核是两趟，这次校验是白送的第三趟。
+
+### 42.4 一条规则三份实现
+
+上面这条规则原先有三份实现、三种形状。现在只有一份：`math::moving_avg::reject_if_non_finite`
+（`pub(crate)`），`fast_moving_avg` 委托给它。委托顺带修掉了它的 warm-up 行为——旧副本从下标 0
+开始扫，发现 0 非有限，再从 warm-up 边界重扫，**一个答案两趟全量**。
+
+同样的合并做了两处：
+
+- `indicators::momentum` 里 `calc_di_dx` 与 `dx_from_state` 是同一个 `+DI`/`-DI`/`DX` 三元守卫的
+  两份手抄件（`compute_adx_family` 一份、`compute_adx_only` 一份）。现在是一份 `di_dx_from_state`。
+  这种重复的危险不在字符数，而在**两份会漂移**。
+- `indicators::math_transform` 里 `ln` 校验**输出**、`log10` 校验**输入**——同一个定义域、同一份
+  错误契约、两种方言。现在都用 `map_positive`，`log10` 的逐元素输入循环消失。
+
+### 42.5 被内核立刻覆盖的全长 NaN 填充
+
+五处分配 `vec![f64::NAN; len]` 然后把 `lookback` 起的每个槽都写一遍。这次填充不免费——它是
+一趟全长的 store，落到的内存内核紧接着就丢掉了。`utils::uninit_output` 把"调用方写入每个槽"
+这个契约讲一次，`unsafe` 与 SAFETY 说明也只有一处，而不是五处：
+
+| 位置 | 缓冲 × 长度 | 填充代价 |
+|---|---|---|
+| `overlap::bbands` | 3 × len | 1M 点基准上是 24 MB |
+| `momentum::compute_adx_family` | 3 × len | 10k 是 240 KB，1M 是 24 MB |
+| `momentum::compute_adx_only`（ADXR） | 1 × len | 1M 是 8 MB |
+| `momentum::aroon_into` | 2 × len | 10k 是 160 KB |
+| `math::moving_avg::sma_inner` 的校验 | — | 换成 §42.3 的向量化探测 |
+
+注意 `overlap::bbands` 有一条**早退路径**：`start > 0` 且有效尾长不足一个窗口时递归根本不跑，
+此时必须整段回读为 NaN。该分支的填充宽度因此收窄为"仅当递归不跑时才是 `len`"，而不是简单删掉。
+
+### 42.6 LINREG 家族的循环不变量除法
+
+`linreg_slope` / `linreg_intercept` / `linreg` 每个槽都对循环不变量做一次除法——斜率除以
+`denom`、截距除以窗口长度。两处都改成倒数乘法：一次额外的舍入，比该家族 1e-8 金标准宽六个数量级，
+而且**这正是 `linear.rs::linreg_slope` 标量尾段早就在做的事**。同一份核在同一个量上既做除法又做
+乘法，是全仓唯一一处这种不一致。`simd_ops::simd_linreg_slope` / `linreg_slope_scalar` /
+`linreg_scalar` / `linreg_avx2` 现在与它一致；`linreg_avx2` 也不再每次调用分配一个
+`Vec<f64>` 存 lane 下标。
+
+### 42.7 一条被门禁抓住的自造错误：`#[expect]` 不生效
+
+本轮新加的 `#[expect(clippy::uninit_vec)]` 在 `overlap::bbands` 与
+`momentum::compute_adx_family` 上被 CI 口径的 clippy **判为未生效**（`RUSTFLAGS="-D
+unfulfilled_lint_expectations"`），而在 `utils::uninit_output` 上生效。用探针逐一验证过
+`set_len` 的七种书写形态（单条/多条 `unsafe` 块、早退后声明、多缓冲、带类型标注……）都无法复现
+那两个函数的差异，也就是说这不是"写法问题"而是"位置问题"。
+
+结论不是去猜 clippy 的实现，而是**换设计**：需要这个模式的地方改为调用
+`utils::uninit_output`。副作用比原方案更好——`unsafe` 块从五处收敛到一处，`#[expect]` 只挂在
+一个**已经被证实会触发**的函数上。
+
+### 42.8 工业级评估（第十六轮后）
+
+- **数值维度**：不变（工业级），且本轮的每一处改动要么逐位保持算术（`floor`/`ceil` 对
+  `f64::floor`/`f64::ceil` 做逐位断言）、要么是一次落在 1e-8 容差内的舍入、要么纯属内存管理。
+  全量回归：**3965 个测试、0 失败、62 个 target**，含 `golden_talib_tests` 对 TA-Lib 的逐值夹具。
+- **效率维度**：提升。全量重跑 90 项配对基准为 **✅75 / ⚠️12 / ❌3**（上一轮 72/16/2）；
+  `ceil` 31.19→1.54µs、`floor` 33.66→2.16µs（对 TA-Lib C 分别为 17.79x / 12.64x），`ln` 0.97x→1.63x，
+  `bbands_20@1M` 0.87x→1.28x，`sma_20@1M` 0.98x→1.14x。
+- **但全量数字不能当结论用**（§42.9）：本轮把 15 个非 ✅ 指标单独复测（3s warm-up / 6s 窗口），
+  结果与全量列**方向不一致**——全量列偏乐观。诚实读法是：`ADX`/`ADXR`/`AROON`/`AROONOSC`/`ULTOSC`/
+  `VAR`/`MAX`/`MIN`/`LINREG*` 落后 **0–30%**（而非 0–5%），唯一的真 ❌ 是 `linreg_slope_14`（两列都慢）；
+  全量里的 `tanh`(0.77❌) 与 `aroonosc_14`(0.71❌) **在复测中翻向**（0.53–0.82 / 1.25），是测量噪声。
+- **工程维度**：提升。两条规则的三份重复实现各自收敛为一份；"写入每个槽"的分配模式的 `unsafe`
+  与 SAFETY 论证从五处收敛到一处。
+- **仍未解决**：`ADX`/`ADXR`/`AROON`/`AROONOSC`/`ULTOSC`/`MAX`/`MIN`/`VAR`/`LINREG*` 落后 **0–30%**
+  （§42.9 修正了全量列的读数），而它们的内核**已经**是手工优化过的（单调队列、van Herk–Gil–Werman 分块
+  扫描、缓存下标）。剩下的是每根 bar 上 `high[i]`/`low[i]`/`out[i]` 的边界检查——C 侧没有对应物。
+  要关掉它，每个循环都得改成 `linreg_slope` 那种 zip 游标写法。这是**逐个循环、逐个风险**的工作，
+  因此单独立项，不夹带进本轮。唯一的真 ❌ 是 `linreg_slope_14`（1.30x）。
+
+### 42.9 测量方法学：单跑比值在 1.25x 以下不可信
+
+本轮把 15 个非 ✅ 指标单独复测，得到两个方向相反的结论，都写进了 CHANGELOG：
+
+1. **复测不是"洗白"**。单独跑时整组落在 1.0–1.3x，而不是全量列的 0.7–1.0x。所以"落后多少"的诚实
+   读数是 **0–30%**，不是"已接近持平"。全量列对这批指标偏乐观。
+2. **`tanh` 与 `aroonosc_14` 是噪声，且可证**。我方 `tanh` 三次运行 59.23 / 37.15 / 24.20µs，
+   TA-Lib 侧 45.83 / 45.56 / 45.62µs——0.2% 对 145%。Criterion 的置信区间在**单次运行内**很紧
+   （如 `[35.274, 40.395]`），所以这是**进程间漂移**而非采样误差，而且是**单侧**的：动的是我方那一列。
+
+结论：`docs/BENCHMARK_REPORT.md` 应作为**筛查**产物，而不是判决书；接近 1.0 的比值要单独复测。
+这条方法学结论本身是本轮的产出之一——上一轮的 §41.7 正是在缺少它的情况下得出了错误推论。
+
+### 42.10 顺带发现的、早于本轮的 CI 红灯：8 条断链
+
+跑**完整**门禁矩阵（而不是只跑前几轮碰过的那几个）才发现 `scripts/check_rustdoc.sh` 失败，
+8 条 intra-doc link 无法解析。`git blame` 全部指向 2026-10-04（`db78064`、`ca6d3f16`），
+即**早于本轮两个 pass**——`doc` 这个 CI job 从那时起就是红的，没人发现。
+
+规律很明确：**全部出现在模块级（`//!`）文档注释里**。同一个 `NodeKind` 链接写在隔屏的正常 `///`
+注释里（`core/src/semantic_graph.rs:394`）能正常解析，所以问题不在链接文本，而在 rustdoc 解析模块
+文档时所处的 scope。现在每条都改成显式的 crate 绝对路径——裸的 `NodeKind` 写成
+`crate::semantic_graph::NodeKind`，其余同理——在任一 scope 下都无歧义。
+
+`core/src/compute.rs:162` 是另一类错误：`[`Self::FixedLookback(0)`]` 链接的是一个**变体实例化**，
+不是 item。现在降级为纯代码跨度，与周边已经不加链接的 `FixedLookback(_)` 风格一致。
+
+| 文件 | 修复的链接 |
+|---|---|
+| `core/src/semantic_graph.rs` | `NodeKind`、`ArtifactHash`、`SemanticGraph::content_hash`、`SemanticNode::inputs` |
+| `core/src/runtime_context.rs` | `BufferArena`、`StateArena`、`RuntimeContext` |
+| `core/src/formula/compute_ir.rs` | `SemanticGraph::content_hash` |
+| `core/src/compute.rs` | `Self::FixedLookback(0)` 降级为代码跨度 |
+
+纯文档改动：不动运行时行为、不动 API 面、无可测代价。
+
+### 42.11 门禁矩阵（本轮结束时全绿）
+
+`cargo fmt --check`；`RUSTFLAGS="-D warnings" cargo check --workspace --all-targets --locked`；
+两个 clippy 调用（`RUSTFLAGS="-D unfulfilled_lint_expectations"`）；`cargo test -p finkit --tests
+--no-fail-fast`（**62 target / 3965 通过 / 0 失败 / 3 ignored**）；rustdoc 策略门禁（§42.10）；
+21 个 `scripts/check_*.py` 内务门禁。上一轮红的就是 rustdoc 那一项。
