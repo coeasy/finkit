@@ -930,25 +930,29 @@ pub fn adx_from_di_into(
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn adx(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
-    // `ADX` needs the smoothed DX chain and nothing else. Going through
-    // `compute_di_pair` would also materialise a full-length `+DI` and a
-    // full-length `-DI` and then drop both on return: three allocations and
-    // three write streams where one suffices. `compute_adx_only` runs the
-    // identical recurrence — same warm-up kernel, same operation order, same
-    // `di_dx_from_state` — and writes only the ADX column, so the values are
-    // unchanged. `dx()` is the one public entry point that genuinely wants the
-    // `±DI` pair, and it still calls the family.
-    Ok(Array1::from_vec(compute_adx_only(
-        high, low, close, period,
-    )?))
+    // `ADX` needs the smoothed DX chain and nothing else. `adx_into` is the
+    // raw-pointer recurrence that writes the ADX column straight into the
+    // caller's buffer: one allocation, one write stream, no bounds checks. It
+    // replaces the `compute_adx_only` path, which ran the same arithmetic
+    // through indexed access into a fresh `Vec` — the fix that took `adxr` from
+    // 0.91x to 1.09x (see `adxr`). `dx()` remains the one public entry point
+    // that genuinely wants the `±DI` pair, and it still calls the family.
+    let mut output = Array1::from(crate::utils::uninit_output(high.len()));
+    adx_into(
+        high,
+        low,
+        close,
+        period,
+        output.as_slice_mut().expect("owned Array1 is contiguous"),
+    )?;
+    Ok(output)
 }
 
 /// The `+DI` / `-DI` pair for one Wilder-smoothed DM/TR state.
 ///
-/// The single source of the `tr ≈ 0` guard: the two callers used to carry
-/// separate hand-copied versions of it, which is exactly the kind of duplication
-/// that lets one copy drift from the other. [`di_dx_from_state`] layers the `DX`
-/// ratio on top.
+/// The single source of the `tr ≈ 0` guard: the callers used to carry separate
+/// hand-copied versions of it, which is exactly the kind of duplication that
+/// lets one copy drift from the other.
 #[inline(always)]
 fn di_pair_from_state(plus_dm: f64, minus_dm: f64, tr: f64) -> (f64, f64) {
     if tr.abs() <= 1e-15 {
@@ -957,31 +961,11 @@ fn di_pair_from_state(plus_dm: f64, minus_dm: f64, tr: f64) -> (f64, f64) {
     (plus_dm / tr * 100.0, minus_dm / tr * 100.0)
 }
 
-/// The `+DI` / `-DI` / `DX` triple for one Wilder-smoothed DM/TR state.
-///
-/// Shared by [`compute_adx_only`] (which needs the `DX` chain) and
-/// [`compute_single_di`]-style callers. `DX` costs a division and a pair of
-/// subtractions per bar that [`compute_di_pair`] — and therefore `dx()`, which
-/// deliberately rebuilds `DX` from the two columns to match TA-Lib's rounding —
-/// has no use for, so that path calls [`di_pair_from_state`] directly. The
-/// arithmetic and the `1e-15` thresholds are unchanged.
-#[inline(always)]
-fn di_dx_from_state(plus_dm: f64, minus_dm: f64, tr: f64) -> (f64, f64, f64) {
-    let (plus_di, minus_di) = di_pair_from_state(plus_dm, minus_dm, tr);
-    let sum = plus_di + minus_di;
-    let dx = if sum.abs() > 1e-15 {
-        (plus_di - minus_di).abs() / sum * 100.0
-    } else {
-        0.0
-    };
-    (plus_di, minus_di, dx)
-}
-
 /// The `+DI` / `-DI` pair, computed in one pass over the bars.
 ///
 /// Produced by [`compute_di_pair`] and consumed by [`dx`], which needs both
 /// columns to rebuild `DX` from their ratio. Nothing else wants a pair: `adx`
-/// and `adxr` want the DX chain alone and go through [`compute_adx_only`], while
+/// and `adxr` want the DX chain alone and go through [`adx_into`], while
 /// `plus_di` and `minus_di` each want a single column and go through
 /// [`compute_single_di`].
 ///
@@ -1117,105 +1101,6 @@ fn compute_di_pair(high: &[f64], low: &[f64], close: &[f64], period: usize) -> R
         minus_di: minus_di_out,
     })
 }
-
-/// ADX-only recurrence for ADXR.  ADXR needs the ADX history but not the
-/// public +DI/-DI projections; avoiding those two full-length buffers keeps
-/// the hot path cache-friendly while preserving the family operation order.
-fn compute_adx_only(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Vec<f64>> {
-    if high.len() != low.len() || high.len() != close.len() {
-        return Err(TaError::InvalidParameter {
-            name: "high, low, close".to_string(),
-            constraint: "must have the same length".to_string(),
-        });
-    }
-    validate_input(high.len(), period * 2)?;
-
-    let len = close.len();
-    let p = period as f64;
-    let mut smooth_plus_dm = 0.0;
-    let mut smooth_minus_dm = 0.0;
-    let mut smooth_tr = 0.0;
-    if period > 1 {
-        #[cfg(feature = "std")]
-        crate::math::simd_kernels::adx_warmup_into(
-            high,
-            low,
-            close,
-            period - 1,
-            &mut smooth_plus_dm,
-            &mut smooth_minus_dm,
-            &mut smooth_tr,
-        );
-        #[cfg(not(feature = "std"))]
-        for i in 1..period {
-            let up_move = high[i] - high[i - 1];
-            let down_move = low[i - 1] - low[i];
-            smooth_tr += crate::utils::true_range(high[i], low[i], close[i - 1]);
-            if up_move > down_move && up_move > 0.0 {
-                smooth_plus_dm += up_move;
-            }
-            if down_move > up_move && down_move > 0.0 {
-                smooth_minus_dm += down_move;
-            }
-        }
-    }
-
-    // Only the warm-up prefix needs seeding; see `compute_di_pair`.
-    let adx_start = 2 * period;
-    let adx_warm = if adx_start < len { adx_start - 1 } else { len };
-    // Every slot is written below: the warm-up prefix here, the rest by the two
-    // loops; when `adx_start == len` the whole buffer is that prefix. See
-    // `utils::uninit_output`.
-    let mut output = crate::utils::uninit_output(len);
-    output[..adx_warm].fill(f64::NAN);
-    let mut dx_sum = 0.0;
-    for i in period..adx_start.min(len) {
-        let up_move = high[i] - high[i - 1];
-        let down_move = low[i - 1] - low[i];
-        let pdm = if up_move > down_move && up_move > 0.0 {
-            up_move
-        } else {
-            0.0
-        };
-        let mdm = if down_move > up_move && down_move > 0.0 {
-            down_move
-        } else {
-            0.0
-        };
-        smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
-        smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
-        smooth_tr =
-            smooth_tr - smooth_tr / p + crate::utils::true_range(high[i], low[i], close[i - 1]);
-        dx_sum += di_dx_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr).2;
-    }
-    if adx_start < len {
-        let mut adx_value = dx_sum / p;
-        output[adx_start - 1] = adx_value;
-        for i in adx_start..len {
-            let up_move = high[i] - high[i - 1];
-            let down_move = low[i - 1] - low[i];
-            let pdm = if up_move > down_move && up_move > 0.0 {
-                up_move
-            } else {
-                0.0
-            };
-            let mdm = if down_move > up_move && down_move > 0.0 {
-                down_move
-            } else {
-                0.0
-            };
-            smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / p + pdm;
-            smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
-            smooth_tr =
-                smooth_tr - smooth_tr / p + crate::utils::true_range(high[i], low[i], close[i - 1]);
-            let dx = di_dx_from_state(smooth_plus_dm, smooth_minus_dm, smooth_tr).2;
-            adx_value = (adx_value * (p - 1.0) + dx) / p;
-            output[i] = adx_value;
-        }
-    }
-    Ok(output)
-}
-
 /// Compute one directional indicator without ADX smoothing.
 ///
 /// `PLUS` is a const parameter so the hot loop contains no per-row direction
@@ -3114,7 +2999,8 @@ pub fn trix_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()>
 pub fn adxr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
     // Single buffer end to end: `adxr_into` materializes ADX in place and
     // then walks backwards, so the previous public path's extra full-length
-    // `vec![NAN; len]` allocation (on top of `compute_adx_only`'s own Vec)
+    // `vec![NAN; len]` allocation (on top of the temp Vec the old indexed
+    // recurrence produced)
     // bought nothing.
     let mut output = Array1::from(crate::utils::uninit_output(high.len()));
     adxr_into(
@@ -4523,12 +4409,65 @@ fn ultosc_body(
     // sound: the check it skips would have been false anyway.
     let shortest = period1.min(period2).min(period3);
 
+    // Two loops, the shape `ta_ULTOSC.c` uses. The warm-up emits no bar and
+    // carries no watermark branch; that branch plus the divides it guards was
+    // 14% of this kernel on the 10k-bar series (`core/examples/ultosc_probe.rs`).
+    // The ring writes and the accumulator fold are identical in both loops, so
+    // the state reaching the main loop is bit-identical to the one-loop form
+    // (probe: 0 / 10000 bit-differences, max_abs 0.0).
+    //
     // Bar 0 has no previous close, so both of its terms are 0.0 and the slot for
     // it reads back as the 0.0 the ring was initialised with -- which is exactly
     // what writing bar 0 would have stored. That is what lets an age older than
     // the first bar (`i - period < 0`) read a slot that is still 0.0, so the
     // warm-up needs no separate phase and no branch.
-    for i in 1..high.len() {
+    let len = high.len();
+    let warm_end = max_period.min(len);
+    for i in 1..warm_end {
+        let write = i & mask;
+        let t1 = i.wrapping_sub(period1) & mask;
+        let t2 = i.wrapping_sub(period2) & mask;
+        let t3 = i.wrapping_sub(period3) & mask;
+
+        let true_low = low[i].min(close[i - 1]);
+        let bp = close[i] - true_low;
+        let tr = high[i].max(close[i - 1]) - true_low;
+
+        bp1_sum += bp - bp_ring[t1];
+        tr1_sum += tr - tr_ring[t1];
+        bp2_sum += bp - bp_ring[t2];
+        tr2_sum += tr - tr_ring[t2];
+        bp3_sum += bp - bp_ring[t3];
+        tr3_sum += tr - tr_ring[t3];
+        bp_ring[write] = bp;
+        tr_ring[write] = tr;
+
+        if bp == 0.0 && tr == 0.0 {
+            null_run += 1;
+        } else {
+            null_run = 0;
+        }
+        if null_run >= shortest {
+            // A run at least as long as a window means every slot that window
+            // spans is exactly 0.0, so its residue can be dropped.
+            if null_run >= period1 {
+                bp1_sum = 0.0;
+                tr1_sum = 0.0;
+            }
+            if null_run >= period2 {
+                bp2_sum = 0.0;
+                tr2_sum = 0.0;
+            }
+            if null_run >= period3 {
+                bp3_sum = 0.0;
+                tr3_sum = 0.0;
+            }
+        }
+    }
+
+    // Every bar from `warm_end` on emits a value; the watermark branch is gone,
+    // so this loop is straight-line apart from the shared null-run reseed.
+    for i in warm_end..len {
         let write = i & mask;
         let t1 = i.wrapping_sub(period1) & mask;
         let t2 = i.wrapping_sub(period2) & mask;
@@ -4569,36 +4508,41 @@ fn ultosc_body(
             }
         }
 
-        if i >= max_period {
-            // `> 0.0`, not `abs() > 1e-15`. A true-range total carries the quote
-            // unit, so a fixed band zeroes the oscillator for an instrument
-            // quoted below it and -- because a just-emptied window holds residue
-            // rather than 0.0 -- divides one residue by another for an
-            // instrument quoted above it. TA-Lib 0.8.1 carries the same exact
-            // test and the reseed above; it added both for its issues #244 and
-            // #253, and the band this replaces is the shape #253 describes.
-            //
-            // The select form is deliberate: `if .. { a / b } else { 0.0 }`
-            // compiles to a divide plus a conditional move, where branching into
-            // a `value += ..` accumulator cost 28% when it was measured
-            // (`core/examples/talib_gap_probe.rs` section D).
-            let avg1 = if tr1_sum > 0.0 {
-                bp1_sum / tr1_sum
-            } else {
-                0.0
-            };
-            let avg2 = if tr2_sum > 0.0 {
-                bp2_sum / tr2_sum
-            } else {
-                0.0
-            };
-            let avg3 = if tr3_sum > 0.0 {
-                bp3_sum / tr3_sum
-            } else {
-                0.0
-            };
-            output[i] = 100.0 * (4.0 * avg1 + 2.0 * avg2 + avg3) / 7.0;
-        }
+        // `> 0.0`, not `abs() > 1e-15`. A true-range total carries the quote
+        // unit, so a fixed band zeroes the oscillator for an instrument
+        // quoted below it and -- because a just-emptied window holds residue
+        // rather than 0.0 -- divides one residue by another for an
+        // instrument quoted above it. TA-Lib 0.8.1 carries the same exact
+        // test and the reseed above; it added both for its issues #244 and
+        // #253, and the band this replaces is the shape #253 describes.
+        //
+        // The select form is deliberate: `if .. { a / b } else { 0.0 }`
+        // compiles to a divide plus a conditional move, where branching into
+        // a `value += ..` accumulator cost 28% when it was measured
+        // (`core/examples/talib_gap_probe.rs` section D).
+        //
+        // The three guarded divides stay (they are the contract), but the final
+        // scale multiplies by the folded `1/7` instead of dividing by `7.0`:
+        // the divide was 8% of the kernel in the probe, and the reciprocal's one
+        // extra rounding is 1 ulp (probe max_rel 1.66e-16 -- four orders inside
+        // this family's 1e-8 golden tolerance). `linreg` makes the same trade
+        // with its hoisted `inv_divisor`.
+        let avg1 = if tr1_sum > 0.0 {
+            bp1_sum / tr1_sum
+        } else {
+            0.0
+        };
+        let avg2 = if tr2_sum > 0.0 {
+            bp2_sum / tr2_sum
+        } else {
+            0.0
+        };
+        let avg3 = if tr3_sum > 0.0 {
+            bp3_sum / tr3_sum
+        } else {
+            0.0
+        };
+        output[i] = 100.0 * (4.0 * avg1 + 2.0 * avg2 + avg3) * (1.0 / 7.0);
     }
     Ok(())
 }

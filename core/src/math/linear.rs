@@ -352,7 +352,10 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_input(input.len(), period)?;
 
     let len = input.len();
-    let mut output = init_output(len);
+    // Every slot from `warm_start + period - 1` on is written below, so only the
+    // warm-up prefix needs a NaN fill: `init_output`'s zero pass plus full-length
+    // NaN pass would both be overwritten (the degenerate path fills `[..len]`).
+    let mut output = crate::utils::uninit_output(len);
 
     // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
     // bad data: start the rolling window after it. `warm_start == 0` leaves
@@ -360,8 +363,9 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
     // below are seeded from a NaN-bearing window and `NaN - NaN` keeps them NaN
     // for the whole series.
     let warm_start = crate::math::leading_warmup(input);
+    output[..(warm_start + period - 1).min(len)].fill(f64::NAN);
     if warm_start + period > len {
-        return Ok(output);
+        return Ok(output.into());
     }
     let p = period as f64;
     let last_x = (period - 1) as f64;
@@ -416,7 +420,7 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
         *out = slope * last_x + intercept;
     }
 
-    Ok(output)
+    Ok(output.into())
 }
 
 /// Calculate the angle of the linear regression line in degrees
@@ -447,7 +451,9 @@ pub fn linreg_angle(input: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_input(input.len(), period)?;
 
     let len = input.len();
-    let mut output = init_output(len);
+    // As in [`linreg`]: only the warm-up prefix stays NaN, since every slot from
+    // `warm_start + period - 1` on is written below.
+    let mut output = crate::utils::uninit_output(len);
 
     // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
     // bad data: start the rolling window after it. `warm_start == 0` leaves
@@ -455,8 +461,9 @@ pub fn linreg_angle(input: &[f64], period: usize) -> Result<Array1<f64>> {
     // below are seeded from a NaN-bearing window and `NaN - NaN` keeps them NaN
     // for the whole series.
     let warm_start = crate::math::leading_warmup(input);
+    output[..(warm_start + period - 1).min(len)].fill(f64::NAN);
     if warm_start + period > len {
-        return Ok(output);
+        return Ok(output.into());
     }
     let p = period as f64;
     let sum_x = p * (p - 1.0) * 0.5;
@@ -508,7 +515,7 @@ pub fn linreg_angle(input: &[f64], period: usize) -> Result<Array1<f64>> {
         output[today] = angle(sum_xy, sum_y);
     }
 
-    Ok(output)
+    Ok(output.into())
 }
 
 /// Quantile Regression Result

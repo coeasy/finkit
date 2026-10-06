@@ -209,6 +209,43 @@ also benefits the cached rolling-extreme path (`MAX`/`MIN` for NaN-bearing input
 `rescan_extreme_window`.
 
 
+### Changed - 2026-10-06 (twenty-third pass — ULTOSC kernel split + reciprocal, ADX onto adx_into, LINREG prefix fill)
+
+The three largest absolute gaps in the warn list, plus the first dedicated
+kernel probe.
+
+- `ultosc`: new `core/examples/ultosc_probe.rs` measures structural variants
+  in-process, interleaved, ours-vs-ours. Two-loop split (warm-up without the
+  `i >= max_period` watermark branch) = **-14.1%, 0/10000 bit-differences**;
+  folding the trailing `/ 7.0` into `* (1.0/7.0)` adds another ~8% at
+  max_rel 1.66e-16 (1 ulp, four orders inside the 1e-8 golden tolerance) -
+  the same trade `linreg`'s hoisted `inv_divisor` already makes. Combined
+  **-21.6%** on the kernel. The three guarded `tr_sum > 0.0` divides are the
+  contract and stay.
+- `adx` public fn: routed through `adx_into` (raw-pointer recurrence, local
+  `dx()`), replacing `compute_adx_only`'s indexed access, its full DI-pair
+  computation and its own Vec. Same fix that took `adxr` to 1.09x. In-run
+  ours/C ratio moves from 0.95x to 1.05-1.19x in both A/B directions.
+  `compute_adx_only` and `di_dx_from_state` became dead and were deleted.
+- `linreg` / `linreg_angle`: `init_output` (zeros pass + full-length NaN
+  pass) -> `uninit_output` + warm-up-prefix fill; both write every slot from
+  `warm_start + period - 1` on, and the degenerate path's prefix fill covers
+  the whole buffer.
+
+Measurement note for this session: Criterion's cross-run absolute readings
+swung +-20% with a mirror-image run-order artifact (whichever revision ran
+second measured slower - forward A/B read old 62.1 / new 79.0 us, reverse
+read new 64.0 / old 78.1 us on the same bench). Kernel deltas are therefore
+taken from the in-process interleaved duel, cross-implementation ratios from
+the within-run ours/C pairing, and the full-suite run remains the official
+source. Recorded in V4 plan 44.16.
+
+Also recorded: `wma`'s 0.96-0.98x is the R-1 `reject_if_non_finite` SIMD
+scan (~0.8 us of a 21 us call) that TA-Lib does not perform - a deliberate
+contract cost, not headroom.
+
+Tests: 3054 lib + 53 golden parity + 28 differential, all pass.
+
 ### Changed - 2026-10-06 (twenty-second pass — adxr single-buffer public path, ultosc prefix-fill)
 
 Both candidates named at the end of the twenty-first pass, handled; kernel
