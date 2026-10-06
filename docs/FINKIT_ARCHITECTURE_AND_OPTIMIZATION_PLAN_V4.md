@@ -4259,3 +4259,124 @@ golden 容差低四个数量级，且 `linreg` 的 `inv_divisor` 早有同样取
 `reject_if_non_finite` SIMD 非有限扫描（10k×8B）成本吻合——TA-Lib 不做该校验。属**有意契约成本**，
 不优化。剩余 1.00× 边界项（`cos`/`tanh`/`sin`/`ln`）与 `aroon`/`aroonosc`（0.93–0.96×）需要各自
 的探针再定，本会话测量噪声高于这些差距本身，暂不动手。
+
+### 44.17 第二十四轮：公式引擎——`eval_last` 正确性修复、快路径扩展（引擎开销 2.27× → 1.12×，相对 TA-Lib C 由 0.93× 变为 1.92×）
+
+本轮首次把优化对象从「指标内核」移到「公式引擎」本身，并交付了三件可执行资产：
+`core/examples/custom_formula_gallery.rs`（9 个用户自定义公式示例）、
+`core/examples/formula_vs_talib.rs`（引擎/原生/TA-Lib C 三方对比）、
+`core/examples/formula_overhead_probe.rs`（开销分解探针）、
+`core/examples/formula_surface_audit.rs`（能力审计）、`core/examples/eval_last_diag.rs`（回归诊断）。
+
+#### 1. 先修一个正确性 bug：`eval_last` 对同长度上下文返回 NaN（扫描循环形态）
+
+用一份编译好的公式依次对多个等长标的求值（**市场扫描的标准用法**）时，`RSI(CLOSE,14)` 的返回值
+**隔次为 NaN**：
+
+```text
+call 0: 45.50774176681885
+call 1: NaN
+call 2: 45.50774176681885
+call 3: NaN      ← 200 次里 100 次 NaN
+```
+
+根因：`try_eval_last_streaming_common` 遇到 `state.len == ctx.data_len`（同长度 = 新标的或历史被改写）
+时**丢弃缓存并返回 `None`**，交由 `eval_range(formula, ctx, len-1, len)` 兜底；而 `eval_range` 会把窗口
+裁剪到 `required_lookback`，**Wilder 递归指标无法在短窗口上重建历史**，于是稳定输出 NaN。
+`MA` 类非递归指标因此不受影响——这也解释了为什么这个 bug 只在 RSI/ATR 一类上出现。
+
+修复：**不可追加时重新播种，而不是丢弃**。缓存状态只在「真正的一 bar 追加」下复用
+（`state.len + 1 == ctx.data_len` 且前一输入未变）；否则用当前序列全量重算并写回状态，
+直接返回序列实际蕴含的值。EMA 路径（`try_eval_last_streaming_ema`）同源处理。
+
+修复后：同长度重复调用稳定返回 `45.50774176681885`；一 bar 追加路径的 O(1) 行为与数值完全不变；
+`MA(CLOSE,20)` 原先在两条路径间交替的 1 ulp 抖动（`...147` / `...125`）也一并消失——
+因为回退到的裁剪路径走了另一套算术，现在只有一条路径。
+
+#### 2. 公式引擎相对原生直调的开销：2.27× → 1.12×
+
+`formula_vs_talib` 在 10k/100k 两档上同进程交错测量四列（`formula` / `planned` / `native` / `talib-C`）：
+
+| 档位 | 指标 | 改前 formula | 改后 formula | 变化 |
+|---|---:|---:|---:|---:|
+| 10k | WMA(20) | 108.76 µs | **17.79 µs** | **6.1×** |
+| 10k | ATR(14) | 102.88 µs | **40.60 µs** | 2.5× |
+| 10k | DEMA(20) | 85.84 µs | **32.44 µs** | 2.6× |
+| 10k | EMA(20) | 48.94 µs | **33.21 µs** | 1.5× |
+| 10k | **合计** | 555.02 µs | **267.44 µs** | **−52%** |
+| 100k | **合计** | 7002.61 µs | **3112.79 µs** | **−56%** |
+
+| 档位 | f/native | f/talib（C/ours，>1 即引擎更快） |
+|---|---:|---:|
+| 10k | 2.27× → **1.12×** | 0.93× → **1.92×** |
+| 100k | 3.15× → **1.41×** | 0.70× → **1.58×** |
+
+`formula ≈ planned` 说明瓶颈从来不在编译/缓存，而在 `execute` 本身。
+根因是 `try_execute_simple_formula` 快路径**只覆盖 `MA | BOLLMID | EMA | RSI`**，
+其余（WMA/DEMA/TEMA/TRIMA/KAMA/ATR）全部走通用解释器：`resolve_variable_val`
+对每个 `VARIABLE` 节点 `.to_owned()` 克隆整条序列，再加 AST 递归分派。
+探针分解（`formula_overhead_probe`）给出的 10k 账本：内核 25.5 µs、克隆 10.0 µs、
+其余解释器开销 17.0 µs。
+
+改造：把 WMA/DEMA/TEMA/TRIMA/KAMA 纳入单输入快路径，并为 `ATR(HIGH, LOW, CLOSE, N)`
+新增多输入快路径（period 在**最后**一个参数，单输入形态无法表达）。所选内核与通用路径
+**共用同一个 `*_kernel_into`**（`fn_wma` → `moving_avg::wma` → `wma_kernel_into`），
+因此是**逐位一致**而非"接近"；`DEMA`/`TEMA` 的 `warmup_offset + shift_back` 在输入全有限时
+恰好是恒等变换，而全有限正是快路径的既有守卫。
+
+#### 3. 附带修复：EMA 快路径原来与通用路径**不**逐位一致
+
+`formula_overhead_probe` 的数值对照（基准 = 通用路径 `fn_ema` → `moving_avg::ema`）：
+
+| 内核 | 位差 | max_abs | max_rel | 10k 耗时 |
+|---|---:|---:|---:|---:|
+| `moving_avg::ema_into`（**现选用**） | **0 / 10000** | 0.000e0 | 0.000e0 | ~25 µs |
+| `simd_kernels::ema_simd_into`（**原快路径**） | **16 / 10000** | 2.842e-14 | 2.836e-16 | **42.9 µs** |
+| `simd_kernels::ema_fast_into`（未采用） | 8326 / 10000 | 1.137e-13 | 8.064e-16 | **6.2 µs** |
+
+三个结论：
+- 原快路径 EMA 与通用路径差 16 位——**这是一处潜伏的数值一致性缺陷**，本轮一并消除（现为 0 位差）。
+- 换内核同时把 EMA 从 42.9 µs 降到 ~25 µs（引擎侧 52.8 → 37.0 µs，未解释开销 17.0 → 2.5 µs）。
+- `ema_fast_into` 虽快 6.8×，但 8326/10000 位差会破坏「快路径与通用路径逐位一致」契约，
+  **不用于公式引擎**；它的定位就是 Python 公开边界（注释已写明该取舍），维持原状。
+
+#### 4. 核心功能审计结论：已完成
+
+`formula_surface_audit` 从**运行时函数表**（而非手工清单）导出：
+
+- 内置公式函数 **452** 个；
+- TA-Lib 公开目录 **161 项，运行时注册 161 项 = 100% 覆盖**，无缺失；
+- 分类分布：pattern 61 / momentum 30 / math 26 / overlap 15 / statistics 10 / cycle 6 /
+  volatility 5 / price_transform 4 / volume 4；
+- 能力矩阵完整：5 方言（AlphaTA/通达信/同花顺/东财/Pine）、4 执行模式
+  （Interpreter/Plan/Bytecode/JIT）、自定义组件注册、多输出通道、DRAW 绘图指令、
+  增量流式（O(1)/bar + 可序列化检查点）、零拷贝区间求值。
+
+**结论：公式引擎核心功能已完备，无待补的函数缺口。**
+
+#### 5. 多语言支持审计结论：**仍需继续改进**（下一批工作）
+
+以 C 头文件 `ta_*` 的 95 个函数为基准，按规范化名称跨绑定比对：
+
+| 绑定 | 覆盖 | 缺失 | 主要缺口 |
+|---|---:|---:|---|
+| Python | 89 / 95 | 6 | 少量边界项（t3、chandeforecast 等） |
+| Node (TS) | 85 / 95 | 10 | 少量边界项 |
+| Java | 84 / 95 | 11 | 少量边界项 |
+| **.NET** | **55 / 95** | **40** | **CDL 蜡烛图全族 + AD/APO/AVGPRICE/BOP** |
+| **Go** | **51 / 95** | **44** | **CDL 蜡烛图全族 + AD/APO/AVGPRICE/BOP** |
+
+已核实 Go 缺口是**真实缺失而非命名差异**：`ffi/go-binding/go/ta/*.go` 共 137 个导出函数中，
+`Pattern` / `Cdl` / `Candle` 三类标识符**出现 0 次**。.NET 同构。
+
+**下一批优先级**：① 补齐 Go 与 .NET 的 CDL 形态识别（61 个 pattern 函数）与 AD/APO/AVGPRICE/BOP；
+② 拉齐 Python/Node/Java 的最后 6–11 项边界函数。这属于**绑定层 API 补齐**（需同时改 Rust FFI 导出
+与各语言封装 + 各自的契约测试），不是内核问题，故单列一批。
+
+#### 6. 已知遗留（不在本轮范围）
+
+- 快路径结果缓冲仍用 `Array1::from_elem(NaN)`（一次全量填 NaN ≈ 10 µs/10k）。
+  换成 `uninit_output` 需要先逐内核证明「写满 output 的每个槽位」，否则是 UB；列为专项。
+- `KAMA` 快路径用的是分配版 `moving_avg::kama`（无 `_into` 变体），100k 档仍 3.08× vs native。
+- doctest 在本机 Windows 上因命名管道耗尽（`Failed to spawn rustc.exe: code 231`）无法全部编译，
+  与代码无关；已用 `--test-threads=2` 复验仍为同一环境错误。需换机或在 CI 上确认 doctest 全绿。

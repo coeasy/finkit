@@ -209,6 +209,83 @@ also benefits the cached rolling-extreme path (`MAX`/`MIN` for NaN-bearing input
 `rescan_extreme_window`.
 
 
+### Changed - 2026-10-06 (twenty-fourth pass — formula engine: eval_last correctness fix, fast-path expansion, core/multi-language audit)
+
+Formula engine, first pass on the engine itself rather than the kernels.
+
+Correctness fix — eval_last returned NaN on every second symbol:
+- try_eval_last_streaming_common dropped its cached state and returned None
+  when state.len == ctx.data_len (a same-length call = a new symbol in a scan
+  loop). eval_last then fell back to eval_range(formula, ctx, len-1, len),
+  which trims the window to required_lookback - a Wilder recursion cannot be
+  rebuilt on a short window, so RSI(CLOSE,14) alternated 45.5077 / NaN over
+  200 identical calls. Non-recursive MA was unaffected, which is why this went
+  unnoticed.
+- Fix: reseed instead of dropping. The cached state is reused only for a
+  genuine one-bar append (len+1 and unchanged previous input); otherwise the
+  state is rebuilt from the supplied series and its last value returned.
+  try_eval_last_streaming_ema gets the same treatment. Fixed output is stable
+  across repeated calls, the O(1) append path is untouched, and MA's 1-ulp
+  alternation (two arithmetic paths) disappears with it.
+
+Fast-path expansion — engine overhead vs the native call 2.27x -> 1.12x:
+- try_execute_simple_formula only covered MA | BOLLMID | EMA | RSI. Everything
+  else went through the interpreter, where resolve_variable_val clones the
+  whole series per VARIABLE node. Probe ledger at 10k: kernel 25.5 us,
+  clone 10.0 us, remaining interpreter cost 17.0 us.
+- WMA/DEMA/TEMA/TRIMA/KAMA now take the single-input fast path and
+  ATR(HIGH, LOW, CLOSE, N) gets a new multi-input one (its period is the last
+  argument, which the single-input shape cannot express). Each kernel is the
+  one the general executor reaches - fn_wma -> moving_avg::wma ->
+  wma_kernel_into - so the fast path is bit-identical, not merely close.
+  DEMA/TEMA's warmup_offset + shift_back is the identity when the input is
+  fully finite, which is the guard the fast path already requires.
+
+Bit-parity fix carried along: the EMA fast path was NOT bit-identical to the
+general path. Measured against fn_ema -> moving_avg::ema at 10k: the old
+simd_kernels::ema_simd_into differs in 16/10000 slots (max_abs 2.842e-14) and
+costs 42.9 us; moving_avg::ema_into differs in 0/10000 and costs ~25 us, and
+is now what the fast path uses. ema_fast_into (6.2 us, 6.8x faster) is
+deliberately NOT adopted here: it differs in 8326/10000 slots and would break
+the fast-path/general-path parity contract. It keeps serving the Python
+owned-array boundary it was written for.
+
+Measured with the new core/examples/formula_vs_talib.rs (one process,
+interleaved rounds, medians):
+
+  10k  total formula 555.02 -> 267.44 us (-52%); f/native 2.27x -> 1.12x;
+       f/talib 0.93x -> 1.92x (now ahead of TA-Lib C)
+  100k total formula 7002.61 -> 3112.79 us (-56%); f/native 3.15x -> 1.41x;
+       f/talib 0.70x -> 1.58x
+  WMA(20) 108.76 -> 17.79 us (6.1x), ATR(14) 102.88 -> 40.60 us,
+  DEMA(20) 85.84 -> 32.44 us
+
+New runnable examples:
+- custom_formula_gallery.rs — 9 user-authored formula examples: basic
+  expression, register_custom_formula components (composable, cannot shadow
+  built-ins), named channels via eval_multi, IF/REF control flow, templated
+  parameters, incremental streaming with the canonical six-slot
+  [open, high, low, close, volume, amount] row and checkpoint/restore,
+  four dialects, DRAWTEXT/DRAWICON, and compile-once eval_last scanning.
+- formula_vs_talib.rs — formula / planned / native / TA-Lib C columns.
+- formula_overhead_probe.rs — overhead decomposition + kernel bit-parity.
+- formula_surface_audit.rs — capability surface from the runtime table.
+- eval_last_diag.rs — regression probe for the bug fixed above.
+
+Audits (V4 plan 44.17):
+- Core is complete: 452 built-in formula functions, TA-Lib public catalog
+  161/161 registered at runtime (100%), 5 dialects, 4 execution modes,
+  custom components, named channels, drawing, streaming, zero-copy.
+- Multi-language bindings still need work. Against the C header's 95 ta_*
+  functions: Python 89, Node 85, Java 84, .NET 55, Go 51. Go's gap is real,
+  not a naming difference: its 137 exported functions contain zero
+  Pattern/Cdl/Candle identifiers, so the 61 candle pattern functions and
+  AD/APO/AVGPRICE/BOP are genuinely absent. .NET has the same shape.
+
+Tests: 3054 lib + 53 golden + 28 differential + full suite pass. Doc tests
+cannot all compile on this Windows host (rustc spawn fails with code 231,
+named pipes exhausted) - environmental, reproduced at --test-threads=2.
+
 ### Changed - 2026-10-06 (twenty-third pass — ULTOSC kernel split + reciprocal, ADX onto adx_into, LINREG prefix fill)
 
 The three largest absolute gaps in the warn list, plus the first dedicated

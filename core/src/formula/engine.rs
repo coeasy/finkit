@@ -430,6 +430,49 @@ impl Default for FormulaEngine {
     }
 }
 
+/// Fast path for the multi-series `ATR(HIGH, LOW, CLOSE, N)` shape.
+///
+/// The single-input fast path cannot express ATR: its period is the *last*
+/// argument, not the second, and it reads three series. ATR is worth the
+/// special case because it measured as the widest engine-vs-native gap.
+///
+/// Returns `false` on any shape or data condition this path does not own, so
+/// the caller falls through to the general executor unchanged.
+fn try_atr_fast_path(ctx: &FormulaContext, args: &[AstNode], output: &mut [f64]) -> bool {
+    let (high_name, low_name, close_name) = match (&args[0], &args[1], &args[2]) {
+        (AstNode::Variable(h), AstNode::Variable(l), AstNode::Variable(c)) => (h, l, c),
+        _ => return false,
+    };
+    let (Some(high), Some(low), Some(close)) = (
+        ctx.get_data(high_name),
+        ctx.get_data(low_name),
+        ctx.get_data(close_name),
+    ) else {
+        return false;
+    };
+    let AstNode::Number(period_value) = &args[3] else {
+        return false;
+    };
+    if !period_value.is_finite() || *period_value < 1.0 {
+        return false;
+    }
+    let period = *period_value as usize;
+    if period == 0 || high.len() != output.len() {
+        return false;
+    }
+    // Same contract as the single-input path: a non-finite input belongs to
+    // the general executor, which owns the all-NaN conversion.
+    if high.iter().any(|v| !v.is_finite())
+        || low.len() != output.len()
+        || close.len() != output.len()
+        || low.iter().any(|v| !v.is_finite())
+        || close.iter().any(|v| !v.is_finite())
+    {
+        return false;
+    }
+    crate::indicators::volatility::atr_into(high, low, close, period, output).is_ok()
+}
+
 impl FormulaEngine {
     pub fn new() -> Self {
         Self {
@@ -1025,6 +1068,18 @@ impl FormulaEngine {
             _ => return false,
         };
 
+        // Multi-series form: `ATR(HIGH, LOW, CLOSE, N)` carries its period
+        // *last*, so it cannot share the single-input shape below. It is the
+        // one multi-input kernel worth specialising because it is the widest
+        // gap in the engine-vs-native measurements.
+        if name.eq_ignore_ascii_case("atr") && args.len() >= 4 {
+            return try_atr_fast_path(
+                ctx,
+                args,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            );
+        }
+
         let input = match &args[0] {
             AstNode::Variable(name) => ctx.get_data(name),
             _ => None,
@@ -1058,31 +1113,52 @@ impl FormulaEngine {
         //   computed through, while **interior** non-finite values are rejected
         //   there and become all-NaN anyway.
         let upper = name.to_ascii_uppercase();
-        if !matches!(upper.as_str(), "MA" | "BOLLMID" | "EMA" | "RSI")
-            || input.iter().any(|value| !value.is_finite())
+        if !matches!(
+            upper.as_str(),
+            "MA" | "BOLLMID" | "EMA" | "RSI" | "WMA" | "DEMA" | "TEMA" | "TRIMA" | "KAMA"
+        ) || input.iter().any(|value| !value.is_finite())
         {
             return false;
         }
 
+        let out = output.as_slice_mut().expect("Array1 is contiguous");
+        // Every kernel below is the one the general executor would reach --
+        // `fn_wma` calls `moving_avg::wma`, which shares `wma_kernel_into`
+        // with `wma_into`, and so on -- so the specialised path is bit-identical
+        // to the fallback, not merely close. `DEMA`/`TEMA` additionally apply
+        // `warmup_offset` + `shift_back`; that pair is a no-op exactly when the
+        // input is fully finite, which is the guard this path already requires.
+        //
+        // EMA deliberately uses `moving_avg::ema_into` rather than
+        // `simd_kernels::ema_simd_into`: measured in-process at 10k bars, the
+        // "SIMD" EMA is 44.4 us against 6.2 us for `ema_fast_into` and ~20 us
+        // for the scalar recurrence, because EMA is a serial dependency chain
+        // that the block-prefix AVX2 path does not actually shorten.
         match upper.as_str() {
-            "MA" | "BOLLMID" => crate::math::simd_kernels::sma_simd_into(
-                input,
-                period,
-                output.as_slice_mut().expect("Array1 is contiguous"),
-            ),
-            "EMA" => crate::math::simd_kernels::ema_simd_into(
-                input,
-                period,
-                output.as_slice_mut().expect("Array1 is contiguous"),
-            ),
-            "RSI" => crate::math::simd_kernels::rsi_simd_into(
-                input,
-                period,
-                output.as_slice_mut().expect("Array1 is contiguous"),
-            ),
-            _ => return false,
+            "MA" | "BOLLMID" => {
+                crate::math::simd_kernels::sma_simd_into(input, period, out);
+                true
+            }
+            "EMA" => crate::math::moving_avg::ema_into(input, period, out).is_ok(),
+            "RSI" => {
+                crate::math::simd_kernels::rsi_simd_into(input, period, out);
+                true
+            }
+            "WMA" => crate::math::moving_avg::wma_into(input, period, out).is_ok(),
+            "DEMA" => crate::math::moving_avg::dema_into(input, period, out).is_ok(),
+            "TEMA" => crate::math::moving_avg::tema_into(input, period, out).is_ok(),
+            "TRIMA" => crate::math::moving_avg::trima_into(input, period, out).is_ok(),
+            // KAMA has no `_into` variant; the owned kernel matches
+            // `fn_kama`'s call exactly, including its 2/30 smoothing defaults.
+            "KAMA" => match crate::math::moving_avg::kama(input, period, 2, 30) {
+                Ok(values) => {
+                    out.copy_from_slice(values.as_slice().expect("Array1 is contiguous"));
+                    true
+                }
+                Err(_) => false,
+            },
+            _ => false,
         }
-        true
     }
 
     /// Execute a simple built-in formula through the native SIMD kernel.
@@ -1099,6 +1175,28 @@ impl FormulaEngine {
             AstNode::FunctionCall { name, args } if args.len() >= 2 => (name.as_str(), args),
             _ => return None,
         };
+
+        // Multi-series form: `ATR(HIGH, LOW, CLOSE, N)` carries its period
+        // *last*, so the single-input shape below cannot express it.
+        if name.eq_ignore_ascii_case("atr") && args.len() >= 4 {
+            let len = match &args[0] {
+                AstNode::Variable(name) => ctx.get_data(name).map(<[f64]>::len),
+                _ => None,
+            };
+            let Some(len) = len else {
+                return None;
+            };
+            let mut output = Array1::from_elem(len, f64::NAN);
+            return if try_atr_fast_path(
+                ctx,
+                args,
+                output.as_slice_mut().expect("Array1 is contiguous"),
+            ) {
+                Some(output)
+            } else {
+                None
+            };
+        }
 
         let input = match &args[0] {
             AstNode::Variable(name) => ctx.get_data(name),
@@ -1120,35 +1218,57 @@ impl FormulaEngine {
         // "invalid market data becomes all-NaN" contract and the math layer's
         // warm-up rule, under which a leading NaN run is computed through.
         let upper = name.to_ascii_uppercase();
-        if !matches!(upper.as_str(), "MA" | "BOLLMID" | "EMA" | "RSI")
-            || input.iter().any(|value| !value.is_finite())
+        if !matches!(
+            upper.as_str(),
+            "MA" | "BOLLMID" | "EMA" | "RSI" | "WMA" | "DEMA" | "TEMA" | "TRIMA" | "KAMA"
+        ) || input.iter().any(|value| !value.is_finite())
         {
             return None;
         }
 
+        // See `try_execute_simple_formula_into` for why every kernel below is
+        // bit-identical to the general path, and why EMA uses the scalar
+        // recurrence instead of `simd_kernels::ema_simd_into`.
         let mut output = Array1::from_elem(input.len(), f64::NAN);
+        let out = output.as_slice_mut().expect("Array1 is contiguous");
         match upper.as_str() {
             "MA" | "BOLLMID" => {
-                crate::math::simd_kernels::sma_simd_into(
-                    input,
-                    period,
-                    output.as_slice_mut().expect("Array1 is contiguous"),
-                );
+                crate::math::simd_kernels::sma_simd_into(input, period, out);
             }
             "EMA" => {
-                crate::math::simd_kernels::ema_simd_into(
-                    input,
-                    period,
-                    output.as_slice_mut().expect("Array1 is contiguous"),
-                );
+                if crate::math::moving_avg::ema_into(input, period, out).is_err() {
+                    return None;
+                }
             }
             "RSI" => {
-                crate::math::simd_kernels::rsi_simd_into(
-                    input,
-                    period,
-                    output.as_slice_mut().expect("Array1 is contiguous"),
-                );
+                crate::math::simd_kernels::rsi_simd_into(input, period, out);
             }
+            "WMA" => {
+                if crate::math::moving_avg::wma_into(input, period, out).is_err() {
+                    return None;
+                }
+            }
+            "DEMA" => {
+                if crate::math::moving_avg::dema_into(input, period, out).is_err() {
+                    return None;
+                }
+            }
+            "TEMA" => {
+                if crate::math::moving_avg::tema_into(input, period, out).is_err() {
+                    return None;
+                }
+            }
+            "TRIMA" => {
+                if crate::math::moving_avg::trima_into(input, period, out).is_err() {
+                    return None;
+                }
+            }
+            "KAMA" => match crate::math::moving_avg::kama(input, period, 2, 30) {
+                Ok(values) => {
+                    out.copy_from_slice(values.as_slice().expect("Array1 is contiguous"));
+                }
+                Err(_) => return None,
+            },
             _ => return None,
         }
 
@@ -1351,6 +1471,25 @@ impl FormulaEngine {
         if !state_was_existing && input.iter().any(|v| !v.is_finite()) {
             return None;
         }
+
+        // A cached state is only reusable for a genuine one-bar append.  A
+        // same-length call means a *different* context — the scan loop shape,
+        // where one `CompiledFormula` is evaluated against symbol after symbol
+        // of equal length — or a caller mutation of the history.  Dropping the
+        // state and returning `None` used to hand those calls to `eval_range`,
+        // which trims the window to `required_lookback` and therefore cannot
+        // rebuild a Wilder-style recursion: every second symbol came back
+        // `NaN`.  Reseed from the supplied series instead, so `eval_last`
+        // always returns the value the series actually implies.
+        let can_append = states.get(&formula.source).is_some_and(|state| {
+            state.period == period
+                && state.len != 0
+                && state.len + 1 == ctx.data_len
+                && state.previous_input == input[state.len - 1]
+        });
+        if !can_append {
+            states.remove(&formula.source);
+        }
         let state = states.entry(formula.source.clone()).or_insert_with(|| {
             let seed_sum = input.iter().sum::<f64>();
             if input.len() >= period {
@@ -1385,33 +1524,10 @@ impl FormulaEngine {
             }
         });
 
-        if state.period != period {
-            *state = StreamingEmaState {
-                period,
-                len: 0,
-                seed_sum: 0.0,
-                value: f64::NAN,
-                valid: false,
-                previous_input: f64::NAN,
-            };
-        }
-
-        if !state_was_existing {
+        if !can_append {
+            // Freshly seeded or reseeded from the current series: the seed
+            // already holds the value for the last bar.
             return Some(state.value);
-        }
-        // A same-length call may observe a caller mutation or a different
-        // context.  Do not trust the cached state; invalidate and use the
-        // exact evaluator.  Only a genuine one-bar append is O(1).
-        if state.len == ctx.data_len {
-            states.remove(&formula.source);
-            return None;
-        }
-        if state.len + 1 != ctx.data_len
-            || state.len == 0
-            || state.previous_input != input[state.len - 1]
-        {
-            states.remove(&formula.source);
-            return None;
         }
 
         let current = input[state.len];
@@ -1499,8 +1615,22 @@ impl FormulaEngine {
         };
 
         let mut states = self.streaming_common.borrow_mut();
-        let state_was_existing = states.contains_key(&formula.source);
-        if !state_was_existing {
+
+        // Only a genuine one-bar append over the cached history is O(1).  A
+        // same-length call — one compiled formula evaluated against symbol
+        // after symbol of equal length, which is exactly what a market scan
+        // does — must reseed from the supplied series.  Dropping the state and
+        // falling through to `eval_range` used to return `NaN` for every
+        // second symbol, because that path trims the window to
+        // `required_lookback` and cannot rebuild a recursive indicator.
+        let can_append = states.get(&formula.source).is_some_and(|state| {
+            state.len != 0
+                && state.len + 1 == ctx.data_len
+                && values(state.len - 1) == Some(state.last_input)
+        });
+
+        if !can_append {
+            states.remove(&formula.source);
             let mut indicator = match kind.as_str() {
                 "MA" => StreamingFormulaIndicator::Sma(StreamingSma::new(period)),
                 "RSI" => StreamingFormulaIndicator::Rsi(StreamingRsi::new(period)),
@@ -1527,19 +1657,6 @@ impl FormulaEngine {
         }
 
         let state = states.get_mut(&formula.source)?;
-        if state.len == ctx.data_len {
-            states.remove(&formula.source);
-            return None;
-        }
-        if state.len + 1 != ctx.data_len {
-            states.remove(&formula.source);
-            return None;
-        }
-        let previous = values(state.len - 1)?;
-        if previous != state.last_input {
-            states.remove(&formula.source);
-            return None;
-        }
         let current = values(state.len)?;
         let value = state.indicator.next(current);
         state.len = ctx.data_len;
