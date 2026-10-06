@@ -857,11 +857,6 @@ unsafe fn stoch_avx2(
 }
 
 // Scalar fallback (no SIMD intrinsics)
-#[cfg(all(feature = "std", target_arch = "x86_64"))]
-unsafe fn cci_fallback(high: &[f64], low: &[f64], close: &[f64], period: usize, out: &mut [f64]) {
-    cci_scalar(high, low, close, period, out);
-}
-
 #[cfg(all(feature = "std", target_arch = "x86_64", feature = "nightly-avx512"))]
 #[target_feature(enable = "avx512f")]
 unsafe fn sma_avx512(data: &[f64], period: usize, out: &mut [f64]) {
@@ -1324,17 +1319,21 @@ pub fn cci_simd(high: &[f64], low: &[f64], close: &[f64], period: usize) -> allo
 }
 
 #[cfg(feature = "std")]
-/// NOTE: CCI's MAD requires a sorted window (order statistics), which is not
-/// amenable to plain SIMD. The scalar path already uses an O(n·log period)
-/// sorted-window + prefix-sum scheme, so there is no easy vectorization win.
-/// This entry delegates to scalar; it is a dispatch slot, not a vectorized kernel.
+/// CCI's mean deviation is a window reduction that stays scalar on purpose.
+///
+/// This entry exists so the module's `*_simd` surface is uniform, but it
+/// forwards to [`cci_scalar`] on every target — there is no AVX2 arm to
+/// dispatch to. The note that used to sit here ("MAD requires a sorted window,
+/// which is not amenable to plain SIMD") described an implementation that no
+/// longer exists: `cci_scalar` scans the ring directly, and so does
+/// `math::cci::cci`. The reason it still stays scalar is narrower, and
+/// measured. The sum of `|x - mean|` is reassociated into four lanes by any
+/// vector form, and a window whose deviation approaches zero amplifies that
+/// difference through the division at the end. Against TA-Lib's golden series,
+/// which is compared at an *absolute* `1e-8`, the AVX2 form came out 18% slower
+/// on the 10,000-bar series and moved 13 of 10,000 values past that band. See
+/// V4 plan §43.
 pub fn cci_simd_into(high: &[f64], low: &[f64], close: &[f64], period: usize, out: &mut [f64]) {
-    #[cfg(all(feature = "std", target_arch = "x86_64"))]
-    {
-        if x86_dispatch::has_avx2() {
-            return unsafe { cci_fallback(high, low, close, period, out) };
-        }
-    }
     cci_scalar(high, low, close, period, out);
 }
 

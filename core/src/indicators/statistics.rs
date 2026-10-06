@@ -63,6 +63,14 @@ pub fn avgdev(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     // O(1) rolling mean update, O(period) abs-deviation per step. For typical
     // periods (<= 200) this is fast enough; a strict O(1) streaming version
     // is implemented in `streaming::StreamingAvgdev`.
+    //
+    // Two rewrites of this loop were built and measured against it in-process
+    // and both came out *slower*: a ring index instead of `remove(0)`, and an
+    // AVX2 `Σ|x - mean|`. That is the expected result at this size — the window
+    // is 13 doubles, so the memmove it would remove is 104 bytes already in L1,
+    // and the vector scan replaces 14 dependent scalar adds with three
+    // lane-wide ones plus a horizontal reduce and a dispatch check. There is no
+    // headroom here to find, so the straightforward body stays (V4 plan §43).
     let mut buf: Vec<f64> = input[start..start + timeperiod].to_vec();
     let mut sum: f64 = buf.iter().sum();
 
@@ -73,16 +81,14 @@ pub fn avgdev(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     output[start + timeperiod - 1] = dev_sum(&buf, mean) * inv_n;
 
     for i in start + timeperiod..len {
-        let oldest = input[i - timeperiod];
         let newest = input[i];
-        sum += newest - oldest;
+        sum += newest - input[i - timeperiod];
         // O(period) sliding-window update: drop oldest from front, push newest
         // to back. Cheap because period is bounded and the vec is tiny.
         buf.remove(0);
         buf.push(newest);
         let mean = sum * inv_n;
         output[i] = dev_sum(&buf, mean) * inv_n;
-        let _ = oldest; // keep `oldest` for clarity / debug
     }
 
     Ok(output)
@@ -260,7 +266,31 @@ pub fn percent_rank(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     validate_input(input.len(), timeperiod)?;
 
     let len = input.len();
-    let mut output = init_output(len);
+    // Both arms write every slot from `timeperiod` on, so only the warm-up
+    // prefix needs seeding. `init_output` used to clear the whole vector first,
+    // which is a full-length store pass over values the loop overwrites.
+    let mut output = crate::utils::uninit_output(len);
+    output[..timeperiod.min(len)].fill(f64::NAN);
+
+    // Direct count. `TA_PERCENTRANK` is the number of the `timeperiod`
+    // *preceding* observations strictly below the current bar, as a percentage
+    // — an integer, so counting the window element by element produces the very
+    // same value the sorted-window form did, with none of its bookkeeping. The
+    // `count_less` predicate is the same `<` in both forms, which is why this
+    // is an exact restatement rather than a reassociation.
+    //
+    // The sorted form is kept for input containing `NaN`: it compares with
+    // `partial_cmp().unwrap_or(Ordering::Equal)`, which gives a missing bar no
+    // defined position, so the two forms are not required to agree there and
+    // the shipped behaviour is preserved rather than redefined.
+    if input.iter().all(|value| value.is_finite()) {
+        for i in timeperiod..len {
+            let count_less =
+                crate::math::simd_ops::simd_count_less(&input[i - timeperiod..i], input[i]);
+            output[i] = (count_less as f64 / timeperiod as f64) * 100.0;
+        }
+        return Ok(Array1::from(output));
+    }
 
     // TA-Lib ranks the current value against the preceding `timeperiod`
     // observations. The current value is not part of its own reference window.
@@ -291,7 +321,7 @@ pub fn percent_rank(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
         sorted[insert_pos] = current;
     }
 
-    Ok(output)
+    Ok(Array1::from(output))
 }
 
 /// Index of the first entry at or above `value` in an ascending slice.

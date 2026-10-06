@@ -1501,111 +1501,131 @@ pub struct AroonResult {
 /// let result = indicators::aroon(&high, &low, 5).unwrap();
 /// assert_eq!(result.aroon_up.len(), 10);
 /// ```
-/// Single-pass AROON using optimized sliding window.
+/// Cached-index arg-extreme of the trailing window, shared by `AROON`,
+/// `AROON_UP`/`AROON_DOWN` and `AROONOSC`.
 ///
-/// Uses direct index tracking for max/min with efficient rescan when needed.
-/// This approach is faster than deque-based methods for typical periods.
-fn aroon_with_deques(high: &[f64], low: &[f64], period: usize) -> Result<AroonResult> {
-    validate_input(high.len(), period + 1)?;
+/// `idx` is the absolute index of the window's extreme. The window always ends
+/// at the current bar, so `i - idx` is the "age" `AROON` scales and, at the
+/// same time, the lane offset — the two are the same number, and that is what
+/// lets one recurrence serve all three outputs.
+///
+/// This is the cached-index strategy: one comparison per bar while `idx` stays
+/// inside `[i - period, i]`, and a rescan of at most `period + 1` bars when it
+/// leaves. It is the form that won the head-to-head measurements — a monotonic
+/// deque pays a mispredicted pop-back branch on every noisy bar, and a fused
+/// Van Herk–Gil–Werman block scan costs more in dynamically indexed tables than
+/// the rescans it removes (V4 plan §36).
+///
+/// `AROON`, its caller-owned form and `AROONOSC` used to carry three separate
+/// copies of this recurrence with three different `NaN` behaviours; there is
+/// now one, and it is the above — the state is a trait-free struct so the
+/// compiler keeps it in registers rather than re-deriving it per call site.
+#[derive(Clone, Copy)]
+struct ExtremeTracker<const WANT_MAX: bool> {
+    extreme: f64,
+    idx: usize,
+    found: bool,
+}
 
-    let len = high.len();
-    let mut up_out = vec![f64::NAN; len];
-    let mut dn_out = vec![f64::NAN; len];
-    let inv_period = 100.0 / period as f64;
-    let high_ptr = high.as_ptr();
-    let low_ptr = low.as_ptr();
-
-    unsafe {
-        // Initial window [0..=period] (period+1 elements), matching TA-Lib's
-        // AROON window semantics. TA-Lib scans `[today-period .. today]`
-        // (period+1 bars, including the current bar and index 0) and emits the
-        // first value at index `period`.
-        let mut highest_idx = 0usize;
-        let mut lowest_idx = 0usize;
-        let mut highest = *high_ptr;
-        let mut lowest = *low_ptr;
-
-        for k in 1..=period {
-            let h = *high_ptr.add(k);
-            let l = *low_ptr.add(k);
-            if h >= highest {
-                highest = h;
-                highest_idx = k;
-            }
-            if l <= lowest {
-                lowest = l;
-                lowest_idx = k;
-            }
-        }
-
-        // First output at index `period`.
-        *up_out.get_unchecked_mut(period) = highest_idx as f64 * inv_period;
-        *dn_out.get_unchecked_mut(period) = lowest_idx as f64 * inv_period;
-
-        // Slide window: window [ws, i] has `period + 1` elements, matching
-        // TA-Lib's trailing window [today-period .. today].
-        for i in (period + 1)..len {
-            let ws = i - period;
-            let new_h = *high_ptr.add(i);
-            let new_l = *low_ptr.add(i);
-
-            // Update highest
-            if highest_idx < ws {
-                // Max fell out of window, rescan
-                highest = *high_ptr.add(ws);
-                highest_idx = ws;
-                let mut k = ws + 1;
-                while k <= i {
-                    let h = *high_ptr.add(k);
-                    if h >= highest {
-                        highest = h;
-                        highest_idx = k;
-                    }
-                    k += 1;
-                }
-            } else if new_h >= highest {
-                highest = new_h;
-                highest_idx = i;
-            }
-
-            // Update lowest
-            if lowest_idx < ws {
-                // Min fell out of window, rescan
-                lowest = *low_ptr.add(ws);
-                lowest_idx = ws;
-                let mut k = ws + 1;
-                while k <= i {
-                    let l = *low_ptr.add(k);
-                    if l <= lowest {
-                        lowest = l;
-                        lowest_idx = k;
-                    }
-                    k += 1;
-                }
-            } else if new_l <= lowest {
-                lowest = new_l;
-                lowest_idx = i;
-            }
-
-            *up_out.get_unchecked_mut(i) = (period - (i - highest_idx)) as f64 * inv_period;
-            *dn_out.get_unchecked_mut(i) = (period - (i - lowest_idx)) as f64 * inv_period;
+impl<const WANT_MAX: bool> ExtremeTracker<WANT_MAX> {
+    #[inline(always)]
+    fn new() -> Self {
+        Self {
+            extreme: if WANT_MAX {
+                f64::NEG_INFINITY
+            } else {
+                f64::INFINITY
+            },
+            idx: 0,
+            found: false,
         }
     }
 
+    /// Fold bar `i` in, evicting an extreme that has left `[i - period, i]`.
+    ///
+    /// The current value is passed in rather than re-read as `values[i]`, so
+    /// the caller's `zip` walk is the only place the bar is loaded and there is
+    /// no bounds check on the hot path.
+    ///
+    /// The comparison is against an infinite seed, so `NaN` — which fails both
+    /// `>=` and `<=` — is skipped for free with no explicit test; that is the
+    /// property all three previous copies relied on. `>=` / `<=` rather than
+    /// `>` / `<` keep the *newest* tied bar, which matters here because the
+    /// index, not only the value, is what gets reported.
+    #[inline(always)]
+    fn advance(&mut self, values: &[f64], i: usize, value: f64, period: usize) {
+        let wins = if WANT_MAX {
+            value >= self.extreme
+        } else {
+            value <= self.extreme
+        };
+        if wins {
+            self.extreme = value;
+            self.idx = i;
+            self.found = true;
+        } else if self.found && self.idx + period < i {
+            let (extreme, idx, found) =
+                crate::math::statistics::rescan_extreme_window::<WANT_MAX>(values, i - period, i);
+            self.extreme = extreme;
+            self.idx = idx;
+            self.found = found;
+        }
+    }
+
+    /// `100 * (period - age) / period`, or `NaN` when the window holds no
+    /// finite bar.
+    #[inline(always)]
+    fn aroon(&self, i: usize, period: usize, scale: f64) -> f64 {
+        if self.found {
+            (period - (i - self.idx)) as f64 * scale
+        } else {
+            f64::NAN
+        }
+    }
+}
+
+/// AROON
+///
+/// # Examples
+///
+/// ```
+/// use finkit::indicators;
+///
+/// let high = vec![45.0, 45.5, 46.0, 45.5, 46.5, 46.0, 45.5, 45.0, 45.5, 46.0];
+/// let low = vec![43.0, 43.5, 44.0, 43.0, 44.0, 43.5, 43.0, 42.5, 43.0, 43.5];
+/// let result = indicators::aroon(&high, &low, 5).unwrap();
+/// assert_eq!(result.aroon_up.len(), 10);
+/// ```
+pub fn aroon(high: &[f64], low: &[f64], period: usize) -> Result<AroonResult> {
+    let len = high.len();
+    // Every slot is written by the kernel below, warm-up `NaN` prefix included,
+    // so these two buffers need no seeding.
+    let mut aroon_up = crate::utils::uninit_output(len);
+    let mut aroon_down = crate::utils::uninit_output(len);
+    aroon_into(high, low, period, &mut aroon_up, &mut aroon_down)?;
     Ok(AroonResult {
-        aroon_up: Array1::from(up_out),
-        aroon_down: Array1::from(dn_out),
+        aroon_up: Array1::from(aroon_up),
+        aroon_down: Array1::from(aroon_down),
     })
 }
 
-pub fn aroon(high: &[f64], low: &[f64], period: usize) -> Result<AroonResult> {
-    // Use optimized sliding window algorithm for all periods
-    aroon_with_deques(high, low, period)
-}
-
-/// Caller-owned monotonic-queue AROON kernel.  It keeps the newest equal
-/// extrema, matching the scalar implementation without rescanning an entire
-/// window when an old extremum leaves the lookback range.
+/// Caller-owned AROON kernel.
+///
+/// Writes `AROON_UP` into `aroon_up` and `AROON_DOWN` into `aroon_down`; both
+/// must be as long as `high`, and every slot is written (`NaN` where the
+/// contract has no value yet).
+///
+/// Both legs advance in **one** loop. A per-leg helper run twice — one pass
+/// over `high`, then one over `low` — measured 21% slower than this shape on
+/// the 10,000-bar series even though the two forms execute the same number of
+/// comparisons: the second pass re-walks the index arithmetic and the branch
+/// skeleton for no second result.
+///
+/// What is *shared* between [`aroon`], this kernel and [`aroonosc`] is the
+/// recurrence — the private `ExtremeTracker` type — not the loop around it.
+/// Sharing the type is the point: three hand-copied recurrences with three
+/// different `NaN` behaviours cannot be kept in step, whereas these three
+/// differ only in which outputs they pick out of the same state.
 #[inline]
 pub fn aroon_into(
     high: &[f64],
@@ -1627,85 +1647,30 @@ pub fn aroon_into(
         });
     }
     validate_input(high.len(), period + 1)?;
-    // The loop below writes every slot from `period` on, so only the warm-up
-    // prefix needs seeding. Filling the whole buffer first was two extra
-    // full-length store passes over both outputs — 160 KB on a 10k-bar series —
-    // for values the loop overwrites immediately.
-    aroon_up[..period].fill(f64::NAN);
-    aroon_down[..period].fill(f64::NAN);
 
-    // A bounded circular deque is enough because a monotonic queue contains
-    // at most one index per bar in the lookback window.  This avoids the
-    // general-purpose bookkeeping in VecDeque on the default period-14 path.
-    let capacity = period + 1;
-    let mut highs = vec![0usize; capacity];
-    let mut lows = vec![0usize; capacity];
-    let mut high_head = 0usize;
-    let mut low_head = 0usize;
-    let mut high_len = 0usize;
-    let mut low_len = 0usize;
-    let inv_period = 100.0 / period as f64;
-    for i in 0..high.len() {
-        let window_start = i.saturating_sub(period);
-        while high_len != 0 && highs[high_head] < window_start {
-            high_head += 1;
-            if high_head == capacity {
-                high_head = 0;
-            }
-            high_len -= 1;
-        }
-        while low_len != 0 && lows[low_head] < window_start {
-            low_head += 1;
-            if low_head == capacity {
-                low_head = 0;
-            }
-            low_len -= 1;
-        }
-
-        while high_len != 0 {
-            let position = high_head + high_len - 1;
-            let back = if position >= capacity {
-                position - capacity
-            } else {
-                position
-            };
-            if high[highs[back]] > high[i] {
-                break;
-            }
-            high_len -= 1;
-        }
-        let position = high_head + high_len;
-        highs[if position >= capacity {
-            position - capacity
+    let scale = 100.0 / period as f64;
+    let mut highs = ExtremeTracker::<true>::new();
+    let mut lows = ExtremeTracker::<false>::new();
+    // The `zip` walk over all four slices keeps `high[i]`, `low[i]` and the two
+    // output slots free of per-bar bounds checks. Bounds checks on exactly
+    // these loads are what §42.8 identified as the remaining gap for the
+    // `AROON`/`ADX`/`MAX`/`MIN` family, where C has no equivalent.
+    for (i, (((&high_bar, &low_bar), up_slot), down_slot)) in high
+        .iter()
+        .zip(low.iter())
+        .zip(aroon_up.iter_mut())
+        .zip(aroon_down.iter_mut())
+        .enumerate()
+    {
+        highs.advance(high, i, high_bar, period);
+        lows.advance(low, i, low_bar, period);
+        let (up, down) = if i >= period {
+            (highs.aroon(i, period, scale), lows.aroon(i, period, scale))
         } else {
-            position
-        }] = i;
-        high_len += 1;
-
-        while low_len != 0 {
-            let position = low_head + low_len - 1;
-            let back = if position >= capacity {
-                position - capacity
-            } else {
-                position
-            };
-            if low[lows[back]] < low[i] {
-                break;
-            }
-            low_len -= 1;
-        }
-        let position = low_head + low_len;
-        lows[if position >= capacity {
-            position - capacity
-        } else {
-            position
-        }] = i;
-        low_len += 1;
-
-        if i >= period {
-            aroon_up[i] = (period - (i - highs[high_head])) as f64 * inv_period;
-            aroon_down[i] = (period - (i - lows[low_head])) as f64 * inv_period;
-        }
+            (f64::NAN, f64::NAN)
+        };
+        *up_slot = up;
+        *down_slot = down;
     }
     Ok(())
 }
@@ -1741,14 +1706,19 @@ pub fn aroon_into(
 /// indexing from the million-row benchmark case. The result is written
 /// directly into caller-owned storage so formula and FFI paths do not need an
 /// intermediate Array1 or copy.
+///
+/// This used to be `cci_period14_into_impl<const USE_AVX2: bool>` with a
+/// `let _ = USE_AVX2;` at the top and an `is_x86_feature_detected!("avx2")`
+/// branch at the call site — a vectorized path in name only, since the body was
+/// (and still is) the same unrolled scalar code either way. The parameter is
+/// gone rather than filled in: vectorizing the mean and the mean deviation
+/// means reassociating two `f64` sums of a window whose deviation can approach
+/// zero, and `CCI` is compared against TA-Lib's golden series at an *absolute*
+/// `1e-8`, where that reassociation is measurable. The measurement agrees — the
+/// AVX2 form of these two scans came out 18% slower on the 10,000-bar series
+/// *and* moved 13 of 10,000 values past `1e-8`. See V4 plan §43.
 #[inline(always)]
-fn cci_period14_into_impl<const USE_AVX2: bool>(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    output: &mut [f64],
-) {
-    let _ = USE_AVX2;
+fn cci_period14_into_impl(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]) {
     let len = close.len();
     output[..13].fill(f64::NAN);
     let mut ring = [0.0_f64; 14];
@@ -1819,12 +1789,7 @@ fn cci_period14_into_impl<const USE_AVX2: bool>(
 
 #[inline]
 fn cci_period14_into(high: &[f64], low: &[f64], close: &[f64], output: &mut [f64]) {
-    #[cfg(all(feature = "std", target_arch = "x86_64"))]
-    if is_x86_feature_detected!("avx2") {
-        cci_period14_into_impl::<true>(high, low, close, output);
-        return;
-    }
-    cci_period14_into_impl::<false>(high, low, close, output);
+    cci_period14_into_impl(high, low, close, output);
 }
 
 fn cci_generic_into(high: &[f64], low: &[f64], close: &[f64], period: usize, output: &mut [f64]) {
@@ -1857,10 +1822,14 @@ fn cci_generic_into(high: &[f64], low: &[f64], close: &[f64], period: usize, out
         }
         mean_dev *= inv_p;
         unsafe {
+            // TA-Lib's `TA_CCI` writes `0.0` when the deviation is zero, and the
+            // period-14 path above has always done the same. This generic path
+            // used to write `NaN`, so one indicator had two answers depending
+            // only on the period it was called with; the contract is now one.
             *output_ptr.add(first) = if mean_dev.abs() > 1e-15 {
                 (ring[period - 1] - tp_mean) / (0.015 * mean_dev)
             } else {
-                f64::NAN
+                0.0
             };
         }
     }
@@ -1881,10 +1850,13 @@ fn cci_generic_into(high: &[f64], low: &[f64], close: &[f64], period: usize, out
         }
         mean_dev *= inv_p;
         unsafe {
+            // See the first-window branch above: `0.0`, matching `TA_CCI` and
+            // the period-14 path, instead of the `NaN` this branch used to
+            // emit for the same flat window.
             *output_ptr.add(i) = if mean_dev.abs() > 1e-15 {
                 (new_tp - tp_mean) / (0.015 * mean_dev)
             } else {
-                f64::NAN
+                0.0
             };
         }
     }
@@ -3198,67 +3170,38 @@ pub fn aroonosc(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>>
         });
     }
     validate_input(high.len(), period + 1)?;
-    let mut output = Array1::from_elem(high.len(), f64::NAN);
-    let inv_period = 100.0 / period as f64;
-    let window = period + 1;
+    let len = high.len();
+    let scale = 100.0 / period as f64;
+    let mut output = crate::utils::uninit_output(len);
 
-    // Cached-index arg-extremes — the same strategy `aroon_with_deques` uses
-    // and the one that beats a monotonic deque by ~3x here: one comparison per
-    // leg per bar, rescanning only when the cached extreme leaves the window.
-    // `NaN` fails every comparison, so missing bars are skipped with no
-    // explicit test; a window with no finite bar reports NaN (the deque version
-    // used to index an empty queue and panic there instead).
-    // NOTE: a fused Van Herk–Gil–Werman block scan (value+index tables for
-    // both legs, single pass, no per-bar allocation) was tried here and
-    // measured *slower* than this cached path on the noisy benchmark series
-    // (~10ns vs ~7.5ns per bar — the eight dynamically indexed tables cost
-    // more than the rescans they prevent), so the cached kernel stays. See
-    // V4 plan §36.
-    let mut highest = f64::NEG_INFINITY;
-    let mut highest_idx = 0usize;
-    let mut has_high = false;
-    let mut lowest = f64::INFINITY;
-    let mut lowest_idx = 0usize;
-    let mut has_low = false;
-
-    for i in 0..high.len() {
-        let new_high = high[i];
-        let new_low = low[i];
-
-        if new_high >= highest {
-            highest = new_high;
-            highest_idx = i;
-            has_high = true;
-        } else if has_high && highest_idx + window <= i {
-            let (rescanned, position, found) =
-                crate::math::statistics::rescan_extreme_window::<true>(high, i + 1 - window, i);
-            highest = rescanned;
-            highest_idx = position;
-            has_high = found;
-        }
-
-        if new_low <= lowest {
-            lowest = new_low;
-            lowest_idx = i;
-            has_low = true;
-        } else if has_low && lowest_idx + window <= i {
-            let (rescanned, position, found) =
-                crate::math::statistics::rescan_extreme_window::<false>(low, i + 1 - window, i);
-            lowest = rescanned;
-            lowest_idx = position;
-            has_low = found;
-        }
-
-        if i + 1 >= window {
-            output[i] = if has_high && has_low {
-                // Cast before subtracting: the argmax may sit below the argmin.
-                (highest_idx as f64 - lowest_idx as f64) * inv_period
-            } else {
-                f64::NAN
-            };
-        }
+    // Both legs are tracked in this one pass rather than as two `AROON` columns
+    // that are subtracted afterwards: the `_into` form would need two
+    // intermediate 80 KB buffers per call. `AROONOSC = AROON_UP - AROON_DOWN`,
+    // and with `age = i - idx` the two `period` offsets cancel, so the result
+    // is `(idx_high - idx_low) * 100 / period` — a single scaled subtraction
+    // per bar over the same recurrence. The cast happens before the
+    // subtraction because the argmax may sit below the argmin; a window with no
+    // finite bar on either side reports `NaN`, matching `AROON`.
+    //
+    // Every slot is written, warm-up prefix included, which is what lets
+    // `uninit_output` stand in for a full `NaN` fill — see its contract.
+    let mut highs = ExtremeTracker::<true>::new();
+    let mut lows = ExtremeTracker::<false>::new();
+    for (i, ((&high_bar, &low_bar), slot)) in high
+        .iter()
+        .zip(low.iter())
+        .zip(output.iter_mut())
+        .enumerate()
+    {
+        highs.advance(high, i, high_bar, period);
+        lows.advance(low, i, low_bar, period);
+        *slot = if i >= period && highs.found && lows.found {
+            (highs.idx as f64 - lows.idx as f64) * scale
+        } else {
+            f64::NAN
+        };
     }
-    Ok(output)
+    Ok(Array1::from(output))
 }
 
 /// MACD with controllable MA type (MACDEXT)

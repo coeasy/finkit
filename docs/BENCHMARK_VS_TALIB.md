@@ -1,6 +1,8 @@
 # Finkit vs TA-Lib C — Benchmark & Precision Contract
 
 > This document defines how Finkit compares against TA-Lib C without turning one benchmark machine into a universal marketing claim. For the broader ecosystem strategy, see [competitive-positioning-zh.md](competitive-positioning-zh.md).
+>
+> For the per-indicator efficiency analysis — how the non-✅ rows divide into real regressions, measurement noise and structural gaps, which optimizations were measured and then rejected, and why a single-run ratio near 1.0 is not a verdict — see [talib-efficiency-deep-dive-zh.md](talib-efficiency-deep-dive-zh.md).
 
 ## Why TA-Lib remains the primary numerical baseline
 

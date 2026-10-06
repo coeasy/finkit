@@ -7,6 +7,168 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Changed - 2026-10-06 (seventeenth pass — measured, reverted, and one number that did not move)
+
+This pass was asked to (a) stop comparing, (b) actually optimize what is slow, (c) fix the remaining
+legacy defects. The honest summary is that **one** rewrite won, **three** were measured and
+reverted, **two** legacy defects were real, and the single true regression in the report turned out
+to have been mis-attributed by the previous pass.
+
+#### 1. The measurement problem had to be fixed before the optimization could start
+
+`BENCHMARK_REPORT.md` and this pass's own first instrument disagreed about three of four rewrites,
+and the instrument was wrong. Its `*_old` bodies wrote into a **preallocated** buffer while its
+`*_new` side called the **allocating** public function — charging one 80 KB `malloc`/`free` pair to
+the new code. All three micro-rewrites looked like regressions; on re-measurement with matched
+allocation, two were neutral and one was a large win.
+
+The corrected probe (`core/examples/kernel_hotspot_probe.rs`, committed) puts both bodies in one
+binary and runs them interleaved, and carries **null controls** — `AVGDEV` and `LINREG_SLOPE` were
+reverted, so both of their sides are the same algorithm and their ratio is the probe's own noise
+floor:
+
+| null control | ratio | meaning |
+|---|---:|---|
+| `AVGDEV_14` (same body both sides) | **0.995x** | best-case resolution |
+| `LINREG_SLOPE_14` (same body both sides) | **1.042x** | typical resolution |
+
+Two more controls came free from the Criterion rerun: `tanh` ran 59.23 / 37.15 / 24.20 µs across
+three independent processes while TA-Lib sat at 45.83 / 45.56 / 45.62 µs. The drift is **one-sided
+and up to 145%**, and it lives entirely in our column. A single-run ratio near 1.0 is a screening
+artifact, not a verdict.
+
+#### 2. `PERCENTRANK` — 4.58x, and bit-identical
+
+`TA_PERCENTRANK` wants a **count**: how many of the `timeperiod` preceding observations sit strictly
+below the current bar. The shipped code maintained a *sorted* window instead — a branchless binary
+search, then a `copy_within` memmove of roughly half the window, then an insert, per bar. The count
+is an integer, so the two forms agree **exactly**; this is a restatement of one predicate, not a
+reassociation of a float sum, and it needs no tolerance to defend.
+
+| body | 10k bars | ns/bar |
+|---|---:|---:|
+| sorted window + binary search + memmove | 309.40 µs | 30.94 |
+| AVX2 direct count (`simd_ops::simd_count_less`) | 67.50 µs | 6.75 |
+
+**4.584x faster**, and the probe asserts `10000/10000` slots bit-identical. In the full paired rerun
+`percentrank_30` went **293.76 → 70.90 µs, 1.08x → 4.64x**. Input containing `NaN` still takes the
+sorted path: that path compares with `partial_cmp().unwrap_or(Ordering::Equal)`, which gives a
+missing bar no defined position, so the two forms are not required to agree there and the shipped
+behaviour is preserved rather than silently redefined.
+
+#### 3. `AROON` / `AROONOSC` — three hand-copied recurrences collapse to one, and get faster
+
+`AROON`, the caller-owned `aroon_into` and `AROONOSC` each carried their own transcription of the
+same cached-index arg-extreme, with three different `NaN` behaviours. There is now one
+`ExtremeTracker`, shared by all three; they differ only in which output they pick out of the same
+state.
+
+The first attempt at this was **slower**, and the probe caught it: factoring the recurrence into a
+per-leg helper and calling it twice means two passes (one over `high`, one over `low`) where the
+original did one fused pass over both. That measured **0.790x** at the kernel level. Restoring the
+single-pass shape:
+
+| comparison | previous | current | ratio |
+|---|---:|---:|---:|
+| `aroon_14` (allocating) | 97.30 µs | 93.10 µs | **1.045x faster** |
+| `aroonosc_14` | 55.70 µs | 52.40 µs | **1.063x faster** |
+| `aroon_into_14` (kernel level, no allocation) | 51.30 µs | 56.50 µs | 0.908x slower |
+
+Recorded honestly rather than rounded up: the paths the benchmark and the higher layers use got
+faster, the bare `_into` kernel is 9% slower, and 9% sits inside the per-kernel resolution this
+probe demonstrated (0.5%–11.6%). It is **not** claimed as a win. Correctness: `aroon_up`,
+`aroon_down` and `aroonosc` all match at **0 mismatches @1e-12**. The three outputs also stop
+allocating a full-length `NaN` fill — every slot is written by the loop, which is what
+`utils::uninit_output` requires.
+
+In the paired rerun `aroonosc_14` left the ❌ band: **0.71x → 0.85x**.
+
+#### 4. `AVGDEV` — two rewrites built, measured, and reverted
+
+| candidate | result |
+|---|---|
+| ring index instead of `Vec::remove(0)` + `push` | slower |
+| AVX2 `Σ|x - mean|` | slower |
+| null control for scale | 0.995x — so the difference was real, not noise |
+
+The reason is visible in the sizes: a period-14 window is **13 doubles**, so the `remove(0)` being
+removed is a 104-byte memmove already resident in L1, while the vector form replaces 14 dependent
+scalar adds with three lane-wide adds *plus* a horizontal reduce *plus* a runtime dispatch check.
+There is no headroom in this loop. The straightforward body stays, with the negative result recorded
+in the source so the next reader does not rebuild it.
+
+#### 5. `LINREG_SLOPE` — the pointer-cursor rewrite is exactly neutral, and the §42 attribution was wrong
+
+`linreg_slope_14` is the report's only true ❌ (0.76x, and the same 0.76x in both runs). §42.8
+attributed that to per-bar bounds checks and predicted that closing it "requires rewriting every
+loop into `linreg_slope`'s cursor form".
+
+Measured with identical seeding **and** identical allocation, changing only the loop body:
+
+| loop body | 10k bars | ratio |
+|---|---:|---:|
+| indexed (shipped) | 30.40 µs | — |
+| pointer cursors | 30.40 µs | **1.000x, 0 mismatches @1e-12** |
+
+Exactly neutral. LLVM already removes those bounds checks, so the attribution does not hold for this
+kernel. The rewrite is therefore **not** landed — not because it is slower (the earlier "0.593x"
+reading was the biased probe from §1), but because it buys nothing. Anyone continuing from §42.8
+should know that its stated hypothesis has now been tested and falsified rather than merely
+doubted.
+
+#### 6. Legacy defect: two `CCI` SIMD paths that existed only in their names
+
+```rust
+fn cci_period14_into_impl<const USE_AVX2: bool>(...) {
+    let _ = USE_AVX2;   // the parameter is never read
+    ...the same unrolled scalar code either way...
+}
+```
+
+Both arms of the `is_x86_feature_detected!("avx2")` branch produced identical work. A second,
+structurally identical instance sat in `math/simd_kernels.rs`, where `cci_simd_into` branched on
+`has_avx2()` and called the same scalar function on both sides. Readers would reasonably conclude
+the period-14 path was vectorized and stop looking.
+
+The fix is not "add the vectorization" but **delete the parameter and say why it must not be added**:
+vectorizing reassociates `Σ|x - mean|` into lanes, and a window whose deviation approaches zero
+amplifies that difference through the final division. `CCI` is compared against TA-Lib's golden
+series at an *absolute* `1e-8`, where this is measurable. Measurement agrees — the AVX2 form came
+out **18% slower** on the 10k series **and** pushed **13 of 10,000** values past `1e-8`.
+
+A repo-wide sweep confirms this was the only such pattern: `let _ = <ignored const generic>` now
+appears zero times in `core/src`. `fast_moving_avg.rs`'s `USE_FMA` looks similar but is not the same
+defect — its two arms (`mul_add` vs `*` + `+`) genuinely differ, and **both** are instantiated
+(`true` from the `#[target_feature(enable = "fma")]` wrapper, `false` from the software-FMA
+fallback), which the comment there already explains.
+
+#### 7. Legacy defect: one indicator, two answers for a zero-deviation window
+
+`CCI`'s period-14 path wrote `0.0`; its generic path wrote `NaN`. The same indicator returned
+different values depending only on the period it was called with. `TA_CCI` writes `0.0`. Both paths
+now do.
+
+#### 8. Industrial-grade assessment (after the seventeenth pass)
+
+- **Numerical**: unchanged. Every landed change is either bit-identical (`PERCENTRANK`'s integer
+  count, asserted on all 10,000 slots) or verified equal at `1e-12` (`AROON` family), and the two
+  `CCI` fixes move toward TA-Lib's behaviour rather than away from it.
+- **Efficiency**: improved at the tail — paired rerun **❌3 → ❌1**, `percentrank_30` **1.08x →
+  4.64x**, `aroonosc_14` **0.71x → 0.85x**, `tanh` **0.77x → 1.68x** (noise, now confirmed).
+  Distribution **74 / 15 / 1** across 90 pairs.
+- **Engineering**: three duplicate `AROON` recurrences → one shared type; both fake-SIMD branches
+  deleted; two negative results recorded in the source where they would otherwise be rebuilt.
+- **Still open**: `linreg_slope_14` (0.76x, cause now *unknown* rather than assumed) and the
+  0.82–0.98x band of twelve kernels that share one unexplained cause. See
+  `docs/talib-efficiency-deep-dive-zh.md` §9.
+
+#### 9. New document
+
+`docs/talib-efficiency-deep-dive-zh.md` — the efficiency comparison in full: methodology and the
+probe's own noise floor, the 90-pair classification by cause, the per-change evidence, a catalogue
+of the rewrites that were measured and rejected, scale effects at 10k/100k/1M, and the list of what
+is still open.
+
 ### Changed - 2026-10-06 (sixteenth pass — "no kernel changed" was a wrong turn)
 
 The fifteenth pass closed on this sentence: *"this pass and the previous one changed no indicator

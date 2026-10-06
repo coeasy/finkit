@@ -156,6 +156,7 @@ For exact supported functions and Pine mappings, prefer generated catalogs over 
 | [competitive-positioning-zh.md](competitive-positioning-zh.md) | 竞品能力矩阵、可证明优势与超越路线 |
 | [benchmark-results.md](benchmark-results.md) | Current benchmark/evidence summary |
 | [BENCHMARK_VS_TALIB.md](BENCHMARK_VS_TALIB.md) | TA-Lib comparison and reproducibility contract |
+| [talib-efficiency-deep-dive-zh.md](talib-efficiency-deep-dive-zh.md) | 效率深度对比：测量方法学、非 ✅ 行分类、负结果目录、仍未解决项 |
 | [talib-0.8.0-coverage-audit-2026-09-19.md](talib-0.8.0-coverage-audit-2026-09-19.md) | TA-Lib Python 0.8.0 public-surface gap audit |
 | [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) | Checked-in historical benchmark snapshot |
 | [finkit-outperform-talib-architecture-v3.md](finkit-outperform-talib-architecture-v3.md) | **Live spec** — the speedup semantics `scripts/benchmark_talib_arch_v3_gate.py` encodes |
