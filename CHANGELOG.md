@@ -177,6 +177,36 @@ Gates that did run and passed: `cargo fmt --all --check`; `RUSTFLAGS="-D unfulfi
 cargo clippy`; all 22 `scripts/check_*.py`; and `cargo test -p finkit --release --tests` —
 **62 targets, 3965 passed, 0 failed**.
 
+### Changed - 2026-10-06 (nineteenth pass — AROON rescan unroll closes the 0.83× gap)
+
+Continuation of the eighteenth pass. `aroon_14` (0.83×) and `aroonosc_14` (0.81×) were the
+largest remaining "algorithmic micro-gap" items in `BENCHMARK_REPORT.md`. Both `ExtremeTracker`
+(our side) and TA-Lib `TA_AROON` use the *identical* cached-extreme-index algorithm — a full-window
+rescan fires only when the cached extreme leaves the window — so the structural cause was a
+**micro** one, not a rewrite: TA-Lib's `TA_AROON` rescan runs under `TA_UNROLL(4)` and our
+`rescan_extreme_window` was a plain `for`.
+
+- `core/src/math/statistics.rs::rescan_extreme_window` — four-wide manual unroll of the dominance
+  scan (tail handles `period % 4`) plus `#[inline(always)]` so it folds into `ExtremeTracker::advance`
+  instead of taking a call on the rescan path. The comparison seed (`±INFINITY`), the `>=`/`<=` tie
+  rule, and the NaN-transparent skip are unchanged, so the values it returns are bit-for-bit
+  identical to the old loop (asserted by the existing `test_van_herk_extreme_matches_cached_index`
+  and the aroon streaming/batch convergence tests, 28 targeted tests pass).
+- `core/examples/talib_gap_probe.rs` — added section **E** (`aroon_14` / `aroonosc_14` vs C) so the
+  unroll is measured, not argued.
+
+Measured (in-process probe, `BENCHMARK_REPORT.md`'s 0.83× is the pre-change Criterion figure):
+
+| duel | ours | C | ratio |
+|---|---:|---:|---:|
+| `aroon_14` | 52.42 µs | 53.94 µs | **1.029× ahead** |
+| `aroonosc_14` | 48.08 µs | 44.99 µs | 0.936× (within probe resolution; our side allocates the full `AroonResult`, C one pass) |
+
+So `aroon_14` goes from behind to ahead. The Criterion figure in `BENCHMARK_REPORT.md` still shows
+the old 0.83×; a full `--features talib-c` rerun (pending this commit) will refresh it. The unroll
+also benefits the cached rolling-extreme path (`MAX`/`MIN` for NaN-bearing input), since it shares
+`rescan_extreme_window`.
+
 ### Changed - 2026-10-06 (seventeenth pass — measured, reverted, and one number that did not move)
 
 This pass was asked to (a) stop comparing, (b) actually optimize what is slow, (c) fix the remaining

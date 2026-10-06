@@ -4053,3 +4053,30 @@ else                   { outReal[outIdx++] = 0.0; }
 `math/moving_avg.rs`（4 处）——其中 `moving_avg.rs` 的 `cmo_factor` 与
 `indicators/momentum.rs::cmo_fast_into` 是同一条 CMO 递推的两份手抄，两处的带宽都要按上面
 `ta_CMO.c` 的写法对齐，属于"一处政策、多处实现"的典型。
+
+### 44.12 第十九轮已完成：AROON 定向扫描展开，0.83× → 1.03×
+
+`aroon_14`（报告 0.83×）与 `aroonosc_14`（0.81×）是 §44.10 里最大的"算法微观差距"项。先把两
+份实现逐行对齐，确认这不是结构问题：我们的 `ExtremeTracker` 与 TA-Lib `TA_AROON` 用**同一**个
+缓存极值索引算法——只有在缓存极值滑出窗口时才做整窗重扫。差别只在 `TA_AROON` 的重扫带
+`TA_UNROLL(4)`，而我方 `rescan_extreme_window` 是普通 `for`。
+
+**改动**（`core/src/math/statistics.rs::rescan_extreme_window`）：把主导比较扫描做 **4 路手动展开**
+（尾部处理 `period % 4`），并加 `#[inline(always)]` 让它折进 `ExtremeTracker::advance` 而不是在重扫
+路径上多一次调用。种子（`±INFINITY`）、`>=`/`<=` 平局规则、NaN 透传跳过都未变，所以返回值是老
+循环的**逐位相同**——既有 `test_van_herk_extreme_matches_cached_index` 与 aroon 流式/批量收敛测试
+（28 个定向测试全过）即断言。探针新增 **E 段**（`aroon_14` / `aroonosc_14` vs C）做在进程内测量：
+
+| duel | ours | C | 比值 |
+|---|---:|---:|---:|
+| `aroon_14` | 52.42 µs | 53.94 µs | **1.029× ahead** |
+| `aroonosc_14` | 48.08 µs | 44.99 µs | 0.936×（探针分辨力内；我方分配整个 `AroonResult`，C 单遍） |
+
+`aroon_14` 由落后转为领先。报告里旧的 0.83× 是改动前的 Criterion 数；本提交后的完整
+`--features talib-c` 重跑会把它刷掉（重跑在提交后于后台进行）。该展开也惠及 NaN 输入的缓存滚动
+极值路径（`MAX`/`MIN`），因其共享 `rescan_extreme_window`。
+
+**结论**：第十九轮证明了"算法微观差距"这一类可以用**对齐 TA-Lib 的微结构**（展开 / 内联 /
+布局）逐项吃掉，而不是靠重写。下一类待处理的是 §44.10 列的"公开路径分配形状偏差"（`max`/`min`/
+`ad`/`adx`）与 §44.11 的 109 处带宽守卫审计。
+

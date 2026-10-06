@@ -1157,6 +1157,24 @@ fn main() {
         }
     }
 
+    head("===== E. PUBLIC TIER: AROON / AROONOSC, rescan unroll (TA_UNROLL(4)) =====");
+    // Both our `ExtremeTracker` and TA-Lib's `TA_AROON` use the identical
+    // cached-extreme-index algorithm: a full-window rescan fires only when the
+    // cached extreme leaves the window. The one concrete delta is TA-Lib's
+    // `TA_UNROLL(4)` in that rescan, which our plain `for` lacked. Section E
+    // measures whether the 4-wide unroll added to `rescan_extreme_window`
+    // closes the ~17% gap (`aroon_14` 0.83x, `aroonosc_14` 0.81x in the report).
+    duel(
+        "aroon_14: ours vs C",
+        || indicators::aroon(&high, &low, 14).unwrap(),
+        || c_aroon(&high, &low, 14),
+    );
+    duel(
+        "aroonosc_14: ours vs C",
+        || indicators::aroonosc(&high, &low, 14).unwrap(),
+        || c_aroonosc(&high, &low, 14),
+    );
+
     head("===== NULL CONTROLS (closing; compare with the opening pair) =====");
     duel(
         "line slope ours (a/b)",
