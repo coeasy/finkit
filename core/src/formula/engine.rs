@@ -2236,7 +2236,11 @@ impl FormulaEngine {
             return Ok(bytecode);
         }
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
-        let ast = FormulaOptimizer::optimize(&ast);
+        // Execution-safe pass set: `optimize` also runs statement-level DCE,
+        // which would erase assignments visible in `FormulaContext::variables`
+        // and shift `FormulaContext::string_table` indices. See
+        // `FormulaOptimizer::optimize_for_execution`.
+        let ast = FormulaOptimizer::optimize_for_execution(&ast);
         let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
         self.bytecode_cache
             .borrow_mut()
@@ -2269,7 +2273,11 @@ impl FormulaEngine {
     ) -> Result<Array1<f64>, FormulaError> {
         self.require_tree_backend("eval_optimized")?;
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
-        let optimized = FormulaOptimizer::optimize(&ast);
+        // The same pass set `eval` uses. It is still an AST rewrite
+        // (constant folding, algebraic simplification, strength reduction, CSE)
+        // -- it just does not include statement-level DCE, which is not valid for
+        // a compiled execution contract.
+        let optimized = FormulaOptimizer::optimize_for_execution(&ast);
         self.executor.execute(&optimized, ctx)
     }
 
@@ -2331,9 +2339,12 @@ impl FormulaEngine {
         source: &str,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
+        // `compile_shared` already returns an execution-optimized AST. Re-running
+        // the optimizer here applied a *second*, different pass set -- including
+        // statement-level DCE -- on top of it.
         let formula = self.compile_shared(source)?;
-        let ast = FormulaOptimizer::optimize(&formula.ast);
-        let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
+        let bytecode =
+            compile_to_bytecode(&formula.ast, source).map_err(FormulaError::RuntimeError)?;
         let mut jit = self.jit_compiler.borrow_mut();
         let optimized = jit.compile_cached(bytecode);
         jit.execute(&optimized, ctx).map(|r| r.final_value)
@@ -2404,9 +2415,11 @@ impl FormulaEngine {
     /// See [`Self::eval_jit`] and `formula::jit`; opt-in only, no new callers.
     #[cfg(feature = "formula-jit")]
     pub fn compile_jit(&mut self, source: &str) -> Result<OptimizedBytecode, FormulaError> {
+        // Same reasoning as `eval_jit`: the AST that comes back from
+        // `compile_shared` is already optimized for execution.
         let formula = self.compile_shared(source)?;
-        let ast = FormulaOptimizer::optimize(&formula.ast);
-        let bytecode = compile_to_bytecode(&ast, source).map_err(FormulaError::RuntimeError)?;
+        let bytecode =
+            compile_to_bytecode(&formula.ast, source).map_err(FormulaError::RuntimeError)?;
         let mut jit = self.jit_compiler.borrow_mut();
         Ok(jit.compile_cached(bytecode))
     }

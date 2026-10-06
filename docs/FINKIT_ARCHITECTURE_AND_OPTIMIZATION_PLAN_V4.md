@@ -3306,3 +3306,126 @@ libm 调用。现在它跑在 `#[target_feature(enable = "fma")]` + 运行时检
   生命周期），建议单独立项。这不是"差一点点"，而是一个方向性判断：在它修好之前，不应该把
   默认后端切成 `Plan`。
 - 探针 `core/examples/plan_cache_probe.rs` 已保留，上表数字可复现，而不是"声明"。
+
+## 41. 第十五轮：同一条公式，五个答案（2026-10-06）
+
+前四轮问的是"每条路径**跑多快**"。本轮换了个问题：**同一条源码，在每条路径上给出的是不是同一
+个答案？** 答案是不是。四个缺陷，三个是静默的——它们全都是在把一条公式跑遍**所有公开入口**
+时暴露的，而不是靠给某一条路径做性能剖析。
+
+复现方式：`cargo run -p finkit --example backend_divergence_probe`。
+
+### 41.1 五个执行入口用了错误的优化器
+
+`FormulaOptimizer::optimize` 会做**语句级死代码消除**；`optimize_for_execution` 刻意不做，
+理由写在它自己的文档注释里：`X:=...` 赋值可通过 `FormulaContext::variables` 观测，所以语句级
+DCE "只对显式的 lazy/optimizer 用法有效，对正常的编译执行契约无效"。
+
+但有五个**执行**入口在调用 `optimize`：
+
+| 入口 | 原 | 现 |
+|---|---|---|
+| `FormulaCompiler::compile` | `optimize` | `optimize_for_execution` |
+| `FormulaEngine::compile_bytecode` | `optimize` | `optimize_for_execution` |
+| `FormulaEngine::eval_optimized` | `optimize` | `optimize_for_execution` |
+| `FormulaEngine::eval_jit` | 在**已优化**的 AST 上再 `optimize` | 去掉第二遍 |
+| `FormulaEngine::compile_jit` | 同上 | 去掉第二遍 |
+
+两个 JIT 入口比"用错 pass 集合"更糟：它们拿到的是 `compile_shared` 已经**为执行优化过**的 AST，
+又在上面跑了第二遍包含 DCE 的优化器。第二遍直接删除；第一遍本来就是它们需要的。
+
+两个后果，第二个是严重的：
+
+- **副作用**：`JUNK:=MA(CLOSE,5); OUT: CLOSE;` 经 `eval` 发布 `["JUNK","OUT"]`，经
+  `eval_optimized` / `FormulaCompiler` 只有 `["OUT"]`。`ctx.variables` 是**文档化契约**
+  （各语言绑定用它构建结果字典），删掉赋值不是优化，是另一个结果。
+- **返回的数值**：被删的语句同时丢掉它会追加到 `FormulaContext::string_table` 的字符串字面量，
+  而字面量求值为**它在表中的下标**。于是删掉靠前的语句会移动后面每一个字面量的下标：
+
+  | 源码 | `eval` | `eval_optimized` | `FormulaCompiler` |
+  |---|---:|---:|---:|
+  | `TMP:='HELLO'; OUT: 'WORLD';` | **1** | **0** | **0** |
+
+  副作用表错是 bug；**主结果错是错数**。
+
+该保留 DCE 的四处调用没有被碰（`FormulaOptimizer::optimize` 仍是公开 API，
+`core/benches/formula_bench.rs` 仍在用）。变的是：**任何"执行"路径都不再用它**。
+
+### 41.2 `FormulaCompiler` 在未命中路径上也深克隆
+
+第十四轮去掉了两个缓存的**命中**克隆。本轮去掉 `FormulaCompiler::compile` 的**未命中**克隆：
+原本是"构造 → `insert(source, formula.clone())` → 返回原件"，那次 AST 深拷贝只为了让缓存持有
+所有权。缓存现在存 `Arc`，未命中路径存入的就是它将要返回的那个句柄。`compile` 的
+`-> CompiledFormula` 签名不变，所以**一次**拷贝仍是固有的（调用方要求持有所有权），只是不再有
+第二次。
+
+### 41.3 计划后端跑不了"状态语句之后的字符串字面量"
+
+`FormulaComputeLowerer::add_effect` 会把**上一个效果**追加进依赖表，纯粹为了给有状态语句排序。
+`STRING_LITERAL` 走的是 `add_effect`，所以跟在赋值后面的字面量就带上了这条**控制边**——而
+`HotExecutionPlan` 把**每一条**语义依赖都变成缓冲输入。`STRING_LITERAL` 内核又有自己的元数检查，
+于是计划后端直接失败：
+
+```
+FormulaEngine::new().with_execution_mode(Plan)
+    .eval("TMP:='HELLO'; OUT: 'WORLD';", &mut ctx)
+=> RuntimeError("... kernel dispatch failed for kernel 0x43f39d3d91f40744 with code 2")
+   而树后端返回 1
+```
+
+现在字面量改用 `add_node` 下沉——不带控制边。这样做是成立的：该节点**什么都不读**，且对**在哪
+运行不敏感**——它的值是计划烘焙进参数区的下标，而调用方按 `string_literals_ordered()`（以 node id
+即下沉顺序为键，而非执行顺序）预先填好 `string_table`。`effect: Stateful` 是**故意保留**的：
+CSE 绝不能合并两个相同字面量，否则字面量计数变化会破坏那些烘焙下标，报
+`LiteralBindingMismatch`。
+
+既有的 `formula_string_literals.rs` 门禁没抓到它，因为它的四个用例都是**函数调用带字面量实参**
+（`EM_REF("IDX", 1)`）；这条链只在"字面量跟在有状态语句之后"时出现。
+
+### 41.4 字节码 VM 不认"赋值遮蔽内置别名"
+
+`A` 是 `AMOUNT` 的正式别名——`builtin_data_aliases_resolve_to_the_same_series_on_every_path`
+在**每一条**路径上都这么断言。但 `BytecodeCompiler::normalize_variable` 无条件把 `A` 的读取改写成
+`AMOUNT`，于是"自己给 `A` 赋过值"的公式被别名顶掉：
+
+| 路径 | `A:=CLOSE*2; B:=A+CLOSE; OUT: B;` |
+|---|---|
+| `eval`（树，默认） | 43.05 |
+| plan | 43.05 |
+| `FormulaCompiler` | 43.05 |
+| 字节码 VM | `RuntimeError("Data not available: AMOUNT")` |
+
+而 `A` 恰恰是通达信公式里**最常用的用户变量名**，所以这不是边角。编译器现在记录公式绑定过的名字
+（`X:=...`、`X: ...`、`for X = ...`），绑定的名字解析为公式自己的变量；未绑定的名字仍原样走别名表。
+声明记录在**值编译之后**，因此没有前置 `A` 的 `A := A + 1` 右值仍然读别名，与树路径一致。
+
+### 41.5 门禁自身的一个盲区
+
+`formula_differential_tests.rs` 的 `run_plan` 调的是 `executor.execute`，它从 `inputs.first()`
+推导序列长度，因此拒绝**没有任何绑定输入**的计划。于是所有**纯常量公式**在计划路径上都无法被
+测试——而计划后端自己的 `eval_plan_channels` 用 `ctx.data_len` 处理这个情形。也就是说**门禁比生产
+更窄**，而不是引擎有差。该辅助函数现已对齐生产（`execute_range` + 同一长度规则）。
+
+### 41.6 新增的常驻门禁
+
+`every_execution_entry_point_agrees_on_assignments_and_string_table`：把一批"赋值形状"的公式
+依次跑过 `eval`、`eval_optimized`、字节码、JIT、`FormulaCompiler` 与计划路径，**同时**断言返回值
+与 `ctx.variables` / `ctx.string_table`。
+
+本仓其它所有差分门禁**只比对返回值**——这正是 41.1 与 41.4 这两个缺陷能挺过四轮差分测试的原因。
+
+### 41.7 工业级评估（第十五轮后）
+
+- **数值维度**：不变（工业级）。并且本轮把"逐位/逐值一致"的覆盖面从"返回值"扩到**副作用**，
+  即契约本身更严了。
+- **效率维度**：全量重跑 90 项配对基准，本轮为 **✅72 / ⚠️16 / ❌2**（上一轮同套件为 75/14/1）。
+  本轮与上一轮**都没有改动 `core/src/math/` 下任何指标内核**，所以比值的变化只可能来自测量噪声，
+  两个证据：`floor` 33.66µs / `ceil` 31.19µs（我方相差 8%，都稳定）而 TA-Lib 侧为 25.23µs / 30.32µs
+  （C 侧自身相差 **20%**）——0.75x 是 TA-Lib 的快速样本落在了 `floor` 上；`linreg_slope_14` 仍是
+  0.75x，我方 30~33µs 与第十三轮记录的 31.03µs 一致，是那条 loop-carried `sum_xy` 递推的延迟下限，
+  两次候选优化都实测为 no-op。**结论：慢于 TA-Lib C 的指标集合没有变化，两项跨过 1.25x 警戒线是
+  参考侧测量移动所致。**
+- **工程维度**：增强。新增一条跨入口门禁，堵住了"只比数值、不比副作用"的长期盲区。
+- **仍未解决**：41.3 的根因是"热计划把控制依赖也当作数据输入"。本轮在**产生那条边的地方**
+  （下沉器）消除它，而不是在消费侧过滤——彻底分离控制边与数据边需要给语义图加一类边并在
+  规划器/生命周期分析中贯通，属结构性工作，建议单独立项。

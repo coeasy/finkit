@@ -1,6 +1,6 @@
 use ahash::AHashMap;
 use ndarray::Array1;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{Cursor, Read, Write};
 
 use crate::formula::ast::*;
@@ -98,12 +98,22 @@ pub struct Bytecode {
 struct BytecodeCompiler {
     instructions: Vec<OpCode>,
     output_names: Vec<String>,
+    /// Upper-cased names the formula binds (`X:=...`, `X: ...`, `for X = ...`).
+    ///
+    /// A read of one of these resolves to the formula's own variable, never to a
+    /// builtin alias that happens to share its spelling. `A` is an official
+    /// alias for `AMOUNT` on every path, so without this set
+    /// `A:=CLOSE*2; B:=A+CLOSE;` rewrote the read of `A` back to `AMOUNT` and
+    /// failed with `Data not available: AMOUNT` — while the tree, plan and
+    /// `FormulaCompiler` paths all returned the formula's own value.
+    declared: HashSet<String>,
 }
 
 pub fn compile_to_bytecode(ast: &AstNode, source: &str) -> Result<Bytecode, String> {
     let mut compiler = BytecodeCompiler {
         instructions: Vec::new(),
         output_names: Vec::new(),
+        declared: HashSet::new(),
     };
     compiler.compile(ast)?;
 
@@ -165,6 +175,15 @@ impl BytecodeCompiler {
                 Ok(())
             }
             AstNode::Variable(name) => {
+                // A name the formula has already bound is the formula's own
+                // variable, not a builtin alias with the same spelling. See
+                // `BytecodeCompiler::declared`. Names that are not bound fall
+                // through to the alias table exactly as before.
+                let upper = name.to_uppercase();
+                if self.declared.contains(&upper) {
+                    self.instructions.push(OpCode::LoadVar(upper));
+                    return Ok(());
+                }
                 let normalized = self.normalize_variable(name);
                 if self.is_builtin_data(&normalized) {
                     self.instructions.push(OpCode::LoadData(normalized));
@@ -201,7 +220,11 @@ impl BytecodeCompiler {
                 Ok(())
             }
             AstNode::Assignment { name, expr } => {
+                // Declared *after* the value is compiled: `A := A + 1` with no
+                // prior `A` must read the builtin alias on the right-hand side,
+                // exactly as the tree path does.
                 self.compile(expr)?;
+                self.declare(name);
                 self.instructions.push(OpCode::StoreVar(name.clone()));
                 Ok(())
             }
@@ -218,6 +241,7 @@ impl BytecodeCompiler {
                     name: name.clone(),
                     op: op_code,
                 });
+                self.declare(name);
                 Ok(())
             }
             AstNode::Output {
@@ -226,6 +250,7 @@ impl BytecodeCompiler {
                 modifier: _,
             } => {
                 self.compile(expr)?;
+                self.declare(name);
                 self.instructions.push(OpCode::StoreVar(name.clone()));
                 self.instructions.push(OpCode::Output(name.clone()));
                 self.output_names.push(name.clone());
@@ -320,6 +345,7 @@ impl BytecodeCompiler {
                 body,
             } => {
                 self.compile(start)?;
+                self.declare(var);
                 self.instructions.push(OpCode::StoreVar(var.clone()));
                 let loop_start = self.instructions.len();
                 self.instructions.push(OpCode::LoadVar(var.clone()));
@@ -401,6 +427,12 @@ impl BytecodeCompiler {
             "A" => "AMOUNT".to_string(),
             _ => upper,
         }
+    }
+
+    /// Record that the formula binds `name`, so later reads of it resolve to the
+    /// formula's own variable instead of a builtin alias.
+    fn declare(&mut self, name: &str) {
+        self.declared.insert(name.to_uppercase());
     }
 
     fn is_builtin_data(&self, name: &str) -> bool {

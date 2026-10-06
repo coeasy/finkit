@@ -154,23 +154,33 @@ impl FormulaCompiler {
     }
 
     pub fn compile(&mut self, source: &str) -> Result<CompiledFormula, FormulaError> {
-        if let Some(formula) = self.cache.get_cloned(source) {
-            return Ok(formula);
+        if let Some(formula) = self.cache.get_shared(source) {
+            // Handing back an owned formula is this method's contract, so exactly
+            // one deep copy is inherent. The cache is no longer copied into as
+            // well.
+            return Ok((*formula).clone());
         }
 
         let ast = parse_formula(source).map_err(FormulaError::ParseError)?;
         FormulaComputePlan::compile(&ast).map_err(|error| {
             FormulaError::InvalidOperation(format!("formula compute planning failed: {error}"))
         })?;
-        let ast = FormulaOptimizer::optimize(&ast);
-        let formula = CompiledFormula {
+        // `optimize` runs statement-level dead-code elimination, which deletes an
+        // `X:=...` assignment that no output reads. Those assignments are
+        // observable through `FormulaContext::variables`, and dropping the
+        // statement also drops the string literals it would have appended to
+        // `FormulaContext::string_table` -- which shifts the index every later
+        // literal evaluates to and therefore changes the returned *numbers*.
+        // Compilation that feeds execution must use the engine's pass set.
+        let ast = FormulaOptimizer::optimize_for_execution(&ast);
+        let formula = Arc::new(CompiledFormula {
             ast,
             source: source.to_string(),
-        };
+        });
 
-        self.cache.insert(source, formula.clone());
+        self.cache.insert_shared(source, Arc::clone(&formula));
 
-        Ok(formula)
+        Ok((*formula).clone())
     }
 
     pub fn execute(

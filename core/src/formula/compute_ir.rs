@@ -287,7 +287,26 @@ impl<'a> FormulaLowerer<'a> {
         match ast {
             AstNode::Number(value) => self.add_number(*value),
             AstNode::StringLit(value) => {
-                let id = self.add_effect(
+                // Deliberately `add_node`, not `add_effect`: this node reads
+                // nothing and is insensitive to *where* it runs, so it must not
+                // carry a control edge.
+                //
+                // Its runtime value is the index the plan baked into the
+                // parameter arena (`base + plan-local index`), and the caller
+                // pre-populates `FormulaContext::string_table` from
+                // `string_literals_ordered()` -- which is keyed by node id, i.e.
+                // lowering order, not execution order. `add_effect` would chain
+                // it onto `last_effect` purely to serialize stateful statements,
+                // and the hot plan turns *every* semantic dependency into a
+                // buffer input, so `STRING_LITERAL` then failed its own arity
+                // check whenever a literal followed a stateful statement
+                // (`TMP:='HELLO'; OUT:'WORLD';` errored with dispatch code 2 on
+                // the plan backend while the tree backend returned 1).
+                //
+                // `effect: Stateful` is kept on purpose so CSE never merges two
+                // identical literals: a merge would change the literal count and
+                // break the baked indices (`LiteralBindingMismatch`).
+                let id = self.add_node(
                     "STRING_LITERAL",
                     Vec::new(),
                     ComputeCapabilities {
@@ -295,9 +314,9 @@ impl<'a> FormulaLowerer<'a> {
                         streaming: false,
                         stateful: true,
                         lookback: LookbackRequirement::None,
-                        // The executor appends literals to FormulaContext::string_table
-                        // and evaluates the node to the new slot's index; the text is
-                        // carried beside the plan (see `Self::string_literals`).
+                        // The executor evaluates the node to the slot's absolute
+                        // index; the text is carried beside the plan (see
+                        // `Self::string_literals`).
                         dependency: DependencyShape::FixedLookback(0),
                         effect: ComputeEffect::Stateful,
                     },

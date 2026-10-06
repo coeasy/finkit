@@ -270,7 +270,7 @@ After optimization: Shared data, eliminated redundant calculations
 |----------|------------------------|-------|
 | `formula_eval()` | +0.15ms | PyO3 conversion overhead |
 | `formula_eval_bytecode()` | +0.15ms | Same overhead, faster execution |
-| `formula_eval_optimized()` | +0.15ms | Same overhead, fastest execution |
+| `formula_eval_optimized()` | +0.15ms | Same rewrite as `eval`, no cache reuse |
 | `formula_eval_debug()` | +0.25ms | Additional debug info collection |
 
 ### Node.js Binding
@@ -279,7 +279,7 @@ After optimization: Shared data, eliminated redundant calculations
 |----------|------------------------|-------|
 | `formulaEval()` | +0.08ms | N-API conversion overhead |
 | `formulaEvalBytecode()` | +0.08ms | Same overhead, faster execution |
-| `formulaEvalOptimized()` | +0.08ms | Same overhead, fastest execution |
+| `formulaEvalOptimized()` | +0.08ms | Same rewrite as `eval`, no cache reuse |
 | `formulaEvalDebug()` | +0.15ms | Additional debug info collection |
 
 ### Java Binding
@@ -288,7 +288,7 @@ After optimization: Shared data, eliminated redundant calculations
 |----------|------------------------|-------|
 | `formulaEval()` | +0.12ms | JNI conversion overhead |
 | `formulaEvalBytecode()` | +0.12ms | Same overhead, faster execution |
-| `formulaEvalOptimized()` | +0.12ms | Same overhead, fastest execution |
+| `formulaEvalOptimized()` | +0.12ms | Same rewrite as `eval`, no cache reuse |
 | `formulaEvalDebug()` | +0.20ms | Additional debug info collection |
 
 ### Go Binding
@@ -297,7 +297,7 @@ After optimization: Shared data, eliminated redundant calculations
 |----------|------------------------|-------|
 | `FormulaEval()` | +0.10ms | CGO conversion overhead |
 | `FormulaEvalBytecode()` | +0.10ms | Same overhead, faster execution |
-| `FormulaEvalOptimized()` | +0.10ms | Same overhead, fastest execution |
+| `FormulaEvalOptimized()` | +0.10ms | Same rewrite as `eval`, no cache reuse |
 | `FormulaEvalDebug()` | +0.18ms | Additional debug info collection |
 
 ### .NET Binding
@@ -306,7 +306,7 @@ After optimization: Shared data, eliminated redundant calculations
 |----------|------------------------|-------|
 | `FormulaEval()` | +0.09ms | P/Invoke conversion overhead |
 | `FormulaEvalBytecode()` | +0.09ms | Same overhead, faster execution |
-| `FormulaEvalOptimized()` | +0.09ms | Same overhead, fastest execution |
+| `FormulaEvalOptimized()` | +0.09ms | Same rewrite as `eval`, no cache reuse |
 | `FormulaEvalDebug()` | +0.16ms | Additional debug info collection |
 
 ### C/C++ Binding
@@ -315,7 +315,7 @@ After optimization: Shared data, eliminated redundant calculations
 |----------|------------------------|-------|
 | `ta_formula_eval()` | +0.02ms | Minimal C FFI overhead |
 | `ta_formula_eval_bytecode()` | +0.02ms | Same overhead, faster execution |
-| `ta_formula_eval_optimized()` | +0.02ms | Same overhead, fastest execution |
+| `ta_formula_eval_optimized()` | +0.02ms | Same rewrite as `eval`, no cache reuse |
 | `ta_formula_eval_debug()` | +0.05ms | Additional debug info collection |
 
 ## Recommendations
@@ -333,9 +333,15 @@ After optimization: Shared data, eliminated redundant calculations
    - Medium to complex formulas
 
 3. **Optimized Execution (`formula_eval_optimized`)**
-   - Production systems with high throughput
-   - Complex multi-indicator formulas
-   - When maximum performance is required
+   - Not a throughput path. It applies the *same* AST rewrite `formula_eval` applies
+     (constant folding, algebraic simplification, strength reduction, CSE) — it does
+     not run statement-level dead-code elimination, because an `X:=...` assignment is
+     observable through the context's variable map and dropping it would change the
+     result.
+   - It also parses and optimizes on **every call** instead of reusing the compiled
+     cache, so `formula_eval` is the faster choice for repeated evaluation. Use this
+     entry point only when you specifically want the rewrite applied to a source you
+     are not going to evaluate again.
 
 4. **Builtin Function Mapping**
    - Direct indicator calculation (e.g., `MACD()` instead of `EMA(C,12)-EMA(C,26);EMA(DIF,9)`)

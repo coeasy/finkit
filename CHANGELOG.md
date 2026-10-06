@@ -7,6 +7,173 @@ and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
+### Changed - 2026-10-06 (fifteenth pass — one formula source, five answers)
+
+The previous four passes optimized *how fast* each path runs. This one asked a
+different question: **does the same source produce the same answer on every
+path?** It did not. Four defects, three of them silent, all found by running one
+formula through every public entry point instead of profiling one.
+
+`core/examples/backend_divergence_probe.rs` is the probe; every number below is
+reproducible with `cargo run -p finkit --example backend_divergence_probe`.
+
+#### 1. Five execution entry points compiled with the wrong pass set
+
+`FormulaOptimizer::optimize` runs statement-level dead-code elimination.
+`optimize_for_execution` deliberately omits it, and says why in its own doc
+comment: an `X:=...` assignment is observable through
+`FormulaContext::variables`, so statement-level DCE "is only valid for explicit
+lazy/optimizer use, not for the normal compiled execution contract".
+
+Five *execution* entry points called `optimize` anyway:
+
+| Entry point | Was | Now |
+|---|---|---|
+| `FormulaCompiler::compile` | `optimize` | `optimize_for_execution` |
+| `FormulaEngine::compile_bytecode` | `optimize` | `optimize_for_execution` |
+| `FormulaEngine::eval_optimized` | `optimize` | `optimize_for_execution` |
+| `FormulaEngine::eval_jit` | `optimize` *on top of* an already-optimized AST | dropped |
+| `FormulaEngine::compile_jit` | `optimize` *on top of* an already-optimized AST | dropped |
+
+The two JIT entry points were worse than "the wrong pass set": they compiled
+`self.compile_shared(source)?.ast` — an AST that had *already* been optimized for
+execution — and then ran a second optimizer over it that included DCE. The
+second pass is gone; the first one is what they needed.
+
+Two things went wrong, and the second is the serious one:
+
+- **Side effects.** `JUNK:=MA(CLOSE,5); OUT: CLOSE;` published `["JUNK","OUT"]`
+  through `eval` and only `["OUT"]` through `eval_optimized` and
+  `FormulaCompiler`. `ctx.variables` is part of the documented contract (the
+  language bindings build their result dictionaries from it), so dropping the
+  assignment is not an optimization, it is a different result.
+- **The returned numbers.** A dropped statement also drops the string literals
+  it would have appended to `FormulaContext::string_table`, and a literal
+  evaluates to *its index in that table*. So dropping an earlier statement
+  shifts every later literal. Measured, before the fix:
+
+  | source | `eval` | `eval_optimized` | `FormulaCompiler` |
+  |---|---:|---:|---:|
+  | `TMP:='HELLO'; OUT: 'WORLD';` | **1** | **0** | **0** |
+
+  A wrong side table would be a bug; a wrong primary result is a wrong number.
+
+The four `optimize` call sites that *should* keep DCE are untouched
+(`FormulaOptimizer::optimize` is still public, and `core/benches/formula_bench.rs`
+still uses it). What changed is that no path which *executes* uses it.
+
+#### 2. `FormulaCompiler` deep-cloned on the miss path as well
+
+The fourteenth pass removed the cache-hit clone from both caches. This one
+removes the miss-path clone from `FormulaCompiler::compile`: it used to build
+the formula, `insert(source, formula.clone())` and return the original — a deep
+copy of the AST that existed only to satisfy the cache's owned storage. The
+cache stores `Arc` now, so the miss path inserts the very handle it returns.
+`compile` keeps its `-> CompiledFormula` signature, so one copy is still
+inherent (the caller asked to own it); there is just no longer a second one.
+
+#### 3. The plan backend could not run a string literal after a stateful statement
+
+`FormulaComputeLowerer::add_effect` appends the *previous* effect to a node's
+dependency list purely to serialize stateful statements. `STRING_LITERAL` was
+lowered through `add_effect`, so a literal following an assignment picked up
+that control edge — and `HotExecutionPlan` turns **every** semantic dependency
+into a buffer input. The `STRING_LITERAL` kernel rejects any input with its own
+arity check, so the plan backend failed outright:
+
+```
+FormulaEngine::new().with_execution_mode(Plan)
+    .eval("TMP:='HELLO'; OUT: 'WORLD';", &mut ctx)
+=> RuntimeError("... kernel dispatch failed for kernel 0x43f39d3d91f40744 with code 2")
+   while the tree backend returned 1
+```
+
+The literal is now lowered with `add_node` — no control edge. That is sound
+because the node reads nothing and is insensitive to *where* it runs: its value
+is the index the plan baked into the parameter arena, and the caller
+pre-populates `string_table` from `string_literals_ordered()`, which is keyed by
+node id (lowering order), not execution order. `effect: Stateful` is kept on
+purpose, because CSE must never merge two identical literals — a merge would
+change the literal count and break those baked indices with
+`LiteralBindingMismatch`.
+
+The existing `formula_string_literals.rs` gate missed this because all four of
+its cases are *function calls* with a literal argument (`EM_REF("IDX", 1)`); the
+chain only appears when a literal follows a stateful statement.
+
+#### 4. The bytecode VM ignored assignment shadowing of a builtin alias
+
+`A` is an official alias for `AMOUNT` — `builtin_data_aliases_resolve_to_the_same_series_on_every_path`
+asserts exactly that, on every path. But `BytecodeCompiler::normalize_variable`
+rewrote reads of `A` to `AMOUNT` unconditionally, so a formula that *assigned*
+`A` had its own variable replaced by the alias:
+
+| path | `A:=CLOSE*2; B:=A+CLOSE; OUT: B;` |
+|---|---|
+| `eval` (tree, default) | 43.05 |
+| plan | 43.05 |
+| `FormulaCompiler` | 43.05 |
+| bytecode VM | `RuntimeError("Data not available: AMOUNT")` |
+
+`A` is also the single most common user variable in TDX formulas, so this was
+not a corner. The compiler now tracks the names the formula binds
+(`X:=...`, `X: ...`, `for X = ...`) and resolves a bound name to the formula's
+own variable; unbound names still fall through to the alias table exactly as
+before. Declarations are recorded *after* the value is compiled, so
+`A := A + 1` with no prior `A` still reads the alias on the right-hand side, as
+the tree path does.
+
+#### 5. And a gap in the gate itself
+
+`run_plan` in `formula_differential_tests.rs` called `executor.execute`, which
+derives the series length from `inputs.first()` and therefore rejects a plan
+with no bound inputs. Every constant-only formula was untestable on the plan
+path — the plan backend's own `eval_plan_channels` handles that case with
+`ctx.data_len`, so the *gate* was narrower than production, not the engine. The
+helper now mirrors production and calls `execute_range` with the same length
+rule.
+
+#### The new gate
+
+`every_execution_entry_point_agrees_on_assignments_and_string_table` runs a
+corpus of assignment-shaped formulas through `eval`, `eval_optimized`,
+bytecode, JIT, `FormulaCompiler` and the plan path, and asserts **both** the
+returned values *and* `ctx.variables` / `ctx.string_table`. Every other
+differential gate in this repository compares values only, which is precisely
+why defects 1 and 4 survived four rounds of differential testing.
+
+#### Re-measured: 90 paired benchmarks, ✅ 72 / ⚠️ 16 / ❌ 2
+
+The full `talib_c_comparison` suite was re-run on the final tree. Nothing in
+this pass or the previous one touched an indicator kernel — neither round edited
+anything under `core/src/math/` — so any movement in the ratios is measurement
+noise, and the two numbers below are the evidence for saying so rather than
+asserting it:
+
+| Row | Finkit (µs) | TA-Lib C (µs) | Ratio |
+|---|---:|---:|---:|
+| `floor` | 33.66 | 25.23 | 0.75x ❌ |
+| `ceil` | 31.19 | 30.32 | 0.97x ⚠️ |
+| `linreg_slope_14` | 32.99 | 24.74 | 0.75x ❌ |
+| `linreg_intercept_14` | 30.44 | 25.14 | 0.83x ⚠️ |
+
+`floor` and `ceil` are the same trivial elementwise loop. On our side they
+measure 33.66 and 31.19 µs (8% apart, both stable); on the C side they measure
+25.23 and 30.32 µs — **20% apart from each other**. The 0.75x is TA-Lib's fast
+sample landing on `floor`, not a change on our side.
+
+The LINREG pair is the known limitation this repository has recorded since the
+thirteenth pass: the loop-carried `sum_xy` recurrence puts a latency floor under
+`linreg_slope`, two candidate fixes were measured as no-ops (31.03 → 31.10 and
+31.11 µs), and our side still measures 30-33 µs — exactly where it was. The
+previous run reported the same row as 0.75x against a 23.1 µs C sample.
+
+So the honest summary of this run is: **the set of indicators slower than
+TA-Lib C did not change; two rows crossed the report's 1.25x warning threshold
+because the reference measurement moved.** The distribution is 72/16/2 here
+against 75/14/1 on the previous run, with the difference confined to those two
+families.
+
 ### Changed - 2026-10-05 (fourteenth pass — both compiled-formula caches were charging rent on every call)
 
 The previous passes audited the numeric kernels. This one audited the **formula

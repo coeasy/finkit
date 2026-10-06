@@ -13,8 +13,8 @@
 
 use finkit::execution_plan::KernelId;
 use finkit::formula::{
-    parse_formula, unified_formula_executor, FormulaContext, FormulaDialect, FormulaEngine,
-    FormulaExecutionMode, FormulaHotPlan, FormulaStatefulStream,
+    parse_formula, unified_formula_executor, FormulaCompiler, FormulaContext, FormulaDialect,
+    FormulaEngine, FormulaExecutionMode, FormulaHotPlan, FormulaStatefulStream,
 };
 use ndarray::Array1;
 use std::collections::BTreeMap;
@@ -130,7 +130,15 @@ fn run_plan(source: &str, ctx: &FormulaContext) -> Array1<f64> {
     }
 
     let mut executor = unified_formula_executor(&plan);
-    let result = executor.execute(&inputs).expect("plan execute failed");
+    // Mirror production (`eval_plan_channels`): a plan with no bound inputs is a
+    // constant-only formula, and its length comes from the context instead of
+    // from `inputs.first()`. Calling `execute` here made every constant-only
+    // formula untestable on this path -- a gap in the gate, not a difference in
+    // the engine.
+    let length = inputs.first().map_or(ctx.data_len, |input| input.len());
+    let result = executor
+        .execute_range(&inputs, 0..length)
+        .expect("plan execute failed");
     let values = result
         .values
         .into_iter()
@@ -2129,6 +2137,131 @@ fn equality_operators_use_one_tolerance_on_every_path() {
             assert!(
                 (value - expected).abs() < TOLERANCE,
                 "{source}: ast[{index}] = {value}, expected {expected}"
+            );
+        }
+    }
+}
+
+fn sorted_variable_names(ctx: &FormulaContext) -> Vec<String> {
+    let mut names: Vec<String> = ctx.variables.keys().map(|name| name.to_string()).collect();
+    names.sort();
+    names
+}
+
+/// Every entry point that *executes* a formula must observe the same thing.
+///
+/// `FormulaOptimizer::optimize` runs statement-level dead-code elimination, and
+/// five execution entry points used to call it in place of
+/// `optimize_for_execution`. An `X:=...` assignment that no output reads is
+/// still observable through `FormulaContext::variables`; dropping the statement
+/// also drops the string literals it would have appended to
+/// `FormulaContext::string_table`, which shifts the index every later literal
+/// evaluates to — so the divergence reached the returned *numbers*, not only the
+/// side tables. `TMP:='HELLO'; OUT:'WORLD';` returned 1 through `eval` and 0
+/// through `eval_optimized` / `FormulaCompiler`.
+///
+/// The value comparisons below are the same contract `check_all_paths` covers;
+/// what this test adds is the side-effect comparison, which no other gate made.
+#[test]
+fn every_execution_entry_point_agrees_on_assignments_and_string_table() {
+    let sources: &[&str] = &[
+        // An assignment no output reads.
+        "JUNK:=MA(CLOSE,5); OUT: CLOSE;",
+        // The dropped statement carries a literal, so the surviving literal's
+        // index -- the returned value -- moves.
+        "TMP:='HELLO'; OUT: 'WORLD';",
+        // A chain: only the tail is read, the head must still be published.
+        "X:=CLOSE*2; Y:=X+CLOSE; OUT: Y;",
+        // `A` is an official alias for `AMOUNT` on every path, so an assignment
+        // has to shadow it rather than be rewritten back to the alias.
+        "A:=CLOSE*2; B:=A+CLOSE; OUT: B;",
+    ];
+
+    for source in sources {
+        let (reference_values, reference_vars, reference_strings) = {
+            let mut engine = FormulaEngine::new();
+            let mut ctx = make_ctx(64);
+            let values = run_ast(&mut engine, source, &mut ctx);
+            (
+                values,
+                sorted_variable_names(&ctx),
+                ctx.string_table.clone(),
+            )
+        };
+
+        {
+            let mut engine = FormulaEngine::new();
+            let mut ctx = make_ctx(64);
+            let values = engine
+                .eval_optimized(source, &mut ctx)
+                .expect("eval_optimized failed");
+            assert_arrays_match(source, "eval_optimized", &reference_values, &values);
+            assert_eq!(
+                sorted_variable_names(&ctx),
+                reference_vars,
+                "{source}: eval_optimized published different assignments"
+            );
+            assert_eq!(
+                ctx.string_table, reference_strings,
+                "{source}: eval_optimized built a different string table"
+            );
+        }
+
+        {
+            let mut engine = FormulaEngine::new();
+            let ctx = make_ctx(64);
+            let values = run_bytecode(&mut engine, source, &ctx);
+            assert_arrays_match(source, "bytecode", &reference_values, &values);
+        }
+
+        {
+            let mut compiler = FormulaCompiler::new(16);
+            let mut ctx = make_ctx(64);
+            let values = compiler
+                .compile_and_execute(source, &mut ctx)
+                .expect("FormulaCompiler failed");
+            assert_arrays_match(source, "FormulaCompiler", &reference_values, &values);
+            assert_eq!(
+                sorted_variable_names(&ctx),
+                reference_vars,
+                "{source}: FormulaCompiler published different assignments"
+            );
+            assert_eq!(
+                ctx.string_table, reference_strings,
+                "{source}: FormulaCompiler built a different string table"
+            );
+        }
+
+        #[cfg(feature = "formula-jit")]
+        {
+            let mut engine = FormulaEngine::new();
+            let mut ctx = make_ctx(64);
+            let values = run_jit(&mut engine, source, &mut ctx);
+            assert_arrays_match(source, "jit", &reference_values, &values);
+        }
+
+        // The plan path builds its string table and its variable bindings on its
+        // own route, so it is checked on the same inputs.
+        check_all_paths("ENTRY_POINT_PARITY", source, 64);
+
+        // `check_all_paths` compares values only. The plan backend also
+        // publishes assignments and channels through the context
+        // (`eval_plan_channels`), so that side is asserted here too -- a plan
+        // that returns the right series while dropping a binding is the same
+        // class of defect as 41.1.
+        {
+            let mut engine = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
+            let mut ctx = make_ctx(64);
+            let values = engine.eval(source, &mut ctx).expect("plan eval failed");
+            assert_arrays_match(source, "plan", &reference_values, &values);
+            assert_eq!(
+                sorted_variable_names(&ctx),
+                reference_vars,
+                "{source}: the plan backend published different assignments"
+            );
+            assert_eq!(
+                ctx.string_table, reference_strings,
+                "{source}: the plan backend built a different string table"
             );
         }
     }
