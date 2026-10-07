@@ -1241,8 +1241,7 @@ fn main() {
         // index k + (period-1). With that alignment, `variance_into` must agree
         // with TA_VAR to float order.
         let mut shipped_buf = vec![0.0f64; DATA_LEN];
-        finkit::math::rolling_stats::variance_into(&close, 20, &mut shipped_buf)
-            .unwrap();
+        finkit::math::rolling_stats::variance_into(&close, 20, &mut shipped_buf).unwrap();
         let mut raw_buf = vec![0.0f64; DATA_LEN];
         raw_var_into(&close, 20, &mut raw_buf);
         let c = c_var(&close, 20, 1.0);

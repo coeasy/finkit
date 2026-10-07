@@ -209,6 +209,89 @@ also benefits the cached rolling-extreme path (`MAX`/`MIN` for NaN-bearing input
 `rescan_extreme_window`.
 
 
+### Changed - 2026-10-07 (twenty-fifth pass — formula fast path: prove-then-uninit buffer, KAMA onto kama_into, one cross-entry-point fix)
+
+Closes the two "known leftover" items the twenty-fourth pass left open, and turns
+up a real correctness defect on the way: two public entry points were returning
+*different* floats for the same formula.
+
+#### 1. The safety premise was made measurable before it was relied on
+
+Swapping the fast path's `Array1::from_elem(len, NAN)` for `uninit_output` is only
+sound if every kernel the fast path can pick overwrites **every** output slot. Nothing
+proved that, so nothing could use it. Now something does: poison the buffer with a
+signalling NaN no kernel produces (`0x7FF0_0000_0000_0001` — kernels emit the quiet
+`0x7FF8_0000_0000_0000`), run the kernel, count survivors.
+
+All ten (MA/BOLLMID `sma_simd_into`, EMA `ema_into` + `ema_simd_into`, RSI, WMA, DEMA,
+TEMA, TRIMA, KAMA `kama_into`, ATR `atr_into`) leave **0 survivors**. The property is
+now a gate: `core/tests/fastpath_full_writer_contract.rs` names the offending kernel if
+one ever stops being a full writer.
+
+#### 2. Buffer: 15x / 40x on the pre-fill alone
+
+| bars | `from_elem(NAN)` | `uninit_output` | speedup |
+|---:|---:|---:|---:|
+| 10k | 1.58 µs | 0.10 µs | 15.05x |
+| 100k | 65.25 µs | 1.63 µs | 40.03x |
+
+(The twenty-fourth pass wrote "≈10 µs/10k"; measured, 10k is 1.58 µs and 100k is 65 µs.)
+
+#### 3. KAMA: the comment was wrong, and it was costing 3x memory traffic
+
+`try_execute_simple_formula` claimed "KAMA has no `_into` variant". It does:
+`math/mod.rs` re-exports `fast_moving_avg::kama_into` and `unified_dispatch` already used
+it. The old path therefore did three passes over the output (NaN fill, the kernel's own
+`Array1`, then `copy_from_slice`):
+
+| bars | old (fill + allocating + copy) | new (`uninit_output` + `kama_into`) | speedup |
+|---:|---:|---:|---:|
+| 10k | 70.33 µs | **24.97 µs** | **2.82x** |
+| 100k | 359.36 µs | **261.13 µs** | 1.38x |
+
+`engine.eval("KAMA(CLOSE,20)")` @10k is now 29.92 µs end to end.
+
+#### 4. Two entry points disagreed by 16/10000 bits
+
+The twenty-fourth pass moved EMA onto `ema_into` for bit-identity with the general
+executor, but missed `try_execute_simple_formula_slices` — the path behind
+`eval_zero_copy_inputs`, which is what the Python binding's batch scans call:
+
+```text
+before:  eval(EMA) vs eval_zero_copy_inputs(EMA)   16/10000 bits differ
+after :  eval(EMA) vs eval_zero_copy_inputs(EMA)    0/10000 bits differ
+```
+
+Not a precision improvement — the same formula answered differently depending on which
+public entry point was called. Now gated by
+`fast_paths_agree_bit_for_bit_across_entry_points`, which checks all nine fast-path names.
+The slices name table also gained `WMA|DEMA|TEMA|TRIMA|KAMA` (same kernels, still zero-copy),
+so both entry points now serve the same set.
+
+#### 5. Measuring the zero-copy change hit the drift problem a third time
+
+The engine.rs-only stash A/B produced an unusable comparison: the null control
+`SUM(CLOSE,20)`, byte-identical in both builds, read **51.63 µs → 69.30 µs (+34%)**.
+So this pass quotes only same-process interleaved medians (sections 2–3) and deterministic
+tests. The zero-copy extension is claimed structurally (4 → 9 names; bit-for-bit agreement),
+not quantitatively.
+
+#### 6. Housekeeping
+
+- `statistics.rs::rescan_extreme_window` carried both `#[inline]` and `#[inline(always)]`,
+  which rustc reports as `unused_attributes` — and the test job runs with `-D warnings`.
+  Removed the redundant attribute.
+- `cargo fmt --all`: six examples from earlier passes were unformatted, so the CI fmt job
+  (toolchain pinned to 1.98, same as local) was **red**. Now green.
+
+#### Still open
+
+Multi-language bindings (§44.17): Go 51/95 and .NET 55/95 are missing the whole CDL family
+plus AD/APO/AVGPRICE/BOP; Python/Node/Java miss 6–11 boundary functions. Binding-layer work,
+next batch. The remaining 12 ⚠️ indicators all sit within 9% and several flip between passes
+with no code change — below this machine's cross-run variance.
+
+
 ### Changed - 2026-10-06 (twenty-fourth pass — formula engine: eval_last correctness fix, fast-path expansion, core/multi-language audit)
 
 Formula engine, first pass on the engine itself rather than the kernels.

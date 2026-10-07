@@ -431,7 +431,6 @@ fn first_finite(values: &[f64]) -> Option<usize> {
 /// missing bars. Returns `(extreme, position, found_a_finite_bar)`; the third
 /// component is the only way to tell "no finite bar in this window" apart from
 /// "the extreme is very large", so it must be carried out with the value.
-#[inline]
 #[inline(always)]
 pub(crate) fn rescan_extreme_window<const WANT_MAX: bool>(
     values: &[f64],

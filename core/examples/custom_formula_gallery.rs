@@ -136,9 +136,7 @@ fn example_2_custom_component() -> Result<(), Box<dyn std::error::Error>> {
         finite.iter().cloned().fold(f64::INFINITY, f64::min),
         finite.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
     );
-    println!(
-        "  ZS(CLOSE,20) 范围 = [{zmin:.3}, {zmax:.3}]（阈值 ±2 外的 bar 才触发）"
-    );
+    println!("  ZS(CLOSE,20) 范围 = [{zmin:.3}, {zmax:.3}]（阈值 ±2 外的 bar 才触发）");
     tail("MEAN_REV", signal.as_slice().unwrap(), 10);
 
     let buys = signal.iter().filter(|v| **v == 1.0).count();
@@ -151,7 +149,10 @@ fn example_2_custom_component() -> Result<(), Box<dyn std::error::Error>> {
 
     // Removal is explicit and invalidates dependent plans.
     engine.unregister_custom_formula("MEAN_REV")?;
-    println!("  注销 MEAN_REV 后剩余: {:?}", engine.custom_formula_names());
+    println!(
+        "  注销 MEAN_REV 后剩余: {:?}",
+        engine.custom_formula_names()
+    );
     Ok(())
 }
 
@@ -246,7 +247,10 @@ fn example_6_streaming() -> Result<(), Box<dyn std::error::Error>> {
         "RSI(CLOSE, 14)",
         finkit::formula::FormulaDialect::AlphaTA,
     )?;
-    println!("  RSI 依赖输入槽: {:?}", rsi_stream.required_inputs().collect::<Vec<_>>());
+    println!(
+        "  RSI 依赖输入槽: {:?}",
+        rsi_stream.required_inputs().collect::<Vec<_>>()
+    );
 
     let mut rsi_last = f64::NAN;
     let mut warmup = 0usize;
@@ -273,7 +277,10 @@ fn example_6_streaming() -> Result<(), Box<dyn std::error::Error>> {
         "ATR(HIGH, LOW, CLOSE, 14)",
         finkit::formula::FormulaDialect::AlphaTA,
     )?;
-    println!("  ATR 依赖输入槽: {:?}", atr_stream.required_inputs().collect::<Vec<_>>());
+    println!(
+        "  ATR 依赖输入槽: {:?}",
+        atr_stream.required_inputs().collect::<Vec<_>>()
+    );
     let mut atr_last = f64::NAN;
     for i in 0..close.len() {
         row[0] = open[i];
@@ -312,7 +319,12 @@ fn example_7_dialects() -> Result<(), Box<dyn std::error::Error>> {
         let mut ctx = make_ctx(80);
         match engine.eval_with_dialect(source, dialect, &mut ctx) {
             Ok(values) => {
-                let last = values.as_slice().unwrap().last().copied().unwrap_or(f64::NAN);
+                let last = values
+                    .as_slice()
+                    .unwrap()
+                    .last()
+                    .copied()
+                    .unwrap_or(f64::NAN);
                 println!("  {label:<10} {source:<22} → 末值 {last:.4}");
             }
             Err(err) => println!("  {label:<10} {source:<22} → 不支持: {err}"),
@@ -362,7 +374,10 @@ fn example_9_compile_once() -> Result<(), Box<dyn std::error::Error>> {
         scores.push(engine.eval_last(&compiled, &ctx)?);
     }
     let finite = scores.iter().filter(|v| v.is_finite()).count();
-    println!("  200 次 eval_last：有限值 {finite} 条，末值 {:.4}", scores[199]);
+    println!(
+        "  200 次 eval_last：有限值 {finite} 条，末值 {:.4}",
+        scores[199]
+    );
 
     // Switching to the compiled-plan execution path.
     let mut plan_engine = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);

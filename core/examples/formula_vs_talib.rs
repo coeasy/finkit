@@ -35,8 +35,8 @@ use ndarray::Array1;
 
 #[cfg(feature = "talib-c")]
 use finkit::talib_ffi::{
-    call_hlc, call_single_in, TA_ATR, TA_DEMA, TA_EMA, TA_KAMA, TA_RSI, TA_SMA, TA_TEMA,
-    TA_TRIMA, TA_WMA,
+    call_hlc, call_single_in, TA_ATR, TA_DEMA, TA_EMA, TA_KAMA, TA_RSI, TA_SMA, TA_TEMA, TA_TRIMA,
+    TA_WMA,
 };
 
 /// Bars used per measurement. 10k matches the tracked Criterion suite; 100k
@@ -310,7 +310,8 @@ fn main() {
                                     engine.eval(case.source, &mut ctx).expect("eval"),
                                 );
                             }
-                            formula_samples.push(start.elapsed().as_secs_f64() * 1e6 / REPEATS as f64);
+                            formula_samples
+                                .push(start.elapsed().as_secs_f64() * 1e6 / REPEATS as f64);
                         }
                         1 => {
                             let mut ctx = make_ctx(&data);
@@ -320,14 +321,16 @@ fn main() {
                                     engine.execute(&compiled, &mut ctx).expect("execute"),
                                 );
                             }
-                            planned_samples.push(start.elapsed().as_secs_f64() * 1e6 / REPEATS as f64);
+                            planned_samples
+                                .push(start.elapsed().as_secs_f64() * 1e6 / REPEATS as f64);
                         }
                         2 => {
                             let start = std::time::Instant::now();
                             for _ in 0..REPEATS {
                                 std::hint::black_box((case.native)(&data));
                             }
-                            native_samples.push(start.elapsed().as_secs_f64() * 1e6 / REPEATS as f64);
+                            native_samples
+                                .push(start.elapsed().as_secs_f64() * 1e6 / REPEATS as f64);
                         }
                         _ => {
                             #[cfg(feature = "talib-c")]
@@ -336,9 +339,8 @@ fn main() {
                                 for _ in 0..REPEATS {
                                     std::hint::black_box((case.talib)(&data));
                                 }
-                                talib_samples.push(
-                                    start.elapsed().as_secs_f64() * 1e6 / REPEATS as f64,
-                                );
+                                talib_samples
+                                    .push(start.elapsed().as_secs_f64() * 1e6 / REPEATS as f64);
                             }
                         }
                     }

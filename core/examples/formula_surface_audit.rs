@@ -52,12 +52,30 @@ fn main() {
 
     // Capability matrix: what a host can actually select.
     println!("\n执行与方言矩阵:");
-    println!("  {:<22}{}", "方言", "AlphaTA / TongDaXin / TongHuaShun / EastMoney / Pine");
-    println!("  {:<22}{}", "执行模式", "Interpreter(默认) / Plan / Bytecode / JIT");
-    println!("  {:<22}{}", "自定义组件", "register_custom_formula（表达式级宏，可组合）");
-    println!("  {:<22}{}", "多输出", "eval_multi / 命名通道 / DRAWTEXT-DRAWICON-DRAWLINE");
-    println!("  {:<22}{}", "增量流式", "FormulaStatefulStream（O(1)/bar，检查点可序列化）");
-    println!("  {:<22}{}", "零拷贝", "eval_range_zero_copy_inputs / BufferPool");
+    println!(
+        "  {:<22}{}",
+        "方言", "AlphaTA / TongDaXin / TongHuaShun / EastMoney / Pine"
+    );
+    println!(
+        "  {:<22}{}",
+        "执行模式", "Interpreter(默认) / Plan / Bytecode / JIT"
+    );
+    println!(
+        "  {:<22}{}",
+        "自定义组件", "register_custom_formula（表达式级宏，可组合）"
+    );
+    println!(
+        "  {:<22}{}",
+        "多输出", "eval_multi / 命名通道 / DRAWTEXT-DRAWICON-DRAWLINE"
+    );
+    println!(
+        "  {:<22}{}",
+        "增量流式", "FormulaStatefulStream（O(1)/bar，检查点可序列化）"
+    );
+    println!(
+        "  {:<22}{}",
+        "零拷贝", "eval_range_zero_copy_inputs / BufferPool"
+    );
 
     // A sample of the surface, so the number is not the only evidence.
     println!("\n内置函数抽样（前 40 项，共 {}）:", names.len());

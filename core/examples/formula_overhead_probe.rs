@@ -114,7 +114,9 @@ fn main() {
                     let start = Instant::now();
                     for _ in 0..REPEATS {
                         let owned = Array1::from_vec(close.clone());
-                        std::hint::black_box(moving_avg::ema(owned.as_slice().unwrap(), 20).unwrap());
+                        std::hint::black_box(
+                            moving_avg::ema(owned.as_slice().unwrap(), 20).unwrap(),
+                        );
                     }
                     kernel_owned.push(start.elapsed().as_secs_f64() * 1e6 / REPEATS as f64);
                 }
@@ -174,16 +176,32 @@ fn main() {
     let ev = median(&mut engine_eval);
 
     println!("EMA(CLOSE,20) @ {LEN} bars — 开销分解（单进程交错，中位数）\n");
-    println!("  {:<44}{:>10.2} µs", "1. moving_avg::ema(&slice, 20)  [内核底线]", k);
+    println!(
+        "  {:<44}{:>10.2} µs",
+        "1. moving_avg::ema(&slice, 20)  [内核底线]", k
+    );
     println!("  {:<44}{:>10.2} µs", "2. clone→Array1 + 同内核", ko);
     println!("  {:<44}{:>10.2} µs", "3. 仅 Array1::from_vec(clone)", cl);
     println!("  {:<44}{:>10.2} µs", "4. 仅构建 FormulaContext", cb);
-    println!("  {:<44}{:>10.2} µs", "5. 仅 ctx.close_view().to_owned()", vv);
-    println!("  {:<44}{:>10.2} µs", "6. engine.execute(&compiled, ctx)", ee);
+    println!(
+        "  {:<44}{:>10.2} µs",
+        "5. 仅 ctx.close_view().to_owned()", vv
+    );
+    println!(
+        "  {:<44}{:>10.2} µs",
+        "6. engine.execute(&compiled, ctx)", ee
+    );
     println!("  {:<44}{:>10.2} µs", "7. engine.eval(source, ctx)", ev);
     println!("\n  可解释部分 (3) clone            = {:>7.2} µs", cl);
-    println!("  未解释部分 (6 - 1 - 3)          = {:>7.2} µs", ee - k - cl);
-    println!("  引擎总开销 (6 - 1)              = {:>7.2} µs  ({:.2}x)", ee - k, ee / k);
+    println!(
+        "  未解释部分 (6 - 1 - 3)          = {:>7.2} µs",
+        ee - k - cl
+    );
+    println!(
+        "  引擎总开销 (6 - 1)              = {:>7.2} µs  ({:.2}x)",
+        ee - k,
+        ee / k
+    );
 
     println!("\n内核选型对比（均写入预分配缓冲，无分配）\n");
     for candidate in ["ema_simd_into", "ema_fast_into", "sma_simd_into"] {

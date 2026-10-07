@@ -1148,15 +1148,11 @@ impl FormulaEngine {
             "DEMA" => crate::math::moving_avg::dema_into(input, period, out).is_ok(),
             "TEMA" => crate::math::moving_avg::tema_into(input, period, out).is_ok(),
             "TRIMA" => crate::math::moving_avg::trima_into(input, period, out).is_ok(),
-            // KAMA has no `_into` variant; the owned kernel matches
-            // `fn_kama`'s call exactly, including its 2/30 smoothing defaults.
-            "KAMA" => match crate::math::moving_avg::kama(input, period, 2, 30) {
-                Ok(values) => {
-                    out.copy_from_slice(values.as_slice().expect("Array1 is contiguous"));
-                    true
-                }
-                Err(_) => false,
-            },
+            // `kama_into` is the same `dispatch_kama_kernel` the allocating
+            // `kama` wraps, and it writes every slot (proved by
+            // `fastpath_full_writer_contract`), so the result lands in the caller's
+            // buffer directly -- 2/30 smoothing defaults as `fn_kama` uses.
+            "KAMA" => crate::math::moving_avg::kama_into(input, period, 2, 30, out).is_ok(),
             _ => false,
         }
     }
@@ -1186,7 +1182,9 @@ impl FormulaEngine {
             let Some(len) = len else {
                 return None;
             };
-            let mut output = Array1::from_elem(len, f64::NAN);
+            // `atr_into` is a full writer (see `fastpath_full_writer_contract`), so the
+            // buffer needs no NaN pre-fill.
+            let mut output = Array1::from_vec(crate::utils::uninit_output(len));
             return if try_atr_fast_path(
                 ctx,
                 args,
@@ -1229,7 +1227,10 @@ impl FormulaEngine {
         // See `try_execute_simple_formula_into` for why every kernel below is
         // bit-identical to the general path, and why EMA uses the scalar
         // recurrence instead of `simd_kernels::ema_simd_into`.
-        let mut output = Array1::from_elem(input.len(), f64::NAN);
+        // Every kernel in the `match` below is a full writer (proved by
+        // `fastpath_full_writer_contract`), so the result buffer is allocated
+        // uninitialised rather than paying a full-length NaN store pass.
+        let mut output = Array1::from_vec(crate::utils::uninit_output(input.len()));
         let out = output.as_slice_mut().expect("Array1 is contiguous");
         match upper.as_str() {
             "MA" | "BOLLMID" => {
@@ -1263,12 +1264,11 @@ impl FormulaEngine {
                     return None;
                 }
             }
-            "KAMA" => match crate::math::moving_avg::kama(input, period, 2, 30) {
-                Ok(values) => {
-                    out.copy_from_slice(values.as_slice().expect("Array1 is contiguous"));
+            "KAMA" => {
+                if crate::math::moving_avg::kama_into(input, period, 2, 30, out).is_err() {
+                    return None;
                 }
-                Err(_) => return None,
-            },
+            }
             _ => return None,
         }
 
@@ -1799,28 +1799,53 @@ impl FormulaEngine {
         // name check comes first and a non-finite input falls through, so the
         // general executor applies the math layer's warm-up rule.
         let upper = name.to_ascii_uppercase();
-        if !matches!(upper.as_str(), "MA" | "BOLLMID" | "EMA" | "RSI")
-            || input.iter().any(|value| !value.is_finite())
+        if !matches!(
+            upper.as_str(),
+            "MA" | "BOLLMID" | "EMA" | "RSI" | "WMA" | "DEMA" | "TEMA" | "TRIMA" | "KAMA"
+        ) || input.iter().any(|value| !value.is_finite())
         {
             return None;
         }
-        let mut output = Array1::from_elem(input.len(), f64::NAN);
+        // Full writers (proved by `fastpath_full_writer_contract`): no NaN pre-fill.
+        let mut output = Array1::from_vec(crate::utils::uninit_output(input.len()));
+        let out = output.as_slice_mut().expect("Array1 is contiguous");
         match upper.as_str() {
-            "MA" | "BOLLMID" => crate::math::simd_kernels::sma_simd_into(
-                input,
-                period,
-                output.as_slice_mut().expect("Array1 is contiguous"),
-            ),
-            "EMA" => crate::math::simd_kernels::ema_simd_into(
-                input,
-                period,
-                output.as_slice_mut().expect("Array1 is contiguous"),
-            ),
-            "RSI" => crate::math::simd_kernels::rsi_simd_into(
-                input,
-                period,
-                output.as_slice_mut().expect("Array1 is contiguous"),
-            ),
+            "MA" | "BOLLMID" => crate::math::simd_kernels::sma_simd_into(input, period, out),
+            // `ema_into`, not `simd_kernels::ema_simd_into`: the latter differs
+            // from the scalar recurrence by 16/10000 bits, which would make this
+            // entry point disagree with `eval`. Same reason as
+            // `try_execute_simple_formula_into`.
+            "EMA" => {
+                if crate::math::moving_avg::ema_into(input, period, out).is_err() {
+                    return None;
+                }
+            }
+            "RSI" => crate::math::simd_kernels::rsi_simd_into(input, period, out),
+            "WMA" => {
+                if crate::math::moving_avg::wma_into(input, period, out).is_err() {
+                    return None;
+                }
+            }
+            "DEMA" => {
+                if crate::math::moving_avg::dema_into(input, period, out).is_err() {
+                    return None;
+                }
+            }
+            "TEMA" => {
+                if crate::math::moving_avg::tema_into(input, period, out).is_err() {
+                    return None;
+                }
+            }
+            "TRIMA" => {
+                if crate::math::moving_avg::trima_into(input, period, out).is_err() {
+                    return None;
+                }
+            }
+            "KAMA" => {
+                if crate::math::moving_avg::kama_into(input, period, 2, 30, out).is_err() {
+                    return None;
+                }
+            }
             _ => return None,
         }
         Some(output)

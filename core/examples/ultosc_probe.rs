@@ -72,14 +72,7 @@ fn duel<A, B>(label: &str, mut base: impl FnMut() -> A, mut cand: impl FnMut() -
 }
 
 #[inline(always)]
-fn dx_like_guards(
-    bp1: f64,
-    tr1: f64,
-    bp2: f64,
-    tr2: f64,
-    bp3: f64,
-    tr3: f64,
-) -> f64 {
+fn dx_like_guards(bp1: f64, tr1: f64, bp2: f64, tr2: f64, bp3: f64, tr3: f64) -> f64 {
     let avg1 = if tr1 > 0.0 { bp1 / tr1 } else { 0.0 };
     let avg2 = if tr2 > 0.0 { bp2 / tr2 } else { 0.0 };
     let avg3 = if tr3 > 0.0 { bp3 / tr3 } else { 0.0 };

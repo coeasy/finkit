@@ -87,6 +87,11 @@
 - `formula_dialect_coverage.rs` - 方言覆盖矩阵
 - `formula_registry_signature.rs` - 注册表函数签名契约
 - `formula_talib_081_surface.rs` - TA-Lib 0.8.1 公式面覆盖
+- `fastpath_full_writer_contract.rs` - **快路径的 UB 前提门禁**：快路径结果缓冲用
+  `uninit_output`（不铺 NaN），因此每个可被选中的内核都必须**写满输出槽位**。
+  用内核不会产生的信令 NaN 污染缓冲、数幸存哨兵，逐个点名不是全写入者的内核；
+  并要求 `eval` 与 `eval_zero_copy_inputs` 对全部 9 个快路径名字**逐位一致**
+  （此前两者在 EMA 上差 16/10000 位）
 
 ### 收敛门禁 (Convergence Gates)
 §18 的「五条边」每条都必须被钉住：`batch == streaming`、`full == range`、

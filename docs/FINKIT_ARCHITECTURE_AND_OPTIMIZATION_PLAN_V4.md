@@ -4380,3 +4380,113 @@ call 3: NaN      ← 200 次里 100 次 NaN
 - `KAMA` 快路径用的是分配版 `moving_avg::kama`（无 `_into` 变体），100k 档仍 3.08× vs native。
 - doctest 在本机 Windows 上因命名管道耗尽（`Failed to spawn rustc.exe: code 231`）无法全部编译，
   与代码无关；已用 `--test-threads=2` 复验仍为同一环境错误。需换机或在 CI 上确认 doctest 全绿。
+
+### 44.18 第二十五轮：公式快路径的缓冲与 KAMA 分配（§44.17 遗留项 1、2 结清，并修一处跨入口点不一致）
+
+本轮把 §44.17「已知遗留」的前两条一次做完，并顺带修掉一处**真实存在的跨入口点数值不一致**。
+三件事都不是凭感觉改的：先写探针证明前提，再动内核。
+
+#### 1. 先证明，再改：全写入契约（`fastpath_fill_probe` / `fastpath_full_writer_contract`）
+
+§44.17 把「快路径缓冲换 `uninit_output`」列为专项，障碍是**无法证明**每个内核都写满输出槽位——
+若某个内核留了一个槽没写，调用方就会读到未初始化内存（UB）。
+
+办法是把「是否写满」变成一个可测命题：用**内核绝不会产生的信令 NaN**（`0x7FF0_0000_0000_0001`；
+内核产出的是安静 NaN `0x7FF8_0000_0000_0000`）把输出缓冲整片污染，跑一次内核，数幸存哨兵：
+
+| 内核（快路径选择） | 幸存/10000 | 结论 |
+|---|---:|---|
+| `simd_kernels::sma_simd_into`（MA/BOLLMID） | 0 | 全写 |
+| `fast_moving_avg::ema_into`（EMA，into 路径） | 0 | 全写 |
+| `simd_kernels::ema_simd_into`（EMA，slices 路径） | 0 | 全写 |
+| `simd_kernels::rsi_simd_into`（RSI） | 0 | 全写 |
+| `moving_avg::wma_into`（WMA） | 0 | 全写 |
+| `moving_avg::dema_into`（DEMA） | 0 | 全写 |
+| `moving_avg::tema_into`（TEMA） | 0 | 全写 |
+| `moving_avg::trima_into`（TRIMA） | 0 | 全写 |
+| `moving_avg::kama_into`（KAMA） | 0 | 全写 |
+| `volatility::atr_into`（ATR，多输入） | 0 | 全写 |
+
+结论：**全部 10 个内核都是全写入者**，`uninit_output` 的前提成立。
+这个性质以**契约测试**固化（`core/tests/fastpath_full_writer_contract.rs`），
+任何内核日后被改成「提前返回 / 只写短窗口 / 新增 `if`」，都会先在这里红，并点名是哪一个内核。
+
+#### 2. 结果缓冲：`Array1::from_elem(NAN)` → `uninit_output`
+
+三处快路径（ATR 分支、`try_execute_simple_formula`、`try_execute_simple_formula_slices`）
+原先都先铺一遍 NaN 再让内核覆盖。同进程交错测量（`fastpath_buffer_probe`，中位数）：
+
+| 档位 | `from_elem(NAN)` | `uninit_output` | 倍数 |
+|---|---:|---:|---:|
+| 10k | 1.58 µs | **0.10 µs** | **15.05×** |
+| 100k | 65.25 µs | **1.63 µs** | **40.03×** |
+
+（§44.17 里写的「≈10 µs/10k」是估算；实测 10k 只有 1.58 µs，100k 才 65 µs。）
+
+#### 3. KAMA：分配版 + `copy_from_slice` → `kama_into` 直写
+
+§44.17 的注释写着「KAMA has no `_into` variant」，**这句是错的**：
+`core/src/math/mod.rs` 早已把 `fast_moving_avg::{kama, kama_into}` 显式再导出为
+`math::moving_avg::{kama, kama_into}`，`unified_dispatch.rs` 也一直在用 `kama_into`。
+于是旧快路径做了**三倍内存流量**：铺 NaN（写 10k）→ `kama()` 内部再分配一个 `Array1` 并计算（写 10k）
+→ `copy_from_slice`（读 10k + 写 10k）。改成 `kama_into` 直写缓冲后只剩一遍。
+
+| 档位 | 旧（铺 NaN + 分配版 + 拷贝） | 新（`uninit_output` + `kama_into`） | 倍数 |
+|---|---:|---:|---:|
+| 10k | 70.33 µs | **24.97 µs** | **2.82×** |
+| 100k | 359.36 µs | **261.13 µs** | **1.38×** |
+
+端到端 `engine.eval("KAMA(CLOSE,20)")` @10k 现为 **29.92 µs**（与 24.97 µs 的纯工作量只差引擎开销）。
+
+#### 4. 顺带修一处真实缺陷：slices 路径的 EMA 与 `eval` 不一致
+
+§44.17 已经把 `try_execute_simple_formula_into` 的 EMA 从 `simd_kernels::ema_simd_into`
+换成 `ema_into`（0 位差），但**零拷贝入口** `eval_zero_copy_inputs` 用的
+`try_execute_simple_formula_slices` 漏改，仍走 `ema_simd_into`：
+
+```text
+修复前：eval(EMA) vs eval_zero_copy_inputs(EMA)  位差 16 / 10000
+修复后：eval(EMA) vs eval_zero_copy_inputs(EMA)  位差  0 / 10000
+```
+
+这不是"更准一点"，而是**两个公开入口对同一条公式给出不同的浮点结果**——而
+`eval_zero_copy_inputs` 正是 Python 绑定批量扫描走的路径（`ffi/python-binding`）。
+同类不一致不会再悄悄出现：新测试
+`fast_paths_agree_bit_for_bit_across_entry_points` 对全部 9 个名字逐一比对两个入口。
+
+同时把 slices 快路径的名字表从 `MA|BOLLMID|EMA|RSI` 扩到
+`+WMA|DEMA|TEMA|TRIMA|KAMA`——它们用的是与 ctx 路径**同一个 `*_into` 内核**，
+零拷贝性质不变（内核签名本就是 `&[f64]` → `&mut [f64]`），因此两个入口现在服务同一批名字。
+
+#### 5. 测量方法学（第三次被同一块石头绊到）
+
+本轮为了给零拷贝路径做「改前/改后」，用 `git stash push -- core/src/formula/engine.rs`
+跑了两次二进制。结果**空对照自己动了**：`SUM(CLOSE,20)` 在两次运行里是
+**51.63 µs → 69.30 µs（+34%）**——它两版代码完全相同。
+
+所以本轮的结论只引用**同进程、交错、取中位数**的数字（上表 2、3 两节，以及确定性测试）。
+跨运行的绝对微秒数在这台机器上依旧是噪声显示器，与 §44.16 记的「谁后跑谁慢」一致。
+零拷贝路径的收益本轮**不作为量化结论**，只主张两件可判定的事：
+① 名字表从 4 扩到 9；② 两个入口逐位一致（测试）。其中 EMA 一行与进程内内核差
+（`ema_simd_into` 43.14 µs vs `ema_into` 25.09 µs，§44.17）方向一致，可交叉印证。
+
+#### 6. 附带：清掉一处 future-incompat 告警 + 全仓 rustfmt
+
+- `core/src/math/statistics.rs` 的 `rescan_extreme_window` 同时挂了 `#[inline]` 和
+  `#[inline(always)]`，rustc 报 `unused_attributes`（"will become a hard error"）。
+  CI 的 test 作业带 `-D warnings`，这类告警正是会把绿树变红的东西；删掉多余的 `#[inline]`。
+- `cargo fmt --all`：先前几轮留下的 6 个 example 与新增文件存在格式差异，
+  `cargo fmt --all -- --check`（CI 的 fmt 作业，工具链同样钉 1.98）此前**是红的**，现已转绿。
+
+#### 7. 已知遗留（更新）
+
+- ~~快路径缓冲 `from_elem(NaN)`~~ → 本轮改为 `uninit_output`（契约测试守护）。
+- ~~`KAMA` 无 `_into` 变体~~ → 本轮改走 `kama_into`；该项作废。
+- 多语言绑定补齐（§44.17 第 5 节）：**仍未动**。以 C 头 95 个 `ta_*` 为基准，
+  Go 51/95、.NET 55/95 缺整个 CDL 家族 + AD/APO/AVGPRICE/BOP；Python 89/95、Node 85/95、Java 84/95
+  缺 6–11 项边界函数。属绑定层 API 补齐（Rust FFI 导出 + 各语言封装 + 各自契约测试），单列一批。
+- 剩余 12 项 ⚠️ 指标（绝对值均 ≤4 µs）：`min_30` 0.91×、`ultosc` 0.93×、`var_20` 0.93×、
+  `aroonosc` 0.94×、`linreg_angle`/`max_30` 0.97×、`ad`/`aroon`/`trima` 0.98×、
+  `acos`/`ln`/`minus_di` 0.99×。其中多项在代码未变时逐轮在 ✅/⚠️ 间翻转，
+  差距（<9%）小于本机跨运行方差——继续单点攻坚的边际收益低。
+- doctest 本机 Windows 命名管道耗尽问题（同上轮）。

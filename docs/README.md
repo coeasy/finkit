@@ -125,6 +125,7 @@ Binding-specific source guides also live with their implementations, including `
 | [formula.md](formula.md) | Formula syntax, evaluation and debugging guidance |
 | [formula/grammar.md](formula/grammar.md) | Core formula grammar |
 | [formula/pine-grammar.md](formula/pine-grammar.md) | Supported Pine grammar subset |
+| [formula/custom-formula-examples.md](formula/custom-formula-examples.md) | Worked examples of user-defined formulas: composable components, named channels, control flow, parameterised templates, streaming + checkpoints, dialects, `DRAW`, compiled-scan `eval_last` |
 | [formula-runtime.md](formula-runtime.md) | Persistent compiled plans and incremental execution |
 | [formula-runtime-contract.md](formula-runtime-contract.md) | Ownership, `eval_range`, `eval_last`, append, warm-up composability, multi-path agreement and concurrency semantics |
 | [formula-templates.md](formula-templates.md) | Reusable formula patterns |
