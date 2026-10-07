@@ -24,7 +24,8 @@ Choose the path that matches your goal:
 | Build factor/runtime workloads | [Runtime and factors](runtime-and-factors.md) |
 | Understand research architecture | [Factor research architecture](factor-research-architecture.md) |
 | Diagnose failures | [Troubleshooting](troubleshooting.md) |
-| 查看当前重构路线与审计记录 | [架构、全链路审计与优化改进方案 V4](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) |
+| 查看当前架构与重构总纲 | [架构、开发细节与分层重构总纲 V5](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) |
+| 查看历史审计记录（证据来源） | [架构、全链路审计与优化改进方案 V4](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) |
 
 ## Product model
 
@@ -194,12 +195,13 @@ document is indistinguishable from one that was deleted.
 ## Current refactor baseline
 
 **There is exactly one execution baseline:
-[`FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md`](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md).**
+[`FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md`](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md).**
 Everything else below is either a constraint source or an audit trail — not a competing plan.
 
 | Document | Purpose |
 | --- | --- |
-| [FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) | **唯一执行基线** —— 架构/全链路审计、Batch 0–4 落地状态表、§28–§30 历轮审计记录 |
+| [FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) | **唯一执行基线** —— 分层架构地图、开发细节、V4 遗留项基线核验、Batch 0–4 重构路线 |
+| [FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) | **历史证据来源（非执行基线）** —— 27 轮全链路审计原始记录与方法学 |
 | [refactor-plan-2026-09-21.md](refactor-plan-2026-09-21.md) | **约束来源（非执行基线）** —— 用户已确认的产品边界与定调（不做回测/选股、JIT/`eval_simd` 冻结）与方法论记录 |
 | [runtime-carrier-adoption-plan-2026-09-20.md](runtime-carrier-adoption-plan-2026-09-20.md) | R2/R3/R4 声明式载体落地规格（进行中） |
 

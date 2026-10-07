@@ -297,7 +297,7 @@ Use [core-contracts.md](core-contracts.md) for the stable contracts around Facto
 
 ### Features
 
-Default features include the standard library, formula support, serde, observability scaffolding, formula JIT/SIMD, and all indicator categories. Optional features include `rayon`, `finkit-polars`, `talib-c`, `nightly-avx512`, `precision-f32`, and profiling/observability options defined in `core/Cargo.toml`.
+Default features include the standard library, formula support, serde, observability scaffolding, formula JIT/SIMD, and all indicator categories. Optional features include `rayon`, `finkit-polars`, `talib-c`, `nightly-avx512`, and profiling/observability options defined in `core/Cargo.toml`.
 
 If minimizing a build, disable defaults only after checking transitive indicator dependencies:
 

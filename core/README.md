@@ -77,7 +77,6 @@ Important optional features include:
 - `finkit-polars` — Polars integration;
 - `talib-c` — TA-Lib C comparison/integration support where configured;
 - `nightly-avx512` — AVX-512-specific paths requiring the appropriate Rust/toolchain/CPU conditions;
-- `precision-f32` — f32-oriented support where implemented;
 - profiling/observability-related feature switches defined in `core/Cargo.toml`.
 
 For minimal builds, inspect the current feature graph before disabling defaults because indicator families have transitive feature dependencies.

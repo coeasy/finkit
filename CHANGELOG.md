@@ -209,6 +209,38 @@ also benefits the cached rolling-extreme path (`MAX`/`MIN` for NaN-bearing input
 `rescan_extreme_window`.
 
 
+### Changed - 2026-10-07 (twenty-eighth pass — V5 plan adopted; Batch 4 ① removes two dangling features)
+
+Adopts `docs/FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md` as the current execution baseline and
+begins executing it batch by batch. This pass lands the first, fully-contained, zero-risk item from
+Batch 4 (engineering & documentation governance).
+
+#### 1. Two dangling features removed (Batch 4 ①)
+
+`circuit-breaker` and `precision-f32` were defined in `core/Cargo.toml` but referenced by **no**
+`#[cfg(feature = …)]` anywhere in the tree (confirmed by a repo-wide grep: matches only in
+`core/Cargo.toml` and documentation). A dangling feature is a silent contract hazard — it implies a
+capability the engine does not implement, and any future reader who enables it gets a no-op.
+
+- Removed `circuit-breaker = ["std"]` and `precision-f32 = []` from `core/Cargo.toml`.
+- Removed the `precision-f32` mention from `core/README.md` and `docs/usage.md` so the published
+  feature list no longer advertises a non-existent switch.
+- `cargo check -p finkit` stays green (the only output is benign Windows incremental-lock warnings,
+  unrelated to the change).
+- `docs/FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md` annotations N1/N2 and the Batch 4 ① row are
+  marked resolved, keeping the live baseline accurate (this is exactly the "docs must not drift"
+  item Batch 4 exists to prevent).
+
+#### 2. Sequencing note
+
+V5's Batch 1 (semantic unification, correctness priority) is next. Its first concrete defect is the
+two `adx_into` copies (`indicators/momentum.rs:4912` legacy vs `math/kernels/compat.rs:481`
+canonical, TA-Lib-aligned) that disagree on NaN OHLC. Per V5's own discipline, the merge is
+**golden-test-first**: the current NaN behaviour is pinned by a new regression test *before* any
+code changes, so the unification cannot ship a silent numerical drift. That golden baseline is the
+next deliverable, kept in its own commit.
+
+
 ### Changed - 2026-10-07 (twenty-seventh pass — Python/Node/Java to full parity, and three pre-existing red gates)
 
 The twenty-sixth pass closed Go and .NET, leaving item ② open: Python 69/78,

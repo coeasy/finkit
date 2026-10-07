@@ -202,7 +202,6 @@ formula = ["std", "dep:pest", "dep:pest_derive", "dep:lru"]
 talib-c = ["std"]
 serde = ["std", "dep:serde", "dep:serde_json", "dep:bincode"]
 nightly-avx512 = []
-precision-f32 = []
 rayon = ["std", "dep:rayon"]
 finkit-polars = ["std", "dep:polars"]
 # O-1: tracing re-export. opt-in subscriber via tracing-subscriber feature.
@@ -211,8 +210,6 @@ tracing-subscriber = ["dep:tracing-subscriber", "tracing"]
 # O-2: prometheus exporter. Opt-in to keep binary size small.
 metrics-prometheus = ["dep:metrics-exporter-prometheus", "metrics"]
 metrics = ["dep:metrics"]
-# R-4: circuit breaker pattern for repeated failure isolation.
-circuit-breaker = ["std"]
 # Optional formula execution paths, enabled by default for backward compatibility.
 #
 # FROZEN (decided 2026-09-21): both features stay in the default set because four
