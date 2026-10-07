@@ -173,9 +173,14 @@ EXTRACTORS = {
     "c": lambda: _collect(
         [ROOT / "ffi/c-binding/include/finkit.h"], r"\b(ta_[A-Za-z0-9_]+)\s*\("
     ),
+    # ``(?:<[^>]*>)?`` after the name is load-bearing, not cosmetic: PyO3
+    # functions that borrow numpy arrays are declared ``fn cdl_x<'py>(``, and
+    # a pattern requiring ``\s*\(`` straight after the name silently skips
+    # every one of them -- then reports the *next* function instead, which
+    # both under-counts this binding and double-counts its neighbour.
     "python": lambda: _collect(
         [ROOT / "ffi/python-binding/src/generated.rs", ROOT / "ffi/python-binding/src/lib.rs"],
-        r"#\[pyfunction\][\s\S]{0,600}?\bfn\s+([a-z][a-z0-9_]*)\s*\(",
+        r"#\[pyfunction\][\s\S]{0,600}?\bfn\s+([a-z][a-z0-9_]*)\s*(?:<[^>]*>)?\s*\(",
     ),
     "node": lambda: _collect(
         [ROOT / "ffi/node-binding/index.d.ts"],
@@ -183,7 +188,7 @@ EXTRACTORS = {
     ),
     "go": lambda: _collect(
         sorted((ROOT / "ffi/go-binding/go/ta").glob("*.go")),
-        r"^func\s+([A-Z][A-Za-z0-9_]*)\s*\(",
+        r"^func\s+([A-Z][A-Za-z0-9_]*)\s*(?:\[[^\]]*\])?\s*\(",
     ),
     "java": lambda: _collect(
         sorted((ROOT / "ffi/java-binding/java/src/main/java/com/finkit").glob("*.java")),

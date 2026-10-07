@@ -1,6 +1,6 @@
 // ─────────────────────────────────────────────────────────────────────
 // GENERATED FILE — do not edit by hand.
-// Source of truth: docs/indicator_registry.json (ffi.bodies.<lang>).
+// Source of truth: docs/ffi_registry.json (ffi.bodies.<lang>).
 // Regenerate with: python3 scripts/sync_bindings.py --lang node --generate --rewrite
 // ─────────────────────────────────────────────────────────────────────
 
@@ -138,6 +138,36 @@ pub fn bollinger_bands(
             middle: res.middle.into_raw_vec(),
             lower: res.lower.into_raw_vec(),
         })
+        .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))
+}
+
+/// Midpoint (MIDPOINT)
+///
+/// MIDPOINT = (highest_high + lowest_low) / 2
+///
+/// @param close - Input data series
+/// @param timeperiod - Lookback period (default: 14)
+/// @returns Array of midpoint values
+#[napi]
+pub fn midpoint(close: Vec<f64>, timeperiod: u32) -> Result<Vec<f64>> {
+    indicators::midpoint(&close, timeperiod as usize)
+        .map(|arr| arr.into_raw_vec())
+        .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))
+}
+
+/// Midprice (MIDPRICE)
+///
+/// MIDPRICE = (highest_high + lowest_low) / 2, computed from the high and
+/// low series over the lookback window.
+///
+/// @param high - High prices
+/// @param low - Low prices
+/// @param timeperiod - Lookback period (default: 14)
+/// @returns Array of midprice values
+#[napi]
+pub fn midprice(high: Vec<f64>, low: Vec<f64>, timeperiod: u32) -> Result<Vec<f64>> {
+    indicators::midprice(&high, &low, timeperiod as usize)
+        .map(|arr| arr.into_raw_vec())
         .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))
 }
 
@@ -1167,4 +1197,3 @@ pub fn heikin_ashi(
         })
         .map_err(|e| Error::new(Status::InvalidArg, format!("{}", e)))
 }
-

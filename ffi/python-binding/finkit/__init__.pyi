@@ -16,6 +16,9 @@ from numpy.typing import NDArray
 # Type aliases
 ArrayLike = Union[NDArray[np.floating], List[float], Tuple[float, ...]]
 Array1D = NDArray[np.floating]
+# The chart-construction indicators return a discrete state column (1 / 0 / -1)
+# alongside their price line; that column crosses the boundary as int32.
+Array1D_INT = NDArray[np.integer]
 
 def resolve_market_session(
     market: str,
@@ -1238,6 +1241,50 @@ def detect_head_shoulders(
     high: ArrayLike, min_bars: int = 5, head_ratio: float = 1.1
 ) -> List[int]:
     """Indices where a head-and-shoulders top is detected."""
+    ...
+
+# ============================================================================
+# Chart constructions
+# ============================================================================
+
+def darvas_box(
+    high: ArrayLike,
+    low: ArrayLike,
+    close: ArrayLike,
+    lookback: int = 5,
+    confirmation: int = 3,
+) -> Tuple[Array1D, Array1D, Array1D_INT]:
+    """Darvas box. Returns (box_top, box_bottom, signal); signal is 1 / -1 / 0."""
+    ...
+
+def renko(
+    high: ArrayLike, low: ArrayLike, box_size: float
+) -> Tuple[Array1D, Array1D_INT]:
+    """Renko bricks. Returns (bricks, direction); direction is 1 / -1 / 0."""
+    ...
+
+def kagi(close: ArrayLike, reversal: float) -> Tuple[Array1D, Array1D_INT]:
+    """Kagi line. Returns (kagi, direction); direction is 1 / -1 / 0."""
+    ...
+
+def point_and_figure(
+    high: ArrayLike, low: ArrayLike, box_size: float, reversal: int
+) -> Tuple[Array1D, Array1D_INT, Array1D_INT]:
+    """Point & Figure. Returns (pnf, column_type, new_column)."""
+    ...
+
+def three_line_break(close: ArrayLike, lines: int) -> Tuple[Array1D, Array1D_INT]:
+    """Three Line Break. Returns (line, direction); direction is 1 / -1 / 0."""
+    ...
+
+def williams_alligator(close: ArrayLike) -> Tuple[Array1D, Array1D, Array1D]:
+    """Williams Alligator. Returns (jaw, teeth, lips)."""
+    ...
+
+def heikin_ashi(
+    open: ArrayLike, high: ArrayLike, low: ArrayLike, close: ArrayLike
+) -> Tuple[Array1D, Array1D, Array1D, Array1D]:
+    """Heikin-Ashi. Returns (ha_open, ha_high, ha_low, ha_close)."""
     ...
 
 # ============================================================================

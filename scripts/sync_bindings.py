@@ -174,6 +174,37 @@ KNOWN_INFRA = {
 PYTHON_REGISTRY_OVERLAY = ROOT / "target" / "python_registry_ssot.json"
 
 
+def _overlay_is_fresh(overlay: Path) -> bool:
+    """Whether the transient overlay is newer than the checked-in SSOT.
+
+    A stale overlay is a silent-wrong-answer trap: it shadows the checked-in
+    registry, so hand-authoring a body in ``docs/ffi_registry.json`` and then
+    running ``--generate`` produces a binding that quietly omits it.  That is
+    exactly what happened once already -- the overlay predated the edit, the
+    generator emitted the old body set, and the only symptom was a set of
+    "function is never used" warnings in the binding crate.
+
+    Refreshing is cheap (``scripts/prepare_python_registry_ssot.py``), so
+    prefer the checked-in SSOT whenever the overlay cannot be shown to be
+    newer, and say so rather than failing silently.
+    """
+    if not overlay.exists():
+        return False
+    sources = [p for p in (FFI_REG, REG) if p.exists()]
+    if not sources:
+        return True
+    newest = max(sources, key=lambda p: p.stat().st_mtime)
+    if overlay.stat().st_mtime < newest.stat().st_mtime:
+        print(
+            f"[sync] ignoring stale {overlay.relative_to(ROOT)} (older than "
+            f"{newest.relative_to(ROOT)}); using the checked-in registry. "
+            "Re-run scripts/prepare_python_registry_ssot.py to refresh it.",
+            file=sys.stderr,
+        )
+        return False
+    return True
+
+
 def load_registry() -> dict:
     # The core registry (`REG`) carries the per-indicator metadata
     # (category / description / params / convergence / streaming); the FFI SSOT
@@ -182,15 +213,16 @@ def load_registry() -> dict:
     # round trip is lossy.
     #
     # Prefer the transient enriched Python overlay when a preparation workflow
-    # created it: it already holds both halves.  Otherwise merge the checked-in
-    # FFI SSOT with the checked-in core registry, so a clean checkout does not
-    # depend on ignored build artifacts.
+    # created it *and it is still newer than the SSOT* -- it already holds both
+    # halves, but an out-of-date copy would shadow a fresh checked-in edit.
+    # Otherwise merge the checked-in FFI SSOT with the checked-in core
+    # registry, so a clean checkout does not depend on ignored build artifacts.
     #
     # The merge is load-bearing, not cosmetic: falling back to the FFI SSOT
     # *alone* used to make `--discover` overwrite the rich core registry with a
     # name-only stub, silently deleting `category` / `description` / `params` /
     # `convergence` / `streaming` for every indicator.
-    if PYTHON_REGISTRY_OVERLAY.exists():
+    if _overlay_is_fresh(PYTHON_REGISTRY_OVERLAY):
         return json.loads(PYTHON_REGISTRY_OVERLAY.read_text(encoding="utf-8"))
 
     if not FFI_REG.exists():

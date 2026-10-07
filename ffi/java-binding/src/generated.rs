@@ -811,3 +811,153 @@ let c = get_double_array(&mut env, close);
     build_dto2(env, &r.kagi, &r.direction)
     })
 }
+
+// ============================================================================
+// Volume & oscillator family (VORTEX / INERTIA / VZO / volume momentum / volume
+// ROC / Chande forecast / Twiggs money flow)
+//
+// These seven were the only indicators reachable from every other binding but
+// missing a JNI entry point here.
+// ============================================================================
+
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_Indicators_vortex(
+    mut env: JNIEnv,
+    _class: JClass,
+    high: JDoubleArray,
+    low: JDoubleArray,
+    close: JDoubleArray,
+    period: jint,
+    result: JObject,
+) {
+    ffi_catch_void(|| {
+        let high_vec = get_double_array(&mut env, high);
+        let low_vec = get_double_array(&mut env, low);
+        let close_vec = get_double_array(&mut env, close);
+        if let Ok(res) = indicators::vortex(&high_vec, &low_vec, &close_vec, period as usize) {
+            let vi_plus_arr = to_double_array(&mut env, res.vi_plus.into_raw_vec_and_offset().0);
+            let vi_minus_arr = to_double_array(&mut env, res.vi_minus.into_raw_vec_and_offset().0);
+            set_double_field(&mut env, &result, "viPlus", vi_plus_arr);
+            set_double_field(&mut env, &result, "viMinus", vi_minus_arr);
+        }
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_Indicators_inertia(
+    mut env: JNIEnv,
+    _class: JClass,
+    open: JDoubleArray,
+    high: JDoubleArray,
+    low: JDoubleArray,
+    close: JDoubleArray,
+    rvi_period: jint,
+    linreg_period: jint,
+) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+let open_vec = get_double_array(&mut env, open);
+    let high_vec = get_double_array(&mut env, high);
+    let low_vec = get_double_array(&mut env, low);
+    let close_vec = get_double_array(&mut env, close);
+    match indicators::inertia(
+        &open_vec,
+        &high_vec,
+        &low_vec,
+        &close_vec,
+        rvi_period as usize,
+        linreg_period as usize,
+    ) {
+        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+        Err(_) => std::ptr::null_mut(),
+    }
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_Indicators_vzo(
+    mut env: JNIEnv,
+    _class: JClass,
+    close: JDoubleArray,
+    volume: JDoubleArray,
+    period: jint,
+) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+let close_vec = get_double_array(&mut env, close);
+    let volume_vec = get_double_array(&mut env, volume);
+    match indicators::vzo(&close_vec, &volume_vec, period as usize) {
+        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+        Err(_) => std::ptr::null_mut(),
+    }
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_Indicators_volumeMomentum(
+    mut env: JNIEnv,
+    _class: JClass,
+    volume: JDoubleArray,
+    period: jint,
+) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+let volume_vec = get_double_array(&mut env, volume);
+    match indicators::volume_momentum(&volume_vec, period as usize) {
+        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+        Err(_) => std::ptr::null_mut(),
+    }
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_Indicators_volumeRoc(
+    mut env: JNIEnv,
+    _class: JClass,
+    volume: JDoubleArray,
+    period: jint,
+) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+let volume_vec = get_double_array(&mut env, volume);
+    match indicators::volume_roc(&volume_vec, period as usize) {
+        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+        Err(_) => std::ptr::null_mut(),
+    }
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_Indicators_chandeForecast(
+    mut env: JNIEnv,
+    _class: JClass,
+    close: JDoubleArray,
+    period: jint,
+) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+let close_vec = get_double_array(&mut env, close);
+    match indicators::chande_forecast_oscillator(&close_vec, period as usize) {
+        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+        Err(_) => std::ptr::null_mut(),
+    }
+    })
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_finkit_Indicators_twiggsMf(
+    mut env: JNIEnv,
+    _class: JClass,
+    high: JDoubleArray,
+    low: JDoubleArray,
+    close: JDoubleArray,
+    volume: JDoubleArray,
+    period: jint,
+) -> jdoubleArray {
+    ffi_catch_ptr(|| {
+let high_vec = get_double_array(&mut env, high);
+    let low_vec = get_double_array(&mut env, low);
+    let close_vec = get_double_array(&mut env, close);
+    let volume_vec = get_double_array(&mut env, volume);
+    match indicators::twiggs_money_flow(&high_vec, &low_vec, &close_vec, &volume_vec, period as usize) {
+        Ok(result) => to_double_array(&mut env, result.into_raw_vec_and_offset().0),
+        Err(_) => std::ptr::null_mut(),
+    }
+    })
+}
+

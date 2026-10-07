@@ -209,6 +209,113 @@ also benefits the cached rolling-extreme path (`MAX`/`MIN` for NaN-bearing input
 `rescan_extreme_window`.
 
 
+### Changed - 2026-10-07 (twenty-seventh pass — Python/Node/Java to full parity, and three pre-existing red gates)
+
+The twenty-sixth pass closed Go and .NET, leaving item ② open: Python 69/78,
+Node 76/78, Java 71/78. Two things were wrong with that sentence, and both were
+found before a single wrapper was written.
+
+#### 1. The measuring stick was wrong, and it was the one shipped one pass earlier
+
+`audit_binding_parity.py` reported `cdl_inverted_hammer` and
+`cdl_three_black_crows` missing from Python, but both are in `generated.rs`. The
+Python extractor required `\s*\(` immediately after the function name, and PyO3
+functions that borrow NumPy arrays are declared `fn cdl_inverted_hammer<'py>(`.
+A pattern that cannot match at that position does not skip the function — it
+walks on and matches the **next** `fn`, so the neighbour is counted twice and the
+real one not at all. Silent, and it makes the total wrong by exactly 2.
+
+Adding a generics slot (`(?:<[^>]*>)?` for Python, `(?:\[[^\]]*\])?` for Go)
+turned the number into **71/78** — now identical to what
+`sync_bindings.py --check` reports from stored bodies. Two independent measures
+that used to disagree now agree, which is the actual evidence the fix is right.
+
+#### 2. Three bindings closed
+
+| binding | before | after | added |
+| --- | ---: | ---: | --- |
+| Python | 71/78 | **78/78** | DARVAS_BOX, RENKO, KAGI, POINT_AND_FIGURE, THREE_LINE_BREAK, WILLIAMS_ALLIGATOR, HEIKIN_ASHI |
+| Node | 76/78 | **78/78** | MIDPOINT, MIDPRICE |
+| Java | 71/78 | **78/78** | VORTEX, INERTIA, VZO, VOLUME_MOMENTUM, VOLUME_ROC, CHANDE_FORECAST, TWIGGS_MF |
+
+The seven Python gaps were exactly the seven multi-output indicators with no
+stored body — and the hardest ones, because they return a price line *and* a
+discrete state column. That column crosses as `int32` via four new helpers
+(`py_arrays4_f64`, `py_array_f64_i32`, `py_arrays2_f64_i32`,
+`py_array_f64_i32_i32`), never widened into `f64`. Same principle as the
+`TaIntResult` carrier for Go/.NET: do not let a caller do arithmetic on a label.
+
+#### 3. Three ways to "compile fine but not actually be wired up"
+
+- **PyO3 registration is manual.** A body in `generated.rs` without a matching
+  `m.add_function(wrap_pyfunction!(...))` compiles clean and is dead code; only
+  the CI test job's `-D warnings` turns that into a failure.
+- **Node's `index.d.ts` is a build artifact.** Regenerating `src/generated.rs`
+  does not touch it, and the audit scrapes it — so the binding kept reading 76/78
+  until `napi build` actually ran. That also surfaced `index.mjs`, the
+  hand-written ESM facade, whose drift the existing "ESM and CommonJS surfaces
+  must be identical" test caught immediately.
+- **Java has no generation path at all.** Storing no bodies means
+  `--generate --lang java` would emit an empty file; `src/generated.rs` there is
+  hand-maintained.
+
+#### 4. A stale overlay silently shadowed the SSOT
+
+Writing the seven bodies into `docs/ffi_registry.json` and regenerating produced
+no new functions at all. `sync_bindings.load_registry()` preferred
+`target/python_registry_ssot.json` on mere existence, and the local copy predated
+the edit. CI never hits this (it runs the preparation first); local development
+silently got the wrong answer.
+
+`_overlay_is_fresh()` now requires the overlay to be genuinely newer than
+`docs/ffi_registry.json` / `docs/indicator_registry.json`, names the stale file on
+stderr with the command to refresh it, and falls back to the checked-in SSOT.
+
+#### 5. Three pre-existing red gates fixed
+
+`verify_python_bindings.py` — the entry point of CI's `python-build-state` job —
+was already failing on HEAD with four violations (confirmed against a clean
+worktree, so unrelated to this pass). All four were the *spec describing a
+superseded implementation*:
+
+1. `volume.rs public AD` still expected `Array1::<f64>::zeros` while the source
+   uses `uninit_output`. The source is the deliberate, faster version — applying
+   the spec would have reverted it. Fixed the spec, and added the missing
+   evidence: `ad`'s soundness rested on "`ad_into` writes every slot", which was
+   only a comment. `fastpath_full_writer_contract.rs` now poisons the buffer with
+   a signalling NaN and pins `ad_into` plus both `adosc_into` kernels.
+2. The ADOSC spec's section boundary swallowed `adosc_into`; bound it at the
+   zero-copy variant, matching the AD spec.
+3. The extrema-kernel markers named two doc comments that the kernel rewrite had
+   removed. Replaced with phrases from the live two-tier design (cached-index fast
+   path + monotonic ring fallback). A permanently-red gate gets ignored; this one
+   is green again.
+
+#### 6. Verification
+
+`audit_binding_parity.py --check`, `sync_bindings.py --check --all`,
+`verify_python_bindings.py`, `binding_spec.py`, ten repository-hygiene scripts,
+`cargo fmt --all -- --check`, `cargo test -p finkit --lib --tests` (63 targets,
+0 failures) and the four FFI crate test suites are all green. Node's own suite is
+14/14 and the whole Java source tree compiles under `javac -encoding UTF-8`.
+
+Beyond compiling, the new surface was exercised:
+
+- **Python**: the freshly built extension was loaded directly as `finkit.pyd` and
+  32 assertions ran — shapes preserved, state columns `int32` and confined to
+  `-1/0/1`, HA close equal to the OHLC mean bit-for-bit, invalid parameters
+  raising `ValueError`, all seven names exported.
+- **Node**: `midpoint` and `midprice` match an independent hand calculation
+  bit-for-bit, through both the CommonJS and ESM entry points.
+- **Java**: the same hardcoded inputs were pushed through the Python extension and
+  through JNI, and all eight paths agree to **0.000e+00**. That verifies the
+  wiring — symbol resolution, argument order, result-object field names — which is
+  the part that fails silently.
+
+iOS and Android stay at 15/78 deliberately: they are mobile shims over a
+narrowed ABI subset, a roadmap item rather than unwritten wrappers.
+
+
 ### Changed - 2026-10-07 (twenty-sixth pass — multi-language bindings: make the gap measurable, then close Go and .NET to full parity)
 
 The twenty-fifth pass left one item open: Go and .NET each shipped roughly half

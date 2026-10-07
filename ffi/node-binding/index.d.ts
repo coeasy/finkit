@@ -194,6 +194,28 @@ export declare function t3(close: Array<number>, timeperiod: number, vfactor?: n
  */
 export declare function bollingerBands(close: Array<number>, timeperiod: number, nbdevup: number, nbdevdn: number): BbandsResult
 /**
+ * Midpoint (MIDPOINT)
+ *
+ * MIDPOINT = (highest_high + lowest_low) / 2
+ *
+ * @param close - Input data series
+ * @param timeperiod - Lookback period (default: 14)
+ * @returns Array of midpoint values
+ */
+export declare function midpoint(close: Array<number>, timeperiod: number): Array<number>
+/**
+ * Midprice (MIDPRICE)
+ *
+ * MIDPRICE = (highest_high + lowest_low) / 2, computed from the high and
+ * low series over the lookback window.
+ *
+ * @param high - High prices
+ * @param low - Low prices
+ * @param timeperiod - Lookback period (default: 14)
+ * @returns Array of midprice values
+ */
+export declare function midprice(high: Array<number>, low: Array<number>, timeperiod: number): Array<number>
+/**
  * Parabolic SAR (SAR)
  *
  * A trend-following indicator that provides stop levels.

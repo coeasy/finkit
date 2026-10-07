@@ -13,7 +13,7 @@
 
 use finkit::formula::{FormulaContext, FormulaEngine};
 use finkit::indicators::volatility;
-use finkit::math::{fast_moving_avg, moving_avg, simd_kernels};
+use finkit::math::{fast_moving_avg, moving_avg, simd_kernels, volume_kernels};
 use ndarray::Array1;
 
 const LEN: usize = 4_096;
@@ -85,6 +85,33 @@ fn every_fast_path_kernel_writes_every_slot() {
     });
     assert_full_writer("volatility::atr_into (ATR, multi-input)", |out| {
         let _ = volatility::atr_into(&high, &low, &close, PERIOD, out);
+    });
+}
+
+/// `indicators::ad` allocates its result with `uninit_output` -- it does **not**
+/// pre-fill -- and the only thing making that sound is `ad_into` overwriting
+/// every slot. The justification used to be a source comment with no test
+/// behind it, which is exactly the kind of invariant that rots silently. ADOSC
+/// keeps the same option open, and it has two kernels (a 3/10 fast path and a
+/// general path), so both are pinned here too.
+#[test]
+fn uninit_allocated_volume_kernels_write_every_slot() {
+    let high = series(LEN);
+    let low: Vec<f64> = high.iter().map(|v| v - 1.0).collect();
+    let close = series(LEN);
+    let volume: Vec<f64> = (0..LEN).map(|i| 10_000.0 + (i as f64) * 3.0).collect();
+
+    assert_full_writer("volume_kernels::ad_into (AD)", |out| {
+        let _ = volume_kernels::ad_into(&high, &low, &close, &volume, out);
+    });
+    assert_full_writer(
+        "volume_kernels::adosc_into (ADOSC, 3/10 fast path)",
+        |out| {
+            let _ = volume_kernels::adosc_into(&high, &low, &close, &volume, 3, 10, out);
+        },
+    );
+    assert_full_writer("volume_kernels::adosc_into (ADOSC, general path)", |out| {
+        let _ = volume_kernels::adosc_into(&high, &low, &close, &volume, 5, 20, out);
     });
 }
 

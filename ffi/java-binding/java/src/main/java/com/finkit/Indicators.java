@@ -784,6 +784,92 @@ public final class Indicators {
     public static native DoubleIntOutput renko(double[] high, double[] low, double boxSize);
     public static native DoubleIntOutput kagi(double[] close, double reversal);
 
+    // =========================================================================
+    // Volume & oscillator family
+    // =========================================================================
+
+    /**
+     * Vortex Indicator (VI).
+     *
+     * <p>Tracks two directional movement lines: VI+ captures upward trend
+     * strength, VI- downward. A crossover of the two marks a trend change.
+     *
+     * @param high   high prices
+     * @param low    low prices
+     * @param close  close prices
+     * @param period lookback period (typically 14)
+     * @param result receives {@code viPlus} and {@code viMinus}
+     */
+    public static native void vortex(double[] high, double[] low, double[] close,
+                                     int period, VortexResult result);
+
+    /**
+     * Inertia (RVI smoothed by a linear regression).
+     *
+     * @param open         open prices
+     * @param high         high prices
+     * @param low          low prices
+     * @param close        close prices
+     * @param rviPeriod    period for the Relative Volatility Index (typically 10)
+     * @param linregPeriod smoothing regression period (typically 14)
+     * @return inertia values
+     */
+    public static native double[] inertia(double[] open, double[] high, double[] low,
+                                          double[] close, int rviPeriod, int linregPeriod);
+
+    /**
+     * Volume Zone Oscillator (VZO).
+     *
+     * @param close  close prices
+     * @param volume volume series
+     * @param period lookback period (typically 14)
+     * @return VZO values
+     */
+    public static native double[] vzo(double[] close, double[] volume, int period);
+
+    /**
+     * Volume Momentum.
+     *
+     * @param volume volume series
+     * @param period lookback period (typically 14)
+     * @return volume momentum values
+     */
+    public static native double[] volumeMomentum(double[] volume, int period);
+
+    /**
+     * Volume Rate of Change.
+     *
+     * @param volume volume series
+     * @param period lookback period (typically 14)
+     * @return volume ROC values
+     */
+    public static native double[] volumeRoc(double[] volume, int period);
+
+    /**
+     * Chande Forecast Oscillator (CFO).
+     *
+     * <p>Percentage difference between the close and its linear-regression
+     * forecast.
+     *
+     * @param close  close prices
+     * @param period lookback period (typically 14)
+     * @return CFO values
+     */
+    public static native double[] chandeForecast(double[] close, int period);
+
+    /**
+     * Twiggs Money Flow.
+     *
+     * @param high   high prices
+     * @param low    low prices
+     * @param close  close prices
+     * @param volume volume series
+     * @param period lookback period (typically 14)
+     * @return Twiggs money flow values
+     */
+    public static native double[] twiggsMf(double[] high, double[] low, double[] close,
+                                           double[] volume, int period);
+
     public static native String formulaEvalMulti(
         String source, double[] open, double[] high, double[] low, double[] close, double[] volume);
     public static native String formulaEvalDraw(
@@ -815,6 +901,16 @@ public final class Indicators {
         public double[] aroonUp;
         /** Aroon Down values */
         public double[] aroonDown;
+    }
+
+    /**
+     * Result container for the Vortex Indicator.
+     */
+    public static final class VortexResult {
+        /** Vortex Positive (VI+): upward trend strength */
+        public double[] viPlus;
+        /** Vortex Negative (VI-): downward trend strength */
+        public double[] viMinus;
     }
 
     // =========================================================================

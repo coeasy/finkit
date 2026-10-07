@@ -344,7 +344,9 @@ AD_CANONICAL = '''pub fn ad(high: &[f64], low: &[f64], close: &[f64], volume: &[
     }
     validate_input(high.len(), 1)?;
 
-    let mut output = Array1::<f64>::zeros(high.len());
+    // `ad_into` writes every slot (cumulative AD, no warm-up), so an
+    // uninitialized buffer avoids the full zero-fill pass `zeros` would add.
+    let mut output = Array1::from(crate::utils::uninit_output(high.len()));
     crate::math::volume_kernels::ad_into(
         high,
         low,
@@ -449,7 +451,10 @@ CANONICAL_FUNCTIONS: tuple[CanonicalFunction, ...] = (
         label="volume.rs public ADOSC",
         path=VOLUME,
         start_token="pub fn adosc(\n",
-        next_doc="/// On Balance Volume (OBV)",
+        # Bound the section at the zero-copy variant, exactly as the AD spec
+        # above does. Without this the section swallowed `adosc_into` as well
+        # and could never match a canonical body for `adosc` alone.
+        next_doc="/// ADOSC zero-copy variant",
         canonical=ADOSC_CANONICAL,
         forbidden=("simd_ad_line", "cumulative = vec!"),
     ),
@@ -769,8 +774,10 @@ SYNC_BINDINGS_RULESET = RuleSet(
     # The generator is richer than the historical migration patches: it merges
     # the core registry with the FFI SSOT so `--discover` cannot overwrite rich
     # metadata with a name-only stub, and it prefers the transient Python
-    # overlay when the preparation workflow created one. These are invariants,
-    # not fragments to rewrite.
+    # overlay when the preparation workflow created one -- but only while that
+    # overlay is genuinely newer than the checked-in SSOT, because a stale copy
+    # silently shadows hand-authored bodies. These are invariants, not fragments
+    # to rewrite.
     rules=(),
     required=(
         "from optimize_python_bindings import optimize_source as optimize_python_source",
@@ -778,7 +785,8 @@ SYNC_BINDINGS_RULESET = RuleSet(
         'core = ff.get("core_call", pub).split("::")[-1]',
         'impl_name = f"vec_{nm}_impl"',
         'PYTHON_REGISTRY_OVERLAY = ROOT / "target" / "python_registry_ssot.json"',
-        "if PYTHON_REGISTRY_OVERLAY.exists():",
+        "def _overlay_is_fresh(overlay: Path) -> bool:",
+        "if _overlay_is_fresh(PYTHON_REGISTRY_OVERLAY):",
         "ffi_registry = json.loads(FFI_REG.read_text(encoding=\"utf-8\"))",
         "core_registry = (",
     ),
@@ -906,10 +914,19 @@ def verify_numpy_direct() -> list[str]:
 EXTREMA_KERNEL = ROOT / "core" / "src" / "math" / "statistics.rs"
 EXTREMA_KERNEL_SIGNATURE = "pub(crate) fn rolling_minmax_visit("
 EXTREMA_KERNEL_MARKERS = (
-    # Stack-resident monotonic queues: no heap allocation, no expiry rescans.
-    "Expire stale fronts before insertion",
-    # Large-window compatibility fallback for windows beyond the ring capacity.
-    "Large-window compatibility fallback",
+    # Two-tier design, and both tiers must survive:
+    #   * the cached-index fast path, which rescans only when an extrema leaves
+    #     the window (a per-bar rescan here is what used to make TA_MAX/TA_MIN
+    #     slow on long series), and
+    #   * the monotonic ring fallback for oversized windows, which bounds the
+    #     worst case the cached index cannot.
+    # The markers are phrases from the live kernel doc; they replaced the older
+    # pair ("Expire stale fronts before insertion" / "Large-window compatibility
+    # fallback"), which described the pre-rewrite implementation and had gone
+    # stale -- leaving this gate permanently red and therefore ignored.
+    "rescanning only when an extrema leaves the window",
+    "Monotonic ring",
+    "fn rolling_minmax_ring(",
 )
 EXTREMA_CONSUMERS = (
     (

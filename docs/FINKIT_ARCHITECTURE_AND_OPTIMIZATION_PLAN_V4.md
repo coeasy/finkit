@@ -4591,3 +4591,147 @@ MIDPOINT、MIDPRICE、SAR、MAMA，以及 15 个 CDL 形态识别。
 - ② 项仍开：Python 69/78（缺 9）、Node 76/78（缺 2）、Java 71/78（缺 7）。
   另有 iOS 15/78、Android 15/78 属更靠后的层。
 - 剩余 12 项 ⚠️ 指标与 doctest 本机问题（§44.18 第 7 节）：无变化。
+
+---
+
+### 44.20 第二十七轮：Python/Node/Java 拉齐到 78/78，并修好三处既有的红灯
+
+#### 1. 起点：先把"审计脚本自己"当成被审计对象
+
+本轮承接 §44.19 的 ② 项（Python 69/78、Node 76/78、Java 71/78）。开工第一步不是补函数，
+而是核对上一轮那个**刚交付的**审计脚本：它报 Python 缺失 9 项，其中 `cdl_inverted_hammer`
+与 `cdl_three_black_crows` 在 `generated.rs` 里**明明存在**。
+
+根因：Python 抓取正则要求函数名后**紧跟** `(`：
+
+```
+#\[pyfunction\][\s\S]{0,600}?\bfn\s+([a-z][a-z0-9_]*)\s*\(
+```
+
+而借用 NumPy 数组的 PyO3 函数声明形如 `fn cdl_inverted_hammer<'py>(`——名字与 `(` 之间是
+生命周期。正则匹配失败后**不会跳过这一个**，而是继续向后搜到**下一个** `fn`，于是
+`cdl_hanging_man` 被数了两次、`cdl_inverted_hammer` 被漏掉。这类失败是**静默的**：
+它同时"少计一个 + 多计一个"，总数只差 2，看起来像是正常的缺口。
+
+修法：在名字后加泛型槽 `(?:<[^>]*>)?`（Go 抓取同理加 `(?:\[[^\]]*\])?`）。修正后
+**Python 71/78**——与 `sync_bindings.py --check` 的"已存 body = 71"**首次完全一致**。
+两个口径从"互相打架"变成"互相印证"，这本身就是修复正确的证据。
+
+> 教训已写进 `docs/language-bindings.md`：C 列读 78/78 是抓取器的**自检**，
+> 一旦归一化或正则出错，它应该先变红。
+
+#### 2. 三家闭合
+
+| 绑定 | 改前 | 改后 | 补的东西 |
+| --- | ---: | ---: | --- |
+| Python | 71/78 | **78/78** | DARVAS_BOX / RENKO / KAGI / POINT_AND_FIGURE / THREE_LINE_BREAK / WILLIAMS_ALLIGATOR / HEIKIN_ASHI |
+| Node | 76/78 | **78/78** | MIDPOINT / MIDPRICE |
+| Java | 71/78 | **78/78** | VORTEX / INERTIA / VZO / VOLUME_MOMENTUM / VOLUME_ROC / CHANDE_FORECAST / TWIGGS_MF |
+
+**Python 缺的 7 项恰好等于"多输出指标里最后 7 个"**：此前 8 个多输出指标
+（MAMA/BBANDS/MACD/STOCH/AROON/VORTEX/HT_PHASOR/HT_SINE）都有 body，
+新增的图表族（箱体/砖形/卡吉/点数图/三线反转/鳄鱼线/平均足）一个都没有。
+它们比前 8 个多一层麻烦：返回值里既有价格线（`f64`）又有**离散状态列**（`i32`，取值 `1/0/-1`）。
+
+为此在 `ffi/python-binding/src/lib.rs` 新增 4 个载体：
+`py_arrays4_f64`、`py_array_f64_i32`、`py_arrays2_f64_i32`、`py_array_f64_i32_i32`。
+状态列**不走 `f64`**——拓宽能跑通，但会诱导调用方对"标签"做算术。这与 §44.19 里
+Go/.NET 的 `TaIntResult` 是同一条原则。
+
+#### 3. 三个"编译通过但其实没接上"的坑
+
+**(a) PyO3 必须显式注册。** 把 body 写进 registry 并生成 `generated.rs` 之后，
+`cargo check` 会通过，但会给出 11 条 `function ... is never used`——
+因为 `#[pymodule] fn finkit` 里的 `m.add_function(wrap_pyfunction!(...))` 是**手写清单**。
+漏注册 = 函数是死的。CI 的 test 作业带 `-D warnings`，所以这是**硬失败**；
+但"只看编译成功"的验证会放它过去。本轮补了 7 条注册，并新增
+"Chart constructions (classic price-action family)" 分组。
+
+**(b) Node 的 `index.d.ts` 是构建产物不是源码。** 改完 registry 重新生成
+`src/generated.rs` 后，审计**仍然报 76/78**——因为审计抓的是 `index.d.ts`，
+而它由 `napi build` 生成。必须真的跑一次 `napi build --platform`。
+顺带暴露第二个洞：`index.mjs`（手写的 ESM 门面）没跟着更新，
+`npm test` 的 "keeps ESM and CommonJS export surfaces identical" 直接红——
+这条测试正是为这种漏更新准备的。
+
+**(c) Java 没有生成路径。** Java 不存 body，`--generate --lang java` 会写出**空文件**。
+`ffi/java-binding/src/generated.rs` 是手工维护的，本轮手工加了 7 个 JNI 函数
+＋ `Indicators.java` 的 7 条 native 声明＋嵌套 `VortexResult` 类。
+`vortex` 是唯一新增的 void 导出（填充结果对象），已加入
+`check_warning_contracts.py` 的 `java_void_names` 契约，防止将来某次生成把
+"跨 JNI 边界 unwind"的洞重新打开。
+
+#### 4. 一个真实咬人的陷阱：陈旧 overlay 静默遮蔽 SSOT
+
+把 7 个 body 写进 `docs/ffi_registry.json` 后跑 `--generate`，
+生成器报"wrote ... (78 indicators)"，可 `generated.rs` 里**一个函数都没多**。
+
+根因：`sync_bindings.load_registry()` 优先读 `target/python_registry_ssot.json`
+（由 `prepare_python_registry_ssot.py` 产出）。本机那份是 10-03 的，比 registry 旧，
+却因为"存在即优先"而**遮蔽了刚写的 body**。CI 上没这个问题（每次先跑 prepare），
+本地开发则**静默给出错误结果**。
+
+修法：新增 `_overlay_is_fresh()`——overlay 必须**比 `docs/ffi_registry.json` /
+`docs/indicator_registry.json` 更新**才被采用，否则在 stderr 点名该陈旧文件、
+给出刷新命令，并回退到 check-in 的 SSOT。已验证：把旧 overlay 放回去，
+生成器打印 `[sync] ignoring stale target\python_registry_ssot.json ...` 并仍产出 78。
+
+#### 5. 顺带把三处**既有红灯**修好
+
+跑门禁时发现 `verify_python_bindings.py`（CI `python-build-state` 作业的入口）
+在 HEAD 上**本来就是红的**——4 条违规。已在干净 HEAD 副本（git worktree）上复核确认
+与本轮改动无关。逐条追根因后，全部属于"**规格描述的是已被推翻的旧实现**"：
+
+1. **`volume.rs public AD` 正文漂移**：源码用 `uninit_output`（前几轮的性能改动），
+   规格还写着 `Array1::<f64>::zeros`。**陈旧的规格，不是陈旧的源码**——
+   若照规格 `--apply` 会把已验证的优化**改回去**。
+   改规格，并**补上缺失的证据**：`ad` 用 `uninit_output` 的唯一依据是
+   "`ad_into` 写满每个槽位"，而这条此前只是**一句注释**。已在
+   `core/tests/fastpath_full_writer_contract.rs` 新增
+   `uninit_allocated_volume_kernels_write_every_slot`，用信令 NaN 哨兵覆盖
+   `ad_into` + `adosc_into` 的两条内核（3/10 快路径与通用路径），三条全过。
+2. **`volume.rs public ADOSC` 边界吞掉了 `adosc_into`**：规格的 `next_doc` 指向
+   OBV，导致取样区间把零拷贝变体一起吃进来，永远匹配不上。改成
+   `/// ADOSC zero-copy variant`——与上面 AD 的写法对齐。
+3. **Extrema 内核标记失效**：规格断言的两句注释
+   （"Expire stale fronts before insertion" / "Large-window compatibility fallback"）
+   属于**重写前**的实现。现内核是两层结构（小窗口 cached-index 仅在极值离窗时重扫；
+   大窗口 monotonic ring 兜底），已把标记换成现内核里真实存在、且同样表达
+   "两层都要在"的短语。
+
+修完 4 条 → `binding_spec.py` 与 `verify_python_bindings.py` **双绿**。
+这符合项目既有原则：**永久红的门禁等于没有门禁**。
+
+#### 6. 验证矩阵
+
+| 项 | 结果 |
+| --- | --- |
+| `audit_binding_parity.py --check` | 通过；6 个绑定 78/78（iOS/Android 15/78 为有意保留） |
+| `sync_bindings.py --check --all` | python/node `covered=78/78 skipped=0 drift=none` |
+| `verify_python_bindings.py` / `binding_spec.py` | 通过（**修复前 HEAD 为 4 条违规、exit 1**） |
+| `cargo test -p finkit --lib --tests` | 63 个测试目标全 ok，0 失败 |
+| `cargo test -p finkit-python -p finkit-java -p finkit-go -p finkit-dotnet` | 8 + 9 + 3 + 0 通过 |
+| `cargo fmt --all -- --check` | 通过 |
+| `cargo check -p finkit-python` / `-p finkit-java` | 0 告警（`-D warnings` 语境下的必要条件） |
+| 卫生门禁 10 项 | 全 PASS |
+| `npm test`（Node） | **14/14** |
+| `dotnet test` | 未改 .NET，沿用上轮 40/40 |
+| `javac -encoding UTF-8`（全部 Java 源） | 通过 |
+
+**功能验证（不只是"编译过"）**
+
+- **Python 冒烟**：把 `target/debug/finkit.dll` 直接当作 `finkit.pyd` 加载，
+  32 项检查全绿——形状保持、状态列为 `int32`、取值只落在 `-1/0/1`、
+  HA 收盘价与 OHLC 均值**逐位相等**、非法参数抛 `ValueError`、7 个名字均已被模块导出。
+- **Node 冒烟**：`midpoint` / `midprice` 与独立手算结果**逐位一致**，ESM/CJS 两种导入均可。
+- **Java 跨语言一致性**：同一组**硬编码**输入，Python 扩展算期望值，Java 经 JNI 计算，
+  8 条通路最大误差 **0.000e+00**。这证明的是 JNI 接线（符号名、参数顺序、
+  结果对象字段名）正确，而不是数值——接线正是会静默出错的那部分。
+
+#### 7. 遗留
+
+- ~~② 项：Python/Node/Java~~ → **三个绑定均 78/78，② 项结清**。
+- iOS 15/78、Android 15/78 **有意保留**：它们是移动端 shim，覆盖的是一个刻意收窄的
+  ABI 子集，属独立路线图项，不是"少写封装"。若将来要补齐，应连同移动端二进制体积
+  预算一起评估。
+- 剩余 12 项 ⚠️ 指标与 doctest 本机问题（§44.18 第 7 节）：无变化。

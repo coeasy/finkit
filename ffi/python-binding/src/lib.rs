@@ -220,6 +220,78 @@ where
     ))
 }
 
+fn py_arrays4_f64<'py, F>(
+    py: Python<'py>,
+    calculate: F,
+) -> PyResult<(
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+)>
+where
+    F: Ungil + FnOnce() -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>)>,
+{
+    let (first, second, third, fourth) = py.detach(calculate)?;
+    Ok((
+        PyArray1::from_vec(py, first).unbind(),
+        PyArray1::from_vec(py, second).unbind(),
+        PyArray1::from_vec(py, third).unbind(),
+        PyArray1::from_vec(py, fourth).unbind(),
+    ))
+}
+
+// The chart/pattern family (Darvas box, Renko, Kagi, Point & Figure, Three Line
+// Break) pairs a price line with a discrete state column.  The state is an
+// `i32` enum-like value (`1` / `0` / `-1`), not a price, so it must cross the
+// boundary as an integer array -- widening it into `f64` would invite callers
+// to do arithmetic on what is really a label.  These helpers keep the two
+// dtypes in one tuple without a Python-side cast.
+
+fn py_array_f64_i32<'py, F>(
+    py: Python<'py>,
+    calculate: F,
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<i32>>)>
+where
+    F: Ungil + FnOnce() -> PyResult<(Vec<f64>, Vec<i32>)>,
+{
+    let (values, states) = py.detach(calculate)?;
+    Ok((
+        PyArray1::from_vec(py, values).unbind(),
+        PyArray1::from_vec(py, states).unbind(),
+    ))
+}
+
+fn py_arrays2_f64_i32<'py, F>(
+    py: Python<'py>,
+    calculate: F,
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<i32>>)>
+where
+    F: Ungil + FnOnce() -> PyResult<(Vec<f64>, Vec<f64>, Vec<i32>)>,
+{
+    let (first, second, states) = py.detach(calculate)?;
+    Ok((
+        PyArray1::from_vec(py, first).unbind(),
+        PyArray1::from_vec(py, second).unbind(),
+        PyArray1::from_vec(py, states).unbind(),
+    ))
+}
+
+fn py_array_f64_i32_i32<'py, F>(
+    py: Python<'py>,
+    calculate: F,
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<i32>>, Py<PyArray1<i32>>)>
+where
+    F: Ungil + FnOnce() -> PyResult<(Vec<f64>, Vec<i32>, Vec<i32>)>,
+{
+    let (values, first_state, second_state) = py.detach(calculate)?;
+    Ok((
+        PyArray1::from_vec(py, values).unbind(),
+        PyArray1::from_vec(py, first_state).unbind(),
+        PyArray1::from_vec(py, second_state).unbind(),
+    ))
+}
+
 include!("generated.rs");
 
 // ============================================================================
@@ -6808,6 +6880,19 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(volume_roc, m)?)?;
     m.add_function(wrap_pyfunction!(chande_forecast_oscillator, m)?)?;
     m.add_function(wrap_pyfunction!(twiggs_money_flow, m)?)?;
+
+    // Chart constructions (classic price-action family)
+    //
+    // These are FTA-native, not TA-Lib.  They are the only indicators whose
+    // signature mixes a price line with a discrete state column, so they use
+    // the integer-carrying helpers above instead of the plain f64 ones.
+    m.add_function(wrap_pyfunction!(darvas_box, m)?)?;
+    m.add_function(wrap_pyfunction!(renko, m)?)?;
+    m.add_function(wrap_pyfunction!(kagi, m)?)?;
+    m.add_function(wrap_pyfunction!(point_and_figure, m)?)?;
+    m.add_function(wrap_pyfunction!(three_line_break, m)?)?;
+    m.add_function(wrap_pyfunction!(williams_alligator, m)?)?;
+    m.add_function(wrap_pyfunction!(heikin_ashi, m)?)?;
 
     // Formula System
     #[cfg(feature = "formula")]

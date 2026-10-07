@@ -79,23 +79,37 @@ the canonical 78 indicators in `docs/ffi_registry.json`.
 | Binding | Surface scraped | Covered | Missing |
 | --- | --- | ---: | ---: |
 | C | `ffi/c-binding/include/finkit.h` prototypes | 78 / 78 | 0 |
-| Python | `#[pyfunction]` in `ffi/python-binding/src/` | 69 / 78 | 9 |
-| Node | `export function` in `ffi/node-binding/index.d.ts` | 76 / 78 | 2 |
+| Python | `#[pyfunction]` in `ffi/python-binding/src/` | 78 / 78 | 0 |
+| Node | `export function` in `ffi/node-binding/index.d.ts` | 78 / 78 | 0 |
 | Go | exported funcs in `ffi/go-binding/go/ta/` | 78 / 78 | 0 |
-| Java | `public static` methods under `ffi/java-binding/java/` | 71 / 78 | 7 |
+| Java | `public static` methods under `ffi/java-binding/java/` | 78 / 78 | 0 |
 | .NET | `public static` methods in `ffi/dotnet-binding/src/Finkit/` | 78 / 78 | 0 |
 | iOS | `alpha_ta_*` exports in `ffi/ios-binding/src/` | 15 / 78 | 63 |
 | Android | `shim_indicator!("ta_*", ...)` in `ffi/android-binding/src/` | 15 / 78 | 63 |
 
-The C binding is the reference and reads 78/78, which is what makes the table
-trustworthy: if the extractor or the name-normalisation table ever went wrong,
-C would stop being a clean 100% before anything else moved.
+Six of the eight bindings now expose the entire indicator surface. The C binding
+is the reference and reads 78/78, which is what makes the table trustworthy: if
+the extractor or the name-normalisation table ever went wrong, C would stop being
+a clean 100% before anything else moved.
+
+iOS and Android remain at 15/78 on purpose — they are mobile shims over a
+deliberately small ABI subset, and closing them is a separate roadmap item, not a
+missing wrapper.
 
 Name matching is deliberately tolerant of *spelling* but not of *collisions*:
 `ta_adosc` == `AdOsc` == `adosc`, `ta_stddev` == `StdDev` == `std_dev`,
 `ta_cdl_three_white_soldiers` == `cdlThreeWhiteSoldiers` ==
 `CDL_3WHITE_SOLDIERS`, and the `_json` / `Native` transports are stripped.
 Anything that does not reduce to the same squashed token is counted as missing.
+
+One extractor detail is load-bearing rather than cosmetic: the surface regexes
+must tolerate generic parameters between the function name and its opening
+parenthesis. PyO3 functions that borrow NumPy arrays are declared with a
+lifetime, and Go wrappers may take a type parameter. A pattern that requires a
+bare `\s*\(` straight after the name does not merely skip such a function — it
+matches the *next* one instead, which both under-counts the binding and
+double-counts its neighbour. That failure mode is silent, and it is why the C
+column is treated as the extractor's self-check.
 
 ### The gate is a ratchet, not a completeness check
 
@@ -166,7 +180,31 @@ The current Node package manifest declares additional optional packages such as 
 
 Python remains the most complete binary-distribution path in v0.1.15. Four `cp38-abi3` wheels are built for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
 
+Its indicator surface now matches the C binding exactly (78/78). The last seven
+were the classic price-action constructions — `darvas_box`, `renko`, `kagi`,
+`point_and_figure`, `three_line_break`, `williams_alligator`, `heikin_ashi` —
+which had no stored body because they are the only indicators that return a
+discrete state column next to their price line. That column crosses the boundary
+as `int32` (helpers `py_array_f64_i32`, `py_arrays2_f64_i32`,
+`py_array_f64_i32_i32`, `py_arrays4_f64`), never widened into `f64`, and the
+functions are registered in the `#[pymodule]` block — omitting that registration
+compiles cleanly but yields dead code, which the CI test job's `-D warnings`
+turns into a hard failure.
+
 Use [installation.md](installation.md) and [python.md](python.md) for exact wheel selection, NumPy input requirements, `CompiledFormula`, and troubleshooting.
+
+### Authoring a generated body: the overlay trap
+
+`ffi.bodies.<lang>` in `docs/ffi_registry.json` is the source the generator
+emits from, but `sync_bindings.load_registry()` also honours a transient
+`target/python_registry_ssot.json` overlay produced by
+`scripts/prepare_python_registry_ssot.py`. If that overlay is older than the
+checked-in registry it shadows it, so a freshly authored body is silently
+dropped and the only symptom is "function is never used" warnings in the binding
+crate. `load_registry()` therefore ignores an overlay that is not newer than
+`docs/ffi_registry.json` / `docs/indicator_registry.json`, names the stale file
+on stderr, and falls back to the checked-in SSOT. Re-run
+`scripts/prepare_python_registry_ssot.py` to refresh it deliberately.
 
 ## Rust
 
@@ -196,6 +234,13 @@ cargo package -p finkit --locked --no-verify
 
 The Node binding is under `ffi/node-binding` and uses NAPI-RS.
 
+Its indicator surface now matches the C binding exactly (78/78). The last two
+were `midpoint` and `midprice`, whose bodies were absent from the registry.
+Note that `index.d.ts` is a NAPI-RS *build artifact*: adding a `#[napi]` body and
+regenerating `src/generated.rs` does **not** update it, and the parity audit
+scrapes `index.d.ts`, so the binding keeps reading 76/78 until `napi build`
+actually runs. Regenerate with `npm run build` and re-run the audit.
+
 ```bash
 cd ffi/node-binding
 npm ci
@@ -223,6 +268,19 @@ The Java binding is under `ffi/java-binding`. The validated Linux packaging path
 3. Maven package/Javadoc build;
 4. JAR resource inspection;
 5. a real JVM loader + SMA smoke test.
+
+Its indicator surface now matches the C binding exactly (78/78). The last seven
+were `vortex`, `inertia`, `vzo`, `volumeMomentum`, `volumeRoc`,
+`chandeForecast` and `twiggsMf` — the volume/oscillator family reachable from
+every other binding but with no JNI entry point here. `vortex` is the only new
+void export: it fills a nested `Indicators.VortexResult` and is guarded by
+`ffi_catch_void`, and it has been added to the `java_void_names` contract list in
+`scripts/check_warning_contracts.py` so a future regeneration cannot silently
+reintroduce the unwind-across-JNI hole.
+
+Unlike Python and Node, the Java binding stores no bodies, so `sync_bindings.py
+--generate --lang java` would emit an empty file — `ffi/java-binding/src/generated.rs`
+is maintained by hand.
 
 Example:
 

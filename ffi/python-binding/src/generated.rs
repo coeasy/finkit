@@ -1937,3 +1937,265 @@ fn cdl_marubozu(
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
     })
 }
+
+/// Darvas Box (达瓦斯箱体)
+///
+/// Tracks the rolling box top/bottom and emits a breakout signal once a
+/// confirmed box is left behind.
+///
+/// # Arguments
+/// * `high` - High prices
+/// * `low` - Low prices
+/// * `close` - Close prices
+/// * `lookback` - Bars used to detect a new high (default: 5)
+/// * `confirmation` - Bars to wait before publishing a box (default: 3)
+///
+/// # Returns
+/// Tuple of (box_top, box_bottom, signal); `signal` is 1 / -1 / 0
+#[pyfunction]
+#[pyo3(signature = (high, low, close, lookback=5, confirmation=3))]
+fn darvas_box(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    lookback: usize,
+    confirmation: usize,
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<i32>>)> {
+    let high = high
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let low = low
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let close = close
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    py_arrays2_f64_i32(py, || {
+        indicators::darvas_box(high, low, close, lookback, confirmation)
+            .map(|res| {
+                (
+                    res.box_top.into_raw_vec(),
+                    res.box_bottom.into_raw_vec(),
+                    res.signal.into_raw_vec(),
+                )
+            })
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
+    })
+}
+
+/// Renko bricks (砖形图)
+///
+/// A new brick forms whenever price travels a full `box_size` away from the
+/// last brick's close.
+///
+/// # Arguments
+/// * `high` - High prices
+/// * `low` - Low prices
+/// * `box_size` - Brick height in price units
+///
+/// # Returns
+/// Tuple of (bricks, direction); `direction` is 1 / -1 / 0
+#[pyfunction]
+#[pyo3(signature = (high, low, box_size))]
+fn renko(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    box_size: f64,
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<i32>>)> {
+    let high = high
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let low = low
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    py_array_f64_i32(py, || {
+        indicators::renko(high, low, box_size)
+            .map(|res| (res.bricks.into_raw_vec(), res.direction.into_raw_vec()))
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
+    })
+}
+
+/// Kagi line (卡吉图)
+///
+/// Extends the line while price keeps moving; a `reversal` move in the
+/// opposite direction starts a new segment.
+///
+/// # Arguments
+/// * `close` - Close prices
+/// * `reversal` - Reversal threshold in price units
+///
+/// # Returns
+/// Tuple of (kagi, direction); `direction` is 1 (yang) / -1 (yin) / 0
+#[pyfunction]
+#[pyo3(signature = (close, reversal))]
+fn kagi(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    reversal: f64,
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<i32>>)> {
+    let close = close
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    py_array_f64_i32(py, || {
+        indicators::kagi(close, reversal)
+            .map(|res| (res.kagi.into_raw_vec(), res.direction.into_raw_vec()))
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
+    })
+}
+
+/// Point & Figure (点数图)
+///
+/// Builds X (up) / O (down) columns, ignoring time. A column reverses after
+/// a `reversal`-box move against it.
+///
+/// # Arguments
+/// * `high` - High prices
+/// * `low` - Low prices
+/// * `box_size` - Box height in price units
+/// * `reversal` - Boxes required to start a new column
+///
+/// # Returns
+/// Tuple of (pnf, column_type, new_column); `column_type` is 1 / -1 / 0 and
+/// `new_column` is 1 when this bar opened a column, 0 otherwise
+#[pyfunction]
+#[pyo3(signature = (high, low, box_size, reversal))]
+fn point_and_figure(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    box_size: f64,
+    reversal: usize,
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<i32>>, Py<PyArray1<i32>>)> {
+    let high = high
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let low = low
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    py_array_f64_i32_i32(py, || {
+        indicators::point_and_figure(high, low, box_size, reversal)
+            .map(|res| {
+                (
+                    res.pnf.into_raw_vec(),
+                    res.column_type.into_raw_vec(),
+                    res.new_column.into_raw_vec(),
+                )
+            })
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
+    })
+}
+
+/// Three Line Break (新值三线反转)
+///
+/// The line continues in the prevailing direction and only reverses when the
+/// close breaks the extreme of the last `lines` lines.
+///
+/// # Arguments
+/// * `close` - Close prices
+/// * `lines` - Number of lines to break before reversing
+///
+/// # Returns
+/// Tuple of (line, direction); `direction` is 1 (white) / -1 (black) / 0
+#[pyfunction]
+#[pyo3(signature = (close, lines))]
+fn three_line_break(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+    lines: usize,
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<i32>>)> {
+    let close = close
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    py_array_f64_i32(py, || {
+        indicators::three_line_break(close, lines)
+            .map(|res| (res.line.into_raw_vec(), res.direction.into_raw_vec()))
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
+    })
+}
+
+/// Williams Alligator (鳄鱼线)
+///
+/// Three smoothed moving averages (SMMA) shifted forward: jaw (13, +8),
+/// teeth (8, +5) and lips (5, +3).
+///
+/// # Arguments
+/// * `close` - Close prices
+///
+/// # Returns
+/// Tuple of (jaw, teeth, lips) arrays
+#[pyfunction]
+#[pyo3(signature = (close))]
+fn williams_alligator(
+    py: Python<'_>,
+    close: PyReadonlyArray1<'_, f64>,
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
+    let close = close
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    py_arrays3_f64(py, || {
+        indicators::williams_alligator(close)
+            .map(|res| {
+                (
+                    res.jaw.into_raw_vec(),
+                    res.teeth.into_raw_vec(),
+                    res.lips.into_raw_vec(),
+                )
+            })
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
+    })
+}
+
+/// Heikin-Ashi (平均足)
+///
+/// Smoothed candles: HA_Close is the OHLC mean and HA_Open averages the
+/// previous HA bar, so trends read cleanly and noise is damped.
+///
+/// # Arguments
+/// * `open` - Open prices
+/// * `high` - High prices
+/// * `low` - Low prices
+/// * `close` - Close prices
+///
+/// # Returns
+/// Tuple of (ha_open, ha_high, ha_low, ha_close) arrays
+#[pyfunction]
+#[pyo3(signature = (open, high, low, close))]
+fn heikin_ashi(
+    py: Python<'_>,
+    open: PyReadonlyArray1<'_, f64>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+) -> PyResult<(
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+)> {
+    let open = open
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let high = high
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let low = low
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let close = close
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    py_arrays4_f64(py, || {
+        indicators::heikin_ashi(open, high, low, close)
+            .map(|res| {
+                (
+                    res.ha_open.into_raw_vec(),
+                    res.ha_high.into_raw_vec(),
+                    res.ha_low.into_raw_vec(),
+                    res.ha_close.into_raw_vec(),
+                )
+            })
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
+    })
+}

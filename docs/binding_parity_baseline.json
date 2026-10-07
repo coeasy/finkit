@@ -5,16 +5,16 @@
       "covered": 78
     },
     "python": {
-      "covered": 69
+      "covered": 78
     },
     "node": {
-      "covered": 76
+      "covered": 78
     },
     "go": {
       "covered": 78
     },
     "java": {
-      "covered": 71
+      "covered": 78
     },
     "dotnet": {
       "covered": 78

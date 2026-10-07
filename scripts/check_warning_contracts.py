@@ -67,7 +67,7 @@ def main() -> int:
     java_generated = (ROOT / "ffi/java-binding/src/generated.rs").read_text(
         encoding="utf-8"
     )
-    java_void_names = ("mama", "bbands", "sar", "macd", "stoch", "aroon")
+    java_void_names = ("mama", "bbands", "sar", "macd", "stoch", "aroon", "vortex")
     missing_java_guards: list[str] = []
     for name in java_void_names:
         marker = f"pub extern \"system\" fn Java_com_finkit_Indicators_{name}"
