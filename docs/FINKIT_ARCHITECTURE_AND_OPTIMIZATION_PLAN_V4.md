@@ -4490,3 +4490,104 @@ call 3: NaN      ← 200 次里 100 次 NaN
   `acos`/`ln`/`minus_di` 0.99×。其中多项在代码未变时逐轮在 ✅/⚠️ 间翻转，
   差距（<9%）小于本机跨运行方差——继续单点攻坚的边际收益低。
 - doctest 本机 Windows 命名管道耗尽问题（同上轮）。
+
+### 44.19 第二十六轮：多语言绑定补齐（先量化，再把 Go/.NET 拉到满覆盖）
+
+§44.18 第 7 节把「多语言绑定补齐」列为单列一批的遗留项。本轮先解决一个前置问题：
+**这个缺口到底有多大，没有人能复现。** §44.17 的表格（Go 51/95、.NET 55/95）是手工数出来的，
+而 §44.18 又出现过一个不同的手数（Go 56/95）——两次手数互相矛盾，说明"那个数字"本身不可靠，
+靠它来排优先级就是靠运气。
+
+#### 1. 先量化：`scripts/audit_binding_parity.py`
+
+新增的审计脚本以 `docs/ffi_registry.json` 的 **78 个指标**为基准（而不是 C 头的 95 个符号），
+因为这 78 个才是"指标面"；另外 17 个是基础设施（`ta_version` / `ta_free_*` / `ta_formula_*` /
+streaming 句柄），把它们算进分母会让"覆盖率"随无关改动漂移。
+
+每个绑定的公开面按"用户实际调用的那个文件"抓取：
+
+| 绑定 | 抓取来源 |
+|---|---|
+| C | `ffi/c-binding/include/finkit.h` 的原型 |
+| Python | `ffi/python-binding/src/` 里的 `#[pyfunction]` |
+| Node | `ffi/node-binding/index.d.ts` 的 `export function` |
+| Go | `ffi/go-binding/go/ta/` 的导出函数 |
+| Java | `ffi/java-binding/java/` 的 `public static` 方法 |
+| .NET | `ffi/dotnet-binding/src/Finkit/` 的 `public static` 方法 |
+| iOS | `ffi/ios-binding/src/` 的 `alpha_ta_*` |
+| Android | `ffi/android-binding/src/` 的 `shim_indicator!("ta_*", …)` |
+
+名称匹配按"去分隔符小写化"归并，容忍传输层差异、不容忍真名差异：
+`ta_adosc` == `AdOsc` == `adosc`；`ta_stddev` == `StdDev` == `std_dev`；
+`ta_linear_reg` == `linearReg` == `linreg`；`ta_cdl_three_white_soldiers` ==
+`cdlThreeWhiteSoldiers` == `CDL_3WHITE_SOLDIERS`；`_json` / `Native` 后缀剥离
+（Go 把 Darvas/Renko/Kagi 等图表指标暴露为 `…JSON`，Java 的 JNI 声明带 `Native` 后缀——
+上一版手数正是漏了这两条才把已存在的函数记成缺失）。
+
+**自检**：C 绑定读出 78/78。若抽取器或归并表出错，C 会先掉出 100%，任何其它绑定都还没动。
+这是这张表能被信任的原因。
+
+**实测结果（本轮改动前）**
+
+| 绑定 | 覆盖 | 缺失 |
+|---|---:|---:|
+| C | 78/78 | 0 |
+| Python | 69/78 | 9 |
+| Node | 76/78 | 2 |
+| **Go** | **35/78** | **43** |
+| Java | 71/78 | 7 |
+| **.NET** | **43/78** | **35** |
+| iOS | 15/78 | 63 |
+| Android | 15/78 | 63 |
+
+与 §44.17 的手数不符（Go 51/95 vs 实测 35/78），原因是分母混入基础设施 + 未剥离 `_json` 后缀。**实测取代手数。**
+
+#### 2. Go 35/78 → 78/78
+
+新增 `ffi/go-binding/src/parity.rs`（Rust FFI，36 个入口）与 `ffi/go-binding/go/ta/parity.go`
+（Go 封装）。补齐项：APO、BOP、CMO、MFI、TRIX、VORTEX、VZO、volume momentum/ROC、
+Chande Forecast、Twiggs Money Flow、Inertia、Percent Rank、AVG/MED/TYP/WCLPRICE、
+MIDPOINT、MIDPRICE、SAR、MAMA，以及 15 个 CDL 形态识别。
+
+**一个必须写清楚的设计点**：CDL 的输出是整数（TA-Lib 约定 `+100/0/-100`）。
+把整数塞进 `TaResult` 的 `*mut f64` 数值上没问题（这些值可精确表示），但类型上是撒谎。
+因此 Go 侧新增了第二个结果载体 `TaIntResult` + `ta_free_int_result`，CDL 封装返回 `[]int32`，
+与 Java 的 `int[]`、TA-Lib 自身的契约一致。
+
+#### 3. .NET 43/78 → 78/78
+
+新增 `ffi/dotnet-binding/src/parity.rs`（35 个入口）与
+`ffi/dotnet-binding/src/Finkit/ParityIndicators.cs`。严格沿用既有 ABI：
+`0` 成功、负值失败、写入被 `min(result.len(), length)` 截断（与 `generated.rs` 头部声明的不变式一致）。
+
+#### 4. 门禁：棘轮而不是"补齐检查"
+
+新增 `docs/binding_parity_baseline.json` 记录各语言已达成的下限；
+`make verify-bindings-parity` 与 CI 的 `binding-ssot` 作业在覆盖**回退**时失败，
+而在绑定尚未补全时不失败——理由与 `sync_bindings.py` 的 deferred 层一致：
+**长期红的门禁会被无视。** 两个方向都验证过：把基线里 `go` 改成 99 会得到
+`go: 78/78 < baseline 99` 并以 1 退出；改回即通过。
+
+#### 5. 验证
+
+| 检查 | 结果 |
+|---|---|
+| `cargo test -p finkit-go -p finkit-dotnet` | 9 + 8 通过，**0 告警** |
+| `go build ./... && go vet ./...` | 通过 |
+| `go test ./...` | 通过（含 4 个新增 parity 测试） |
+| `dotnet test`（对新建 `finkit_dotnet.dll`） | **40/40 通过** |
+
+新增的 Rust 测试初版带 5 条 `unnecessary unsafe` 告警，而 CI 的 test 作业带 `-D warnings`——
+已删掉多余包裹（这些入口是安全的 `extern "C" fn`，只有解引用原始指针时才需要 `unsafe`）。
+
+**本机环境说明**：在本机 Windows 上跑 `go test` 需要把 MSVC 产出的 `finkit_go.lib` 换成导入库，
+否则 mingw 的 cgo 链接器吃不掉 MSVC 目标文件（`undefined reference to __chkstk`、
+`??_7type_info@@6B@`）。这是本机工具链不匹配（rustc host = msvc，cgo 用 mingw gcc），
+不是绑定缺陷；CI 在 Linux 上跑同一套测试。
+
+#### 6. 遗留（更新）
+
+- ~~多语言绑定补齐~~ → **Go 与 .NET 已满覆盖（78/78）**；本轮结清 §44.17 第 5 节的 ① 项。
+- ② 项仍开：Python 69/78（缺 9）、Node 76/78（缺 2）、Java 71/78（缺 7）。
+  另有 iOS 15/78、Android 15/78 属更靠后的层。
+- 剩余 12 项 ⚠️ 指标与 doctest 本机问题（§44.18 第 7 节）：无变化。

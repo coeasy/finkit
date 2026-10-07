@@ -50,7 +50,7 @@ LANGS := $(filter-out packages,$(LANGS))
 .PHONY: install-and-test
 .PHONY: docker-build docker-run docker-bench docker-compose-up
 .PHONY: preflight lint
-.PHONY: gen-c-header verify-ffi gen-c-binding verify-bindings verify-bindings-tier verify-all-bindings
+.PHONY: gen-c-header verify-ffi gen-c-binding verify-bindings verify-bindings-tier verify-all-bindings verify-bindings-parity
 .PHONY: build-native-archive verify-native-archive
 .PHONY: installer installer-all check-installer
 .PHONY: $(INSTALLER_TARGETS:%=installer-%)
@@ -289,7 +289,7 @@ refresh-release-manifests:
 check-release-manifests:
 	python3 $(ROOT)/scripts/refresh_release_manifests.py --check
 
-verify-bindings: verify-all-bindings
+verify-bindings: verify-all-bindings verify-bindings-parity
 
 # ---- codegen: registry-driven drift check for the active FFI binding tier --
 # `verify-bindings-tier` drift-checks the **active tier** (Python, Node) against
@@ -304,6 +304,18 @@ verify-bindings-tier:
 
 verify-all-bindings:
 	python3 $(ROOT)/scripts/sync_bindings.py --check --all
+
+# ---- parity ratchet: how much of the 78-indicator FFI surface each binding --
+# `sync_bindings.py` answers "did a *stored* body drift?"; it cannot answer "how
+# much of the surface does this binding actually expose?", because the deferred
+# languages store no bodies at all. `audit_binding_parity.py` scrapes each
+# binding's real public surface and compares it to docs/ffi_registry.json. The
+# gate here is a **ratchet**: it fails when coverage *drops* below
+# docs/binding_parity_baseline.json, not while a binding is still incomplete
+# (a permanently-red gate gets ignored). Raise the recorded numbers with
+# `--update-baseline` after closing a gap.
+verify-bindings-parity:
+	python3 $(ROOT)/scripts/audit_binding_parity.py --check
 
 # ---- help ------------------------------------------------------------------
 help:
@@ -329,6 +341,7 @@ help:
 	@echo "  make verify-bindings  Fail if the C wrappers drifted from the registry"
 	@echo "  make verify-bindings-tier  Drift-check the active tier (Python, Node)"
 	@echo "  make verify-all-bindings  Same, plus report the deferred languages"
+	@echo "  make verify-bindings-parity  Fail if a binding's coverage of the 78-indicator FFI surface regresses"
 	@echo "  make check-rustdoc    Fail if rustdoc emits any diagnostic (ADR 0011)"
 	@echo "  make check-orphans    Fail on orphan scripts, unreachable workflows or unreachable docs"
 	@echo "  make check-script-refs  Fail if a caller references a script that is missing"

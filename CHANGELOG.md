@@ -209,6 +209,69 @@ also benefits the cached rolling-extreme path (`MAX`/`MIN` for NaN-bearing input
 `rescan_extreme_window`.
 
 
+### Changed - 2026-10-07 (twenty-sixth pass — multi-language bindings: make the gap measurable, then close Go and .NET to full parity)
+
+The twenty-fifth pass left one item open: Go and .NET each shipped roughly half
+of the FFI surface. Two hand audits of that gap had disagreed with each other,
+which is itself the finding — nobody could reproduce the number, so nobody could
+improve it.
+
+**Measured first.** `scripts/audit_binding_parity.py` scrapes each binding's real
+public surface (C header prototypes, `#[pyfunction]`, `#[napi]`, Go exported
+funcs, JVM natives, C# methods, `alpha_ta_*`, Android shims) and matches it to
+the 78 indicators in `docs/ffi_registry.json`. Name matching absorbs spelling
+transport differences (`ta_adosc` == `AdOsc` == `adosc`, `StdDev` == `std_dev`,
+`CDL_3WHITE_SOLDIERS` == `cdlThreeWhiteSoldiers`, `_json`/`Native` decorations)
+but not collisions. The C binding reads 78/78 — the reference validating itself,
+which is what makes the rest of the table trustworthy.
+
+The measurement contradicted the hand audits: Go was at 35/78 (not 51/95),
+.NET at 43/78. Both "95"s had been mixing indicators with infrastructure
+(`ta_version`, `ta_free_*`, `ta_formula_*`, streaming handles), and Go's
+`DarvasBoxJSON`/`RenkoJSON` chart wrappers were being counted as missing because
+the audit looked for the bare name.
+
+**Then closed it.**
+
+* **Go 35/78 → 78/78.** 36 new entry points in `ffi/go-binding/src/parity.rs`
+  (APO, BOP, CMO, MFI, TRIX, VORTEX, VZO, volume momentum/ROC, Chande Forecast,
+  Twiggs Money Flow, Inertia, Percent Rank, AVG/MED/TYP/WCLPRICE, MIDPOINT,
+  MIDPRICE, SAR, MAMA, and the 15 candlestick detectors) plus the Go wrappers in
+  `go/ta/parity.go`.
+* **.NET 43/78 → 78/78.** 35 new entry points in
+  `ffi/dotnet-binding/src/parity.rs` and `Finkit/ParityIndicators.cs`, following
+  the existing ABI exactly (`0` = success, negative = failure).
+
+Two design points worth recording:
+
+* Candlestick detectors return integers. Rather than widen `+100/0/-100` into
+  `TaResult`'s `*mut f64` — numerically fine, semantically a lie — Go gained a
+  second result carrier (`TaIntResult` / `ta_free_int_result`) and .NET writes
+  into a caller `int[]`. This matches Java's `int[]` and TA-Lib's own contract.
+* The .NET `copy_out_f64` helper clamps to `min(result.len(), length)`, the same
+  invariant `generated.rs` states in its header.
+
+**The gate is a ratchet.** `docs/binding_parity_baseline.json` records the
+achieved floor; `make verify-bindings-parity` and the `binding-ssot` CI job fail
+when coverage *drops*, not while a binding is still incomplete — a permanently
+red gate gets ignored, which is the same reasoning `sync_bindings.py` already
+uses for its deferred tier. Verified in both directions (bumping `go` to 99 in
+the baseline fails with `go: 78/78 < baseline 99`).
+
+**Verified:** `cargo test -p finkit-go -p finkit-dotnet` green (9 + 8 tests,
+zero warnings — the new tests needed `unsafe` blocks removed because the entry
+points are safe `extern "C"` fns, and the test job runs `-D warnings`);
+`go build ./...`, `go vet ./...` and `go test ./...` green; `dotnet test` 40/40
+green against the freshly built `finkit_dotnet.dll`.
+
+Local note: `go test` on this Windows host needed the MSVC-built `finkit_go.lib`
+replaced by the import library — mingw's cgo linker cannot consume MSVC staticlib
+objects (`undefined reference to __chkstk`, `??_7type_info@@6B@`). That is a
+host toolchain mismatch, not a binding defect; CI runs the same suite on Linux.
+
+Still open: Python 69/78 (9), Node 76/78 (2), Java 71/78 (7), iOS 15/78,
+Android 15/78.
+
 ### Changed - 2026-10-07 (twenty-fifth pass — formula fast path: prove-then-uninit buffer, KAMA onto kama_into, one cross-entry-point fix)
 
 Closes the two "known leftover" items the twenty-fourth pass left open, and turns

@@ -1,0 +1,29 @@
+{
+  "canonical_total": 78,
+  "bindings": {
+    "c": {
+      "covered": 78
+    },
+    "python": {
+      "covered": 69
+    },
+    "node": {
+      "covered": 76
+    },
+    "go": {
+      "covered": 78
+    },
+    "java": {
+      "covered": 71
+    },
+    "dotnet": {
+      "covered": 78
+    },
+    "ios": {
+      "covered": 15
+    },
+    "android": {
+      "covered": 15
+    }
+  }
+}

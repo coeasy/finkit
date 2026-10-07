@@ -493,6 +493,7 @@ pub extern "C" fn ta_streaming_atr_free(handle: *mut c_void) {
 }
 
 include!("generated.rs");
+include!("parity.rs");
 
 #[cfg(test)]
 mod tests {

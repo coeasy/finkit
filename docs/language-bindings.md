@@ -67,6 +67,52 @@ are load-bearing:
 CI asserts the core registry is untouched by the binding job
 (`git diff --exit-code -- docs/indicator_registry.json`).
 
+## Per-language coverage of the FFI surface
+
+`sync_bindings.py` answers *"did a **stored** body drift?"*. It does not answer
+*"how much of the surface does this binding actually expose?"* — the deferred
+languages store no bodies at all, so a binding could lose half its entry points
+and still report `drift=none`. `scripts/audit_binding_parity.py` measures the
+other question: it scrapes each binding's real public surface and compares it to
+the canonical 78 indicators in `docs/ffi_registry.json`.
+
+| Binding | Surface scraped | Covered | Missing |
+| --- | --- | ---: | ---: |
+| C | `ffi/c-binding/include/finkit.h` prototypes | 78 / 78 | 0 |
+| Python | `#[pyfunction]` in `ffi/python-binding/src/` | 69 / 78 | 9 |
+| Node | `export function` in `ffi/node-binding/index.d.ts` | 76 / 78 | 2 |
+| Go | exported funcs in `ffi/go-binding/go/ta/` | 78 / 78 | 0 |
+| Java | `public static` methods under `ffi/java-binding/java/` | 71 / 78 | 7 |
+| .NET | `public static` methods in `ffi/dotnet-binding/src/Finkit/` | 78 / 78 | 0 |
+| iOS | `alpha_ta_*` exports in `ffi/ios-binding/src/` | 15 / 78 | 63 |
+| Android | `shim_indicator!("ta_*", ...)` in `ffi/android-binding/src/` | 15 / 78 | 63 |
+
+The C binding is the reference and reads 78/78, which is what makes the table
+trustworthy: if the extractor or the name-normalisation table ever went wrong,
+C would stop being a clean 100% before anything else moved.
+
+Name matching is deliberately tolerant of *spelling* but not of *collisions*:
+`ta_adosc` == `AdOsc` == `adosc`, `ta_stddev` == `StdDev` == `std_dev`,
+`ta_cdl_three_white_soldiers` == `cdlThreeWhiteSoldiers` ==
+`CDL_3WHITE_SOLDIERS`, and the `_json` / `Native` transports are stripped.
+Anything that does not reduce to the same squashed token is counted as missing.
+
+### The gate is a ratchet, not a completeness check
+
+`docs/binding_parity_baseline.json` records the achieved floor per language.
+`make verify-bindings-parity` (and the `binding-ssot` CI job) fails when coverage
+*regresses* below that floor, not while a binding is still incomplete — the same
+reasoning the deferred-tier reporting above uses: a permanently-red gate gets
+ignored. Closing a gap is a two-step change: land the functions, then raise the
+recorded number with `--update-baseline`.
+
+```
+python3 scripts/audit_binding_parity.py                 # full report
+python3 scripts/audit_binding_parity.py --json-out dist/binding_parity.json
+python3 scripts/audit_binding_parity.py --check         # CI gate
+python3 scripts/audit_binding_parity.py --update-baseline
+```
+
 ## v0.1.15 distribution contract
 
 The `v0.1.15` tag and release workflow are the authoritative version contract:
@@ -271,6 +317,17 @@ The release gate also builds an **external temporary module** using a local `rep
 
 The Go binding includes indicator, streaming, formula, and template APIs. In particular, its formula debug wrapper is `FormulaEvalDebugJSON`; debugger method names are not assumed to be identical in other languages.
 
+Its indicator surface now matches the C binding exactly (78/78). The entry points
+that closed the gap live in `ffi/go-binding/src/parity.rs` and
+`ffi/go-binding/go/ta/parity.go`: APO, BOP, CMO, MFI, TRIX, VORTEX, VZO, volume
+momentum/ROC, Chande Forecast, Twiggs Money Flow, Inertia, Percent Rank, the four
+price transforms, SAR, MAMA, and the 15 candlestick detectors.
+
+Candlestick detectors return `[]int32` carrying TA-Lib's `+100 / 0 / -100`
+convention. They are the only entry points backed by a second result carrier
+(`TaIntResult`), because widening integers into `TaResult`'s `*mut f64` would
+work numerically but would misdescribe the type.
+
 A public `go get` path must not be advertised until the nested-module tag convention and native-library delivery strategy are published and install-tested.
 
 See [../ffi/go-binding/README.md](../ffi/go-binding/README.md).
@@ -291,10 +348,19 @@ The next-release validation currently proves three of those RIDs:
 | RID | Validation |
 | --- | --- |
 | `linux-x64` | native Rust build, .NET 8 tests, NuGet pack, `runtimes/linux-x64/native/libfinkit_dotnet.so` inspection |
-| `win-x64` | native Rust build, 18 .NET 8 tests, NuGet pack, `runtimes/win-x64/native/finkit_dotnet.dll` inspection |
-| `osx-arm64` | native Rust build on a real arm64 macOS runner, 18 .NET 8 tests, NuGet pack, `runtimes/osx-arm64/native/libfinkit_dotnet.dylib` inspection |
+| `win-x64` | native Rust build, 40 .NET 8 tests, NuGet pack, `runtimes/win-x64/native/finkit_dotnet.dll` inspection |
+| `osx-arm64` | native Rust build on a real arm64 macOS runner, 40 .NET 8 tests, NuGet pack, `runtimes/osx-arm64/native/libfinkit_dotnet.dylib` inspection |
 
 `osx-x64` is still a declared package RID, not a proven candidate target. It must receive its own build/package verification before being listed as validated.
+
+Its indicator surface now matches the C binding exactly (78/78). The additions
+live in `ffi/dotnet-binding/src/parity.rs` and
+`ffi/dotnet-binding/src/Finkit/ParityIndicators.cs` — APO, BOP, CMO, MFI, TRIX,
+VORTEX, VZO, volume momentum/ROC, Chande Forecast, Twiggs Money Flow, Inertia,
+Percent Rank, the four price transforms, SAR, and the 15 candlestick detectors.
+
+They follow `Indicators` exactly: `0` = success, negative = failure, and the
+candlestick detectors write integers into a caller `int[]`.
 
 Do not document `dotnet add package Finkit` as a public feed install until an actual NuGet publication and clean consumer install test exist.
 

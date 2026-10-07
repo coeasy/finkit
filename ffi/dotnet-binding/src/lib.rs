@@ -90,6 +90,7 @@ pub extern "C" fn ta_ffi_panic_test() -> c_int {
 }
 
 include!("generated.rs");
+include!("parity.rs");
 
 #[cfg(test)]
 mod tests {

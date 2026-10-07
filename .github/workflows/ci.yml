@@ -70,6 +70,18 @@ jobs:
       # never hide behind a passing job. See scripts/sync_bindings.py.
       - name: Verify binding bodies against the registry
         run: python scripts/sync_bindings.py --check --all
+      # `sync_bindings.py --check` answers "did a *stored* body drift?"; it
+      # cannot answer "how much of the surface does this binding actually
+      # expose?", because the deferred languages store no bodies at all -- so a
+      # binding could lose half its entry points and still report
+      # `drift=none`. `audit_binding_parity.py` scrapes each binding's real
+      # public surface (C header, pyo3, napi, Go exported funcs, JVM natives,
+      # C# methods, alpha_ta_*, Android shims) and compares it to the 78
+      # indicators in `docs/ffi_registry.json`. The gate is a ratchet against
+      # `docs/binding_parity_baseline.json`: it fails when coverage drops, not
+      # while a binding is still incomplete.
+      - name: Verify per-language coverage of the FFI surface has not regressed
+        run: python scripts/audit_binding_parity.py --check
       # The NumPy-direct rewrite used to be checked only from
       # `apply-talib-performance-plan.yml`, whose `on:` covers a branch that is
       # no longer active -- so the check never ran and two binding modules
