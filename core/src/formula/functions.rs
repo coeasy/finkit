@@ -419,7 +419,7 @@ fn canonical_bband_component(
             let mut width = nan_vec(data_len);
             for i in 0..data_len {
                 let mid = middle[i];
-                if mid.is_finite() && mid.abs() > 1e-15 {
+                if mid.is_finite() && mid.abs() > crate::utils::NUMERIC_EPSILON {
                     width[i] = (upper[i] - lower[i]) / mid * 100.0;
                 }
             }
@@ -678,6 +678,111 @@ pub(crate) fn canonical_trend_breakout(
     }
 }
 
+/// Layer 2 of the function table: the canonical overrides, as one list.
+///
+/// The three layers are:
+///
+/// 1. **Legacy compatibility catalogue** — `functions_legacy`, the base table.
+/// 2. **Canonical overrides** — this list. Every entry either *replaces* a
+///    legacy implementation with the same canonical kernel the public
+///    indicator APIs and bindings use, or is an explicitly new name
+///    (`CS_*` cross-sectional transforms) that the legacy table never had.
+/// 3. **TA-Lib 0.7/0.8 additions** — `functions_talib_081`, which may only
+///    *add* names that neither earlier layer provides.
+///
+/// Centralising layer 2 here is what makes the layer boundary assertable:
+/// `get_builtin_functions` and the boundary gate
+/// (`function_table_layers_stay_in_their_lanes`) consume the same list, so a
+/// new override cannot silently bypass the contract (V5 §4.2 problem B).
+fn canonical_overrides() -> Vec<(&'static str, FormulaFn)> {
+    vec![
+        // Explicit cross-sectional transforms. These names are intentionally
+        // separate from the legacy time-window RANK(X, N) contract.
+        ("CS_RANK", fn_cs_rank as FormulaFn),
+        ("CS_ZSCORE", fn_cs_zscore as FormulaFn),
+        ("CS_SCALE", fn_cs_scale as FormulaFn),
+        ("CS_INDNEUTRALIZE", fn_cs_indneutralize as FormulaFn),
+        ("CS_SIGNED_POWER", fn_cs_signed_power as FormulaFn),
+        ("ATR", canonical_atr as FormulaFn),
+        ("NATR", canonical_natr as FormulaFn),
+        ("TRANGE", canonical_trange as FormulaFn),
+        ("TRIMA", canonical_trima as FormulaFn),
+        ("STD", canonical_std as FormulaFn),
+        ("STDDEV", canonical_std as FormulaFn),
+        ("VAR", canonical_var as FormulaFn),
+        // Reference-parity rolling operators for the Alpha158 factor library.
+        // Each also has a plan kernel, so a compiled factor graph executes
+        // them rather than falling back; see
+        // `unified_dispatch::dispatch_reference_rolling_call`.
+        ("QUANTILE", canonical_quantile as FormulaFn),
+        ("RSQUARE", canonical_rsquare as FormulaFn),
+        ("RESI", canonical_resi as FormulaFn),
+        ("RANK_PCT", canonical_rank_pct as FormulaFn),
+        ("STDDEV_SAMPLE", canonical_stddev_sample as FormulaFn),
+        ("SIGN", canonical_sign as FormulaFn),
+        ("BOLL", canonical_boll as FormulaFn),
+        ("BOLLUP", canonical_boll as FormulaFn),
+        ("BBANDS", canonical_boll as FormulaFn),
+        ("BOLLDN", canonical_bolldn as FormulaFn),
+        ("BOLLMID", canonical_bollmid as FormulaFn),
+        ("BOLLWIDTH", canonical_bollwidth as FormulaFn),
+        ("OBV", canonical_obv as FormulaFn),
+        ("AD", canonical_ad as FormulaFn),
+        ("ADOSC", canonical_adosc as FormulaFn),
+        ("MFI", canonical_mfi as FormulaFn),
+        ("GOLDEN_CROSS", canonical_golden_cross as FormulaFn),
+        ("DEAD_CROSS", canonical_dead_cross as FormulaFn),
+        ("BREAKOUT", canonical_breakout as FormulaFn),
+        ("BREAKDOWN", canonical_breakdown as FormulaFn),
+        ("VOLUME_SURGE", canonical_volume_surge as FormulaFn),
+        ("MA_ALIGN", canonical_ma_align as FormulaFn),
+        (
+            "RELATIVE_STRENGTH",
+            canonical_relative_strength as FormulaFn,
+        ),
+        ("GAP_SIGNAL", canonical_gap_signal as FormulaFn),
+        ("TREND_BREAKOUT", canonical_trend_breakout as FormulaFn),
+    ]
+}
+
+/// Names layer 2 *adds* rather than replaces: they are new surface the legacy
+/// catalogue never had. Kept as an explicit list so the layer gate
+/// (`function_table_layers_stay_in_their_lanes`) can distinguish a legitimate
+/// new name from a canonical override that lost its legacy anchor.
+///
+/// Test-only: nothing in the build path consults it, so gating it keeps the
+/// release build free of a dead-code warning for a fixture.
+#[cfg(test)]
+fn canonical_new_names() -> std::collections::HashSet<&'static str> {
+    [
+        // Cross-sectional transforms (deliberately separate from the legacy
+        // time-window RANK(X, N) contract).
+        "CS_RANK",
+        "CS_ZSCORE",
+        "CS_SCALE",
+        "CS_INDNEUTRALIZE",
+        "CS_SIGNED_POWER",
+        // Reference-parity rolling operators for the Alpha158 factor library.
+        "QUANTILE",
+        "RSQUARE",
+        "RESI",
+        "RANK_PCT",
+        "STDDEV_SAMPLE",
+        // Screening/trend functions routed to `indicators::screening`.
+        "GOLDEN_CROSS",
+        "DEAD_CROSS",
+        "BREAKOUT",
+        "BREAKDOWN",
+        "VOLUME_SURGE",
+        "MA_ALIGN",
+        "RELATIVE_STRENGTH",
+        "GAP_SIGNAL",
+        "TREND_BREAKOUT",
+    ]
+    .into_iter()
+    .collect()
+}
+
 /// Build the formula function table from the compatibility surface, then replace
 /// duplicate hot-path implementations with the same canonical kernels used by
 /// the public indicator APIs and language bindings.
@@ -692,75 +797,9 @@ pub fn get_builtin_functions() -> HashMap<String, FormulaFn> {
         map.insert(name, function);
     }
 
-    // Explicit cross-sectional transforms. These names are intentionally
-    // separate from the legacy time-window RANK(X, N) contract.
-    map.insert("CS_RANK".to_string(), fn_cs_rank as FormulaFn);
-    map.insert("CS_ZSCORE".to_string(), fn_cs_zscore as FormulaFn);
-    map.insert("CS_SCALE".to_string(), fn_cs_scale as FormulaFn);
-    map.insert(
-        "CS_INDNEUTRALIZE".to_string(),
-        fn_cs_indneutralize as FormulaFn,
-    );
-    map.insert(
-        "CS_SIGNED_POWER".to_string(),
-        fn_cs_signed_power as FormulaFn,
-    );
-
-    map.insert("ATR".to_string(), canonical_atr as FormulaFn);
-    map.insert("NATR".to_string(), canonical_natr as FormulaFn);
-    map.insert("TRANGE".to_string(), canonical_trange as FormulaFn);
-    map.insert("TRIMA".to_string(), canonical_trima as FormulaFn);
-
-    map.insert("STD".to_string(), canonical_std as FormulaFn);
-    map.insert("STDDEV".to_string(), canonical_std as FormulaFn);
-    map.insert("VAR".to_string(), canonical_var as FormulaFn);
-
-    // Reference-parity rolling operators for the Alpha158 factor library. Each
-    // also has a plan kernel, so a compiled factor graph executes them rather
-    // than falling back; see `unified_dispatch::dispatch_reference_rolling_call`.
-    map.insert("QUANTILE".to_string(), canonical_quantile as FormulaFn);
-    map.insert("RSQUARE".to_string(), canonical_rsquare as FormulaFn);
-    map.insert("RESI".to_string(), canonical_resi as FormulaFn);
-    map.insert("RANK_PCT".to_string(), canonical_rank_pct as FormulaFn);
-    map.insert(
-        "STDDEV_SAMPLE".to_string(),
-        canonical_stddev_sample as FormulaFn,
-    );
-    map.insert("SIGN".to_string(), canonical_sign as FormulaFn);
-
-    map.insert("BOLL".to_string(), canonical_boll as FormulaFn);
-    map.insert("BOLLUP".to_string(), canonical_boll as FormulaFn);
-    map.insert("BBANDS".to_string(), canonical_boll as FormulaFn);
-    map.insert("BOLLDN".to_string(), canonical_bolldn as FormulaFn);
-    map.insert("BOLLMID".to_string(), canonical_bollmid as FormulaFn);
-    map.insert("BOLLWIDTH".to_string(), canonical_bollwidth as FormulaFn);
-
-    map.insert("OBV".to_string(), canonical_obv as FormulaFn);
-    map.insert("AD".to_string(), canonical_ad as FormulaFn);
-    map.insert("ADOSC".to_string(), canonical_adosc as FormulaFn);
-    map.insert("MFI".to_string(), canonical_mfi as FormulaFn);
-
-    map.insert(
-        "GOLDEN_CROSS".to_string(),
-        canonical_golden_cross as FormulaFn,
-    );
-    map.insert("DEAD_CROSS".to_string(), canonical_dead_cross as FormulaFn);
-    map.insert("BREAKOUT".to_string(), canonical_breakout as FormulaFn);
-    map.insert("BREAKDOWN".to_string(), canonical_breakdown as FormulaFn);
-    map.insert(
-        "VOLUME_SURGE".to_string(),
-        canonical_volume_surge as FormulaFn,
-    );
-    map.insert("MA_ALIGN".to_string(), canonical_ma_align as FormulaFn);
-    map.insert(
-        "RELATIVE_STRENGTH".to_string(),
-        canonical_relative_strength as FormulaFn,
-    );
-    map.insert("GAP_SIGNAL".to_string(), canonical_gap_signal as FormulaFn);
-    map.insert(
-        "TREND_BREAKOUT".to_string(),
-        canonical_trend_breakout as FormulaFn,
-    );
+    for (name, function) in canonical_overrides() {
+        map.insert(name.to_string(), function);
+    }
 
     // TA-Lib 0.7/0.8 additions: the kernels and their golden vectors already
     // existed, only the formula surface was missing.
@@ -867,5 +906,67 @@ mod tests {
         )
         .unwrap();
         assert_eq!(power.to_vec(), vec![-4.0, 1.0, 9.0]);
+    }
+
+    /// V5 Batch 2 gate: the three function-table layers stay in their lanes.
+    ///
+    /// Layer 2 (`canonical_overrides`) may only *replace* names the legacy
+    /// catalogue already provides — with the one deliberate exception of the
+    /// `CS_*` cross-sectional transforms, which are new names. Layer 3
+    /// (`functions_talib_081`) may only *add* names neither earlier layer
+    /// provides. Without this assertion the assignment of a name to a layer
+    /// lives only in people's heads, and a new override could silently bypass
+    /// the canonical-kernel policy (V5 §4.2 problem B).
+    #[test]
+    fn function_table_layers_stay_in_their_lanes() {
+        let legacy = super::super::functions_legacy::get_builtin_functions();
+        let overrides = canonical_overrides();
+
+        // Every override either replaces a legacy name or is a recorded
+        // canonical *new* name.
+        let new_names = canonical_new_names();
+        let mut lane_violations = Vec::new();
+        for (name, _) in &overrides {
+            if new_names.contains(name) {
+                continue;
+            }
+            if !legacy.contains_key(*name) {
+                lane_violations.push(*name);
+            }
+        }
+        assert!(
+            lane_violations.is_empty(),
+            "canonical overrides not present in the legacy table (add them to \
+             the legacy catalogue or to `canonical_new_names`): {lane_violations:?}"
+        );
+        // Every recorded new name must genuinely be new.
+        let mut ghost_new_names: Vec<&str> = new_names
+            .iter()
+            .copied()
+            .filter(|name| legacy.contains_key(*name))
+            .collect();
+        ghost_new_names.sort_unstable();
+        assert!(
+            ghost_new_names.is_empty(),
+            "names recorded as canonical *new* names already exist in the \
+             legacy table — they are overrides now; move them out of \
+             `canonical_new_names`: {ghost_new_names:?}"
+        );
+
+        // Layer 3 only fills names the first two layers do not provide.
+        let mut empty = HashMap::new();
+        super::super::functions_talib_081::register(&mut empty);
+        let layer3_names: Vec<&String> = empty.keys().collect();
+        let layer2_names: std::collections::HashSet<&str> =
+            overrides.iter().map(|(name, _)| *name).collect();
+        for name in &layer3_names {
+            if layer2_names.contains(name.as_str()) {
+                panic!(
+                    "functions_talib_081 re-registers `{name}`, which layer 2 \
+                     already provides canonically — talib_081 may only add new \
+                     names, never override the canonical kernels"
+                );
+            }
+        }
     }
 }

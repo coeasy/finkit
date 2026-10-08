@@ -64,13 +64,13 @@ impl StreamingAdx {
 /// edge cases either.
 #[inline]
 fn directional_index(smooth_plus_dm: f64, smooth_minus_dm: f64, smooth_tr: f64) -> f64 {
-    if smooth_tr.abs() <= 1e-15 {
+    if crate::utils::is_zero(smooth_tr) {
         return 0.0;
     }
     let plus_di = smooth_plus_dm / smooth_tr * 100.0;
     let minus_di = smooth_minus_dm / smooth_tr * 100.0;
     let sum = plus_di + minus_di;
-    if sum.abs() > 1e-15 {
+    if !crate::utils::is_zero(sum) {
         (plus_di - minus_di).abs() / sum * 100.0
     } else {
         0.0

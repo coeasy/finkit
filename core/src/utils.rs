@@ -9,12 +9,75 @@ use ndarray::Array1;
 ///
 /// # Returns
 /// The true range value
+///
+/// # NaN semantics (canonical)
+///
+/// `f64::max` ignores NaN operands, so a NaN in the OHLC inputs is *absorbed*
+/// as long as the other two candidates are finite — the TA-Lib behaviour
+/// (`ta_utility.h` computes true range with nested `fmax`, and C `fmax`
+/// discards NaN). This is the **one** canonical true-range semantics: every
+/// ADX/ATR/TRANGE-family kernel routes through here (or the bit-identical
+/// `math::kernels::volatility::true_range`), and comparison-style rewrites
+/// (`if x > range { range = x }`, which *propagate* NaN) are forbidden — they
+/// made ADX and ATR disagree on the same NaN OHLC (V5 R1-1).
 #[inline]
 pub fn true_range(high: f64, low: f64, prev_close: f64) -> f64 {
     (high - low)
         .max((high - prev_close).abs())
         .max((low - prev_close).abs())
 }
+
+/// The one zero-comparison policy point **for the TA-Lib indicator surface**.
+///
+/// TA-Lib defines `TA_IS_ZERO(v) = ((v) > -1e-8) && ((v) < 1e-8)` in
+/// `ta_utility.h` — a **band width of 1e-8**, not an exact-zero test. Any
+/// kernel that guards a division against a zero denominator must use this
+/// predicate (or the `is_zero` helper below) instead of inventing its own
+/// bandwidth: Finkit historically used `1e-15`, so a denominator in
+/// `(1e-15, 1e-8)` was divided here but judged zero by TA-Lib, and the two
+/// outputs diverged on inputs no golden corpus covered (V5 R1-2).
+///
+/// **Scope: `core/src/indicators/**`, `core/src/streaming/**` and
+/// `core/src/math/kernels/**` only** — the code whose output is contractually
+/// "the same number TA-Lib prints". Every kernel on that surface uses this
+/// band, and inherits TA-Lib's fallback contract, which must be recorded next
+/// to the division site (e.g. ADX family: DI and DX fall back to `0.0`, STOCH
+/// falls back to `50.0`).
+///
+/// The formula language runtime and the finkit-specific analytics deliberately
+/// do **not** use this band; see [`NUMERIC_EPSILON`] for why, and
+/// `scripts/check_zero_guard_policy.py` for the gate that keeps both bands
+/// from being spelled out inline again.
+#[inline]
+pub fn is_zero(value: f64) -> bool {
+    value > -crate::utils::TA_IS_ZERO_BANDWIDTH && value < crate::utils::TA_IS_ZERO_BANDWIDTH
+}
+
+/// The band width behind [`is_zero`], kept as a named constant so the policy
+/// is greppable and a future re-alignment has exactly one place to change.
+pub const TA_IS_ZERO_BANDWIDTH: f64 = 1e-8;
+
+/// The near-zero band for the **formula-language runtime and finkit-specific
+/// analytics** — deliberately *not* [`TA_IS_ZERO_BANDWIDTH`].
+///
+/// Widening these guards to TA-Lib's 1e-8 is not a parity fix, it is a
+/// behaviour change with no parity claim behind it, and it destroys documented
+/// contracts. The Alpha158 factor library is the proof: its expressions
+/// regularise denominators with Qlib's `+1e-12` idiom, so a *normal*
+/// denominator sits at ~1e-12. Under a 1e-8 band every such divisor is judged
+/// zero and the factor returns `NaN`. `core/tests/alpha158_parity.rs`
+/// (`the_division_guard_explains_the_wvma_family`) pins that mechanism, and it
+/// failed the moment the band was widened — the golden corpus earning its keep.
+///
+/// So the two bands are a *contract distinction*, not an inconsistency:
+///
+/// | surface | band | whose number is it |
+/// | --- | --- | --- |
+/// | indicators / streaming / math kernels | [`TA_IS_ZERO_BANDWIDTH`] (1e-8) | TA-Lib's |
+/// | formula runtime / features / transforms / risk | [`NUMERIC_EPSILON`] (1e-15) | finkit's own |
+///
+/// Both are named, both are gated; neither is written inline.
+pub const NUMERIC_EPSILON: f64 = 1e-15;
 
 /// Validate that input data is not empty
 ///

@@ -96,7 +96,7 @@ pub fn advance_decline_ratio(advances: &[f64], declines: &[f64]) -> Result<Array
     let mut output = Array1::zeros(len);
 
     for i in 0..len {
-        if declines[i].abs() > 1e-15 {
+        if !crate::utils::is_zero(declines[i]) {
             output[i] = advances[i] / declines[i];
         } else {
             output[i] = f64::NAN;
@@ -276,21 +276,21 @@ pub fn trin(
     let mut output = Array1::zeros(len);
 
     for i in 0..len {
-        let ad_ratio = if declines[i].abs() > 1e-15 {
+        let ad_ratio = if !crate::utils::is_zero(declines[i]) {
             advances[i] / declines[i]
         } else {
             output[i] = f64::NAN;
             continue;
         };
 
-        let volume_ratio = if dec_volume[i].abs() > 1e-15 {
+        let volume_ratio = if !crate::utils::is_zero(dec_volume[i]) {
             adv_volume[i] / dec_volume[i]
         } else {
             output[i] = f64::NAN;
             continue;
         };
 
-        if volume_ratio.abs() > 1e-15 {
+        if !crate::utils::is_zero(volume_ratio) {
             output[i] = ad_ratio / volume_ratio;
         } else {
             output[i] = f64::NAN;

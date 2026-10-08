@@ -1,4 +1,5 @@
 use crate::impl_standard_methods;
+use crate::streaming::forming_bar::FormingBar;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 use crate::utils::true_range;
 
@@ -25,9 +26,9 @@ pub struct StreamingAtr {
     prev_close: f64,
     count: usize,
     last_value: Option<f64>,
+    /// Forming-bar bookkeeping; see [`FormingBar`].
     #[cfg_attr(feature = "serde", serde(skip))]
-    snapshot: Option<SnapshotState>,
-    last_open_time: i64,
+    bar: FormingBar<SnapshotState>,
 }
 
 #[derive(Clone, Copy)]
@@ -37,7 +38,6 @@ struct SnapshotState {
     prev_close: f64,
     count: usize,
     last_value: Option<f64>,
-    last_open_time: i64,
 }
 
 impl StreamingAtr {
@@ -49,32 +49,27 @@ impl StreamingAtr {
             prev_close: f64::NAN,
             count: 0,
             last_value: None,
-            snapshot: None,
-            last_open_time: 0,
+            bar: FormingBar::new(),
         }
     }
 
     pub fn compute_bar(&mut self, bar: &dyn Ohlcv) -> Option<f64> {
         let t = bar.open_time();
-        if t != 0 && t == self.last_open_time {
-            if let Some(snap) = self.snapshot.take() {
-                self.atr_val = snap.atr_val;
-                self.tr_sum = snap.tr_sum;
-                self.prev_close = snap.prev_close;
-                self.count = snap.count;
-                self.last_value = snap.last_value;
-                self.last_open_time = snap.last_open_time;
-            }
+        if let Some(snap) = self.bar.take_rollback(t) {
+            self.atr_val = snap.atr_val;
+            self.tr_sum = snap.tr_sum;
+            self.prev_close = snap.prev_close;
+            self.count = snap.count;
+            self.last_value = snap.last_value;
         }
-        self.snapshot = Some(SnapshotState {
+        let snap = SnapshotState {
             atr_val: self.atr_val,
             tr_sum: self.tr_sum,
             prev_close: self.prev_close,
             count: self.count,
             last_value: self.last_value,
-            last_open_time: self.last_open_time,
-        });
-        self.last_open_time = t;
+        };
+        self.bar.begin(t, snap);
         self.next((bar.high(), bar.low(), bar.close()))
     }
 }
@@ -135,8 +130,7 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingAtr {
         self.prev_close = f64::NAN;
         self.count = 0;
         self.last_value = None;
-        self.snapshot = None;
-        self.last_open_time = 0;
+        self.bar.clear();
     }
 
     fn is_ready(&self) -> bool {

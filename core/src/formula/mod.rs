@@ -185,8 +185,17 @@ pub fn parse_formula_with_dialect(
         | FormulaDialect::TongHuaShun
         | FormulaDialect::EastMoney => parse_formula(source),
         FormulaDialect::Pine => {
+            // The Pine front end enforces its own nesting + source-size budgets
+            // (`formula/pine/parser.rs`), but neither bounds the *AST* the
+            // mapper builds: a flat 1 MiB `a + b + …` chain maps into a
+            // left-nested tree whose depth is the term count. The structural
+            // AST-depth cap must therefore be enforced on the mapper's output
+            // too — checked iteratively, and the rejected tree dismantled
+            // iteratively so its teardown cannot overflow the stack either.
             let pine = parse_pine(source).map_err(|e| format!("Pine parse error: {}", e))?;
-            map_pine_to_alphata(&pine).map_err(|e| format!("Pine map error: {}", e.message))
+            let ast =
+                map_pine_to_alphata(&pine).map_err(|e| format!("Pine map error: {}", e.message))?;
+            parser::enforce_ast_depth(ast)
         }
     }
 }

@@ -5,6 +5,11 @@ use crate::streaming::volatility::atr::StreamingAtr;
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingNatr {
     atr: StreamingAtr,
+    // Persisted for `Serialize`/`Deserialize`: the checkpoint layout is a
+    // tested contract (`core/tests/serde_roundtrip_tests.rs`), but no logic
+    // path reads this value. The derive is feature-gated, so a build without
+    // `serde` sees a write-only field and `dead_code` reports it.
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     period: usize,
     count: usize,
     last_value: Option<f64>,
@@ -28,7 +33,7 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingNatr {
         let atr_val = self.atr.next((bar.high(), bar.low(), bar.close()))?;
         let close = bar.close();
 
-        if close.abs() < 1e-15 {
+        if crate::utils::is_zero(close) {
             self.last_value = None;
             return None;
         }

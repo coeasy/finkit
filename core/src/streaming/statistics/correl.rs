@@ -70,7 +70,7 @@ impl StreamingCorrel {
             let var_y = self.sum_y2 - self.sum_y * self.sum_y / n;
 
             let denom = (var_x * var_y).sqrt();
-            if denom.abs() > 1e-15 {
+            if !crate::utils::is_zero(denom) {
                 Some((cov / denom).clamp(-1.0, 1.0))
             } else {
                 None

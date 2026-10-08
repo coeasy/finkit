@@ -81,7 +81,10 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingChop {
         let lowest = self.lowest.current().unwrap();
 
         let range = highest - lowest;
-        let result = if range.abs() > 1e-15 && self.sum_tr > 0.0 && self.log_period.abs() > 1e-15 {
+        let result = if !crate::utils::is_zero(range)
+            && self.sum_tr > 0.0
+            && !crate::utils::is_zero(self.log_period)
+        {
             Some(100.0 * (self.sum_tr / range).log10() / self.log_period)
         } else {
             None

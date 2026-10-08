@@ -133,7 +133,7 @@ macro_rules! impl_streaming_pattern {
 pattern_struct!(StreamingCdlDoji, 1, "CDL_DOJI", "Doji candlestick pattern");
 impl_streaming_pattern!(StreamingCdlDoji, 1, |w: &VecDeque<Candle>| {
     let c = &w[0];
-    if c.range() > 1e-15 && c.body() <= c.range() * 0.05 {
+    if c.range() > crate::utils::TA_IS_ZERO_BANDWIDTH && c.body() <= c.range() * 0.05 {
         100
     } else {
         0
@@ -150,7 +150,7 @@ pattern_struct!(
 impl_streaming_pattern!(StreamingCdlHammer, 1, |w: &VecDeque<Candle>| {
     let c = &w[0];
     let r = c.range();
-    if r < 1e-15 {
+    if r < crate::utils::TA_IS_ZERO_BANDWIDTH {
         return 0;
     }
     let body = c.body();
@@ -173,7 +173,7 @@ pattern_struct!(
 impl_streaming_pattern!(StreamingCdlInvertedHammer, 1, |w: &VecDeque<Candle>| {
     let c = &w[0];
     let r = c.range();
-    if r < 1e-15 {
+    if r < crate::utils::TA_IS_ZERO_BANDWIDTH {
         return 0;
     }
     let body = c.body();
@@ -332,7 +332,7 @@ pattern_struct!(
 impl_streaming_pattern!(StreamingCdlSpinningTop, 1, |w: &VecDeque<Candle>| {
     let c = &w[0];
     let r = c.range();
-    if r < 1e-15 {
+    if r < crate::utils::TA_IS_ZERO_BANDWIDTH {
         return 0;
     }
     let body = c.body();
@@ -355,7 +355,7 @@ pattern_struct!(
 impl_streaming_pattern!(StreamingCdlMarubozu, 1, |w: &VecDeque<Candle>| {
     let c = &w[0];
     let r = c.range();
-    if r < 1e-15 {
+    if r < crate::utils::TA_IS_ZERO_BANDWIDTH {
         return 0;
     }
     let body = c.body();
@@ -380,7 +380,7 @@ pattern_struct!(
 impl_streaming_pattern!(StreamingCdlHangingMan, 1, |w: &VecDeque<Candle>| {
     let c = &w[0];
     let r = c.range();
-    if r < 1e-15 {
+    if r < crate::utils::TA_IS_ZERO_BANDWIDTH {
         return 0;
     }
     let body = c.body();
@@ -403,7 +403,7 @@ pattern_struct!(
 impl_streaming_pattern!(StreamingCdlShootingStar, 1, |w: &VecDeque<Candle>| {
     let c = &w[0];
     let r = c.range();
-    if r < 1e-15 {
+    if r < crate::utils::TA_IS_ZERO_BANDWIDTH {
         return 0;
     }
     let body = c.body();
@@ -477,7 +477,8 @@ pattern_struct!(StreamingCdlDojiStar, 2, "CDL_DOJISTAR", "Doji Star pattern");
 impl_streaming_pattern!(StreamingCdlDojiStar, 2, |w: &VecDeque<Candle>| {
     let prev = &w[0];
     let curr = &w[1];
-    let is_doji = curr.range() > 1e-15 && curr.body() <= curr.range() * 0.05;
+    let is_doji =
+        curr.range() > crate::utils::TA_IS_ZERO_BANDWIDTH && curr.body() <= curr.range() * 0.05;
     if !is_doji {
         return 0;
     }
@@ -499,7 +500,8 @@ pattern_struct!(
 );
 impl_streaming_pattern!(StreamingCdlAbandonedBaby, 3, |w: &VecDeque<Candle>| {
     let (first, second, third) = (&w[0], &w[1], &w[2]);
-    let is_doji = second.range() > 1e-15 && second.body() <= second.range() * 0.05;
+    let is_doji = second.range() > crate::utils::TA_IS_ZERO_BANDWIDTH
+        && second.body() <= second.range() * 0.05;
     if !is_doji {
         return 0;
     }
@@ -527,8 +529,10 @@ impl_streaming_pattern!(StreamingCdlAbandonedBaby, 3, |w: &VecDeque<Candle>| {
 pattern_struct!(StreamingCdlTristar, 3, "CDL_TRISTAR", "Tri-Star pattern");
 impl_streaming_pattern!(StreamingCdlTristar, 3, |w: &VecDeque<Candle>| {
     let (a, b, c) = (&w[0], &w[1], &w[2]);
-    let is_doji =
-        |candle: &Candle| candle.range() > 1e-15 && candle.body() <= candle.range() * 0.05;
+    let is_doji = |candle: &Candle| {
+        candle.range() > crate::utils::TA_IS_ZERO_BANDWIDTH
+            && candle.body() <= candle.range() * 0.05
+    };
     if !is_doji(a) || !is_doji(b) || !is_doji(c) {
         return 0;
     }
@@ -549,8 +553,10 @@ pattern_struct!(StreamingCdlKicking, 2, "CDL_KICKING", "Kicking pattern");
 impl_streaming_pattern!(StreamingCdlKicking, 2, |w: &VecDeque<Candle>| {
     let prev = &w[0];
     let curr = &w[1];
-    let prev_maru = prev.body() >= prev.range() * 0.95 && prev.range() > 1e-15;
-    let curr_maru = curr.body() >= curr.range() * 0.95 && curr.range() > 1e-15;
+    let prev_maru =
+        prev.body() >= prev.range() * 0.95 && prev.range() > crate::utils::TA_IS_ZERO_BANDWIDTH;
+    let curr_maru =
+        curr.body() >= curr.range() * 0.95 && curr.range() > crate::utils::TA_IS_ZERO_BANDWIDTH;
     if !prev_maru || !curr_maru {
         return 0;
     }

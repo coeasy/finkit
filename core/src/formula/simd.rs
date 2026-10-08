@@ -135,7 +135,7 @@ unsafe fn div_avx2(a: &[f64], b: &[f64], result: &mut [f64]) {
     let len = a.len().min(b.len()).min(result.len());
     let chunks = len / 4;
     let sign_mask = _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MIN));
-    let eps = _mm256_set1_pd(1e-15);
+    let eps = _mm256_set1_pd(crate::utils::NUMERIC_EPSILON);
     let nan = _mm256_set1_pd(f64::NAN);
     for i in 0..chunks {
         let off = i * 4;
@@ -148,7 +148,7 @@ unsafe fn div_avx2(a: &[f64], b: &[f64], result: &mut [f64]) {
         _mm256_storeu_pd(result.as_mut_ptr().add(off), blended);
     }
     for i in (chunks * 4)..len {
-        result[i] = if b[i].abs() < 1e-15 {
+        result[i] = if b[i].abs() < crate::utils::NUMERIC_EPSILON {
             f64::NAN
         } else {
             a[i] / b[i]
@@ -478,7 +478,7 @@ unsafe fn div_avx512(a: &[f64], b: &[f64], result: &mut [f64]) {
     use core::arch::x86_64::*;
     let len = a.len().min(b.len()).min(result.len());
     let chunks = len / 8;
-    let eps = _mm512_set1_pd(1e-15);
+    let eps = _mm512_set1_pd(crate::utils::NUMERIC_EPSILON);
     let nan = _mm512_set1_pd(f64::NAN);
     for i in 0..chunks {
         let off = i * 8;
@@ -491,7 +491,7 @@ unsafe fn div_avx512(a: &[f64], b: &[f64], result: &mut [f64]) {
         _mm512_storeu_pd(result.as_mut_ptr().add(off), blended);
     }
     for i in (chunks * 8)..len {
-        result[i] = if b[i].abs() < 1e-15 {
+        result[i] = if b[i].abs() < crate::utils::NUMERIC_EPSILON {
             f64::NAN
         } else {
             a[i] / b[i]
@@ -876,7 +876,7 @@ unsafe fn div_neon(a: &[f64], b: &[f64], result: &mut [f64]) {
     use core::arch::aarch64::*;
     let len = a.len().min(b.len()).min(result.len());
     let chunks = len / 2;
-    let eps = vdupq_n_f64(1e-15);
+    let eps = vdupq_n_f64(crate::utils::NUMERIC_EPSILON);
     for i in 0..chunks {
         let off = i * 2;
         let va = vld1q_f64(a.as_ptr().add(off));
@@ -889,7 +889,7 @@ unsafe fn div_neon(a: &[f64], b: &[f64], result: &mut [f64]) {
         vst1q_f64(result.as_mut_ptr().add(off), blended);
     }
     for i in (chunks * 2)..len {
-        result[i] = if b[i].abs() < 1e-15 {
+        result[i] = if b[i].abs() < crate::utils::NUMERIC_EPSILON {
             f64::NAN
         } else {
             a[i] / b[i]
@@ -1079,7 +1079,7 @@ unsafe fn mod_neon(a: &[f64], b: &[f64], result: &mut [f64]) {
     use core::arch::aarch64::*;
     let len = a.len().min(b.len()).min(result.len());
     let chunks = len / 2;
-    let eps = vdupq_n_f64(1e-15);
+    let eps = vdupq_n_f64(crate::utils::NUMERIC_EPSILON);
     let nan_vec = vdupq_n_f64(f64::NAN);
     for i in 0..chunks {
         let off = i * 2;
@@ -1255,29 +1255,29 @@ fn div_fallback(a: &[f64], b: &[f64], result: &mut [f64]) {
     let len = a.len().min(b.len()).min(result.len());
     let chunks = len / 4;
     for i in (0..chunks * 4).step_by(4) {
-        result[i] = if b[i].abs() < 1e-15 {
+        result[i] = if b[i].abs() < crate::utils::NUMERIC_EPSILON {
             f64::NAN
         } else {
             a[i] / b[i]
         };
-        result[i + 1] = if b[i + 1].abs() < 1e-15 {
+        result[i + 1] = if b[i + 1].abs() < crate::utils::NUMERIC_EPSILON {
             f64::NAN
         } else {
             a[i + 1] / b[i + 1]
         };
-        result[i + 2] = if b[i + 2].abs() < 1e-15 {
+        result[i + 2] = if b[i + 2].abs() < crate::utils::NUMERIC_EPSILON {
             f64::NAN
         } else {
             a[i + 2] / b[i + 2]
         };
-        result[i + 3] = if b[i + 3].abs() < 1e-15 {
+        result[i + 3] = if b[i + 3].abs() < crate::utils::NUMERIC_EPSILON {
             f64::NAN
         } else {
             a[i + 3] / b[i + 3]
         };
     }
     for i in (chunks * 4)..len {
-        result[i] = if b[i].abs() < 1e-15 {
+        result[i] = if b[i].abs() < crate::utils::NUMERIC_EPSILON {
             f64::NAN
         } else {
             a[i] / b[i]
@@ -1367,7 +1367,7 @@ unsafe fn mod_avx2(a: &[f64], b: &[f64], result: &mut [f64]) {
     let len = a.len().min(b.len()).min(result.len());
     let chunks = len / 4;
     let sign_mask = _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MIN));
-    let eps = _mm256_set1_pd(1e-15);
+    let eps = _mm256_set1_pd(crate::utils::NUMERIC_EPSILON);
     let nan = _mm256_set1_pd(f64::NAN);
     for i in 0..chunks {
         let off = i * 4;
@@ -2295,7 +2295,7 @@ impl SimdOps {
         let mean = sum * inv_w;
         let var = (sum_sq - sum * mean) / (period as f64 - 1.0);
         let std = var.max(0.0).sqrt();
-        result[period - 1] = if std.abs() < 1e-15 {
+        result[period - 1] = if std.abs() < crate::utils::NUMERIC_EPSILON {
             0.0
         } else {
             (data[period - 1] - mean) / std
@@ -2309,7 +2309,7 @@ impl SimdOps {
             let m = sum * inv_w;
             let var = (sum_sq - sum * m) / (period as f64 - 1.0);
             let std = var.max(0.0).sqrt();
-            result[i] = if std.abs() < 1e-15 {
+            result[i] = if std.abs() < crate::utils::NUMERIC_EPSILON {
                 0.0
             } else {
                 (data[i] - m) / std
@@ -2357,7 +2357,7 @@ impl SimdOps {
         let var_y = (sum_y2 - sum_y * mean_y) * inv_w_minus_1;
 
         let denom = (var_x * var_y).sqrt();
-        result[period - 1] = if denom.abs() < 1e-15 {
+        result[period - 1] = if denom.abs() < crate::utils::NUMERIC_EPSILON {
             f64::NAN
         } else {
             cov / denom
@@ -2382,7 +2382,7 @@ impl SimdOps {
             let var_y = (sum_y2 - sum_y * mean_y) * inv_w_minus_1;
 
             let denom = (var_x.max(0.0) * var_y.max(0.0)).sqrt();
-            result[i] = if denom.abs() < 1e-15 {
+            result[i] = if denom.abs() < crate::utils::NUMERIC_EPSILON {
                 f64::NAN
             } else {
                 cov / denom
@@ -2427,7 +2427,7 @@ impl SimdOps {
         let cov = (sum_ab - sum_a * mean_b) * inv_w_minus_1;
         let var_b = (sum_b2 - sum_b * mean_b) * inv_w_minus_1;
 
-        result[period - 1] = if var_b.abs() < 1e-15 {
+        result[period - 1] = if var_b.abs() < crate::utils::NUMERIC_EPSILON {
             f64::NAN
         } else {
             cov / var_b
@@ -2449,7 +2449,7 @@ impl SimdOps {
             let cov = (sum_ab - sum_a * mean_b) * inv_w_minus_1;
             let var_b = (sum_b2 - sum_b * mean_b) * inv_w_minus_1;
 
-            result[i] = if var_b.abs() < 1e-15 {
+            result[i] = if var_b.abs() < crate::utils::NUMERIC_EPSILON {
                 f64::NAN
             } else {
                 cov / var_b.max(0.0)
@@ -2674,7 +2674,7 @@ impl SimdOps {
                 })
                 .sum();
 
-            result[i] = if ss_tot.abs() < 1e-15 {
+            result[i] = if ss_tot.abs() < crate::utils::NUMERIC_EPSILON {
                 1.0
             } else {
                 1.0 - ss_res / ss_tot

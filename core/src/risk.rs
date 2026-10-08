@@ -105,7 +105,7 @@ pub fn max_drawdown(equity: &[f64]) -> (f64, usize, usize) {
             peak = v;
             peak_idx = i;
         }
-        if peak > 1e-15 {
+        if peak > crate::utils::NUMERIC_EPSILON {
             let dd = (peak - v) / peak;
             if dd > max_dd {
                 max_dd = dd;
@@ -138,7 +138,7 @@ pub fn sharpe_ratio(returns: &[f64], risk_free: f64, annualize: usize) -> f64 {
     let mean = returns.iter().sum::<f64>() / n;
     let var: f64 = returns.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / (n - 1.0);
     let std = var.sqrt();
-    if std < 1e-15 {
+    if std < crate::utils::NUMERIC_EPSILON {
         return 0.0;
     }
     (mean - risk_free) / std * (annualize as f64).sqrt()
@@ -167,7 +167,7 @@ pub fn sortino_ratio(returns: &[f64], risk_free: f64, annualize: usize) -> f64 {
         .sum::<f64>()
         / n;
     let dstd = downside_var.sqrt();
-    if dstd < 1e-15 {
+    if dstd < crate::utils::NUMERIC_EPSILON {
         return 0.0;
     }
     (mean - risk_free) / dstd * (annualize as f64).sqrt()
@@ -192,7 +192,7 @@ pub fn calmar_ratio(returns: &[f64], annualize: usize) -> f64 {
         equity[i] = equity[i - 1] * (1.0 + returns[i]);
     }
     let (mdd, _, _) = max_drawdown(&equity);
-    if mdd < 1e-15 {
+    if mdd < crate::utils::NUMERIC_EPSILON {
         0.0
     } else {
         annual_return / mdd
@@ -237,7 +237,10 @@ fn normal_quantile(p: f64) -> f64 {
     const P_LOW: f64 = 0.02425;
     const P_HIGH: f64 = 1.0 - P_LOW;
 
-    let p = p.clamp(1e-15, 1.0 - 1e-15);
+    let p = p.clamp(
+        crate::utils::NUMERIC_EPSILON,
+        1.0 - crate::utils::NUMERIC_EPSILON,
+    );
 
     if p < P_LOW {
         let q = (-2.0 * p.ln()).sqrt();

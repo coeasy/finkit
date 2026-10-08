@@ -87,7 +87,7 @@ impl StreamingIndicator<(f64, f64), f64> for StreamingChaikinVol {
         let prev_idx = self.ema_ring_idx; // next slot = oldest
         let prev = self.ema_ring[prev_idx % (self.roc_period + 1)];
 
-        let cv = if prev.abs() > 1e-15 {
+        let cv = if !crate::utils::is_zero(prev) {
             ((self.ema_val - prev) / prev) * 100.0
         } else {
             0.0

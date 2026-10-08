@@ -1,4 +1,5 @@
 use crate::impl_standard_methods;
+use crate::streaming::forming_bar::FormingBar;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 #[derive(Clone)]
@@ -15,9 +16,11 @@ pub struct StreamingRsi {
     prev_input: f64,
     count: usize,
     last_value: Option<f64>,
+    /// Forming-bar bookkeeping: which bar is in flight and how to undo its
+    /// fold. See [`FormingBar`] for why this is not a hand-rolled pair of
+    /// fields.
     #[cfg_attr(feature = "serde", serde(skip))]
-    snapshot: Option<SnapshotState>,
-    last_open_time: i64,
+    bar: FormingBar<SnapshotState>,
 }
 
 #[derive(Clone, Copy)]
@@ -29,7 +32,6 @@ struct SnapshotState {
     prev_input: f64,
     count: usize,
     last_value: Option<f64>,
-    last_open_time: i64,
 }
 
 impl StreamingRsi {
@@ -46,26 +48,22 @@ impl StreamingRsi {
             prev_input: f64::NAN,
             count: 0,
             last_value: None,
-            snapshot: None,
-            last_open_time: 0,
+            bar: FormingBar::new(),
         }
     }
 
     pub fn compute_bar(&mut self, bar: &dyn Ohlcv) -> Option<f64> {
         let t = bar.open_time();
-        if t != 0 && t == self.last_open_time {
-            if let Some(snap) = self.snapshot.take() {
-                self.avg_gain = snap.avg_gain;
-                self.avg_loss = snap.avg_loss;
-                self.sum_gain = snap.sum_gain;
-                self.sum_loss = snap.sum_loss;
-                self.prev_input = snap.prev_input;
-                self.count = snap.count;
-                self.last_value = snap.last_value;
-                self.last_open_time = snap.last_open_time;
-            }
+        if let Some(snap) = self.bar.take_rollback(t) {
+            self.avg_gain = snap.avg_gain;
+            self.avg_loss = snap.avg_loss;
+            self.sum_gain = snap.sum_gain;
+            self.sum_loss = snap.sum_loss;
+            self.prev_input = snap.prev_input;
+            self.count = snap.count;
+            self.last_value = snap.last_value;
         }
-        self.snapshot = Some(SnapshotState {
+        let snap = SnapshotState {
             avg_gain: self.avg_gain,
             avg_loss: self.avg_loss,
             sum_gain: self.sum_gain,
@@ -73,9 +71,8 @@ impl StreamingRsi {
             prev_input: self.prev_input,
             count: self.count,
             last_value: self.last_value,
-            last_open_time: self.last_open_time,
-        });
-        self.last_open_time = t;
+        };
+        self.bar.begin(t, snap);
         self.next(bar.close())
     }
 }
@@ -117,7 +114,7 @@ impl StreamingIndicator for StreamingRsi {
                 self.avg_loss = self.avg_loss * self.decay + loss * self.inv_period;
             }
 
-            let result = if self.avg_loss.abs() < 1e-15 {
+            let result = if crate::utils::is_zero(self.avg_loss) {
                 Some(100.0)
             } else {
                 let rs = self.avg_gain / self.avg_loss;
@@ -136,8 +133,7 @@ impl StreamingIndicator for StreamingRsi {
         self.prev_input = f64::NAN;
         self.count = 0;
         self.last_value = None;
-        self.snapshot = None;
-        self.last_open_time = 0;
+        self.bar.clear();
     }
 
     fn is_ready(&self) -> bool {

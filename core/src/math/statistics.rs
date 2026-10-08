@@ -182,7 +182,7 @@ pub fn correlation(x: &[f64], y: &[f64]) -> Result<f64> {
     // non-negative and `(var_x * var_y).sqrt()` cannot produce a `NaN`.
     let (cov, var_x, var_y) = crate::math::centred_moments(x, y);
 
-    if var_x < 1e-15 || var_y < 1e-15 {
+    if var_x < crate::utils::NUMERIC_EPSILON || var_y < crate::utils::NUMERIC_EPSILON {
         return Err(TaError::ComputationError {
             message: "Standard deviation is zero for one or both series".to_string(),
         });
@@ -329,7 +329,7 @@ pub fn skewness(data: &[f64]) -> Result<f64> {
     let m = mean(data)?;
     let s = std_dev(data)?;
 
-    if s.abs() < 1e-15 {
+    if s.abs() < crate::utils::NUMERIC_EPSILON {
         return Err(TaError::ComputationError {
             message: "Standard deviation is zero".to_string(),
         });
@@ -369,7 +369,7 @@ pub fn kurtosis(data: &[f64]) -> Result<f64> {
     let m = mean(data)?;
     let s = std_dev(data)?;
 
-    if s.abs() < 1e-15 {
+    if s.abs() < crate::utils::NUMERIC_EPSILON {
         return Err(TaError::ComputationError {
             message: "Standard deviation is zero".to_string(),
         });
@@ -1349,7 +1349,7 @@ pub fn spearman_rank(x: &[f64], y: &[f64]) -> Result<f64> {
     }
 
     let denom = (var_x * var_y).sqrt();
-    if denom < 1e-15 {
+    if denom < crate::utils::NUMERIC_EPSILON {
         return Ok(0.0);
     }
     Ok(cov / denom)

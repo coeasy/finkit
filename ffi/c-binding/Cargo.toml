@@ -13,7 +13,7 @@ crate-type = ["cdylib", "staticlib"]
 path = "src/root.rs"
 
 [dependencies]
-finkit = { path = "../../core" }
+finkit = { path = "../../core", default-features = false, features = ["std", "serde", "formula", "indicators-all"] }
 finkit-ffi-common = { path = "../ffi-common" }
 libc = "0.2"
 serde_json = { workspace = true }

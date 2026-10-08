@@ -11,7 +11,7 @@
   ],
   "runtime_formula_surface": 452,
   "provenance_sources": {
-    "repo:functions_legacy": "core/src/formula/functions_legacy.rs",
+    "repo:functions_legacy": "core/src/formula/functions_legacy/mod.rs",
     "repo:functions_talib_081": "core/src/formula/functions_talib_081.rs",
     "repo:compat": "core/src/formula/compat.rs",
     "repo:analysis": "core/src/formula/analysis.rs",

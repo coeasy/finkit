@@ -25,7 +25,7 @@ pub fn rolling_minmax(data: &[f64], window: usize) -> Array1<f64> {
 
     crate::math::statistics::rolling_minmax_visit(data, data, window, |i, highest, lowest| {
         let range = highest - lowest;
-        out[i] = if range > 1e-15 {
+        out[i] = if range > crate::utils::NUMERIC_EPSILON {
             (data[i] - lowest) / range
         } else {
             0.5
@@ -57,7 +57,7 @@ pub fn robust_scaler(data: &[f64], window: usize) -> Array1<f64> {
         let q1 = sorted[n / 4];
         let q3 = sorted[3 * n / 4];
         let iqr = q3 - q1;
-        if iqr > 1e-15 {
+        if iqr > crate::utils::NUMERIC_EPSILON {
             out[i] = (data[i] - median) / iqr;
         } else {
             out[i] = 0.0;

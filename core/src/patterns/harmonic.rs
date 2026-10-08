@@ -110,16 +110,6 @@ fn find_pivots(high: &[f64], low: &[f64], start: usize, end: usize, order: usize
     pivots
 }
 
-/// Check whether `actual` is within `tolerance` of `expected`.
-#[inline]
-#[allow(dead_code)]
-fn fib_ratio_match(actual: f64, expected: f64, tolerance: f64) -> bool {
-    if expected.abs() < 1e-9 {
-        return actual.abs() < 1e-9;
-    }
-    (actual - expected).abs() / expected.abs() <= tolerance
-}
-
 /// Check whether `actual` is in the `[lo, hi]` range (Fibonacci tolerance).
 #[inline]
 fn fib_range_match(actual: f64, lo: f64, hi: f64, tolerance: f64) -> bool {
@@ -410,6 +400,14 @@ fn validate_ohlcv_inputs(high: &[f64], low: &[f64], pivot_tolerance: f64) -> Res
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Check whether `actual` is within `tolerance` of `expected`.
+    fn fib_ratio_match(actual: f64, expected: f64, tolerance: f64) -> bool {
+        if expected.abs() < 1e-9 {
+            return actual.abs() < 1e-9;
+        }
+        (actual - expected).abs() / expected.abs() <= tolerance
+    }
 
     /// Build a synthetic 5-pivot harmonic series.
     /// `pattern`: choose "bullish" or "bearish".

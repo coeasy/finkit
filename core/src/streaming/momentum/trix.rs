@@ -45,7 +45,7 @@ impl StreamingIndicator for StreamingTrix {
 
         let result = if self.prev_triple_ema.is_nan() {
             None
-        } else if self.prev_triple_ema.abs() > 1e-15 {
+        } else if !crate::utils::is_zero(self.prev_triple_ema) {
             Some((e3 - self.prev_triple_ema) / self.prev_triple_ema * 100.0)
         } else {
             Some(0.0)

@@ -297,6 +297,9 @@ impl AdxState {
 
 #[inline]
 fn true_range(high: f64, low: f64, previous_close: f64) -> f64 {
+    // `f64::max`-style: NaN in the OHLC inputs is absorbed (TA-Lib `fmax`
+    // semantics). This is deliberately the same shape as `utils::true_range`;
+    // see the NaN-semantics contract there before touching it.
     (high - low)
         .max((high - previous_close).abs())
         .max((low - previous_close).abs())
@@ -310,7 +313,13 @@ fn directional_index(
     period: f64,
 ) -> DirectionalIndex {
     let atr = smoothed_tr / period;
-    if smoothed_tr.abs() <= 1e-15 {
+    // Zero-denominator guard: the TA-Lib `TA_IS_ZERO` predicate (1e-8 band,
+    // `ta_utility.h`) via the one policy point `utils::is_zero`. Fallback
+    // contract (recorded, V5 R1-2): with a zero smoothed TR the DI pair and
+    // DX are defined as `0.0` — no directional movement, no directional
+    // index. Previously a hand-picked `1e-15` band divided denominators
+    // TA-Lib would have judged zero, diverging in `(1e-15, 1e-8)`.
+    if crate::utils::is_zero(smoothed_tr) {
         return DirectionalIndex {
             atr,
             plus_di: 0.0,
@@ -321,7 +330,8 @@ fn directional_index(
     let plus_di = 100.0 * smoothed_plus_dm / smoothed_tr;
     let minus_di = 100.0 * smoothed_minus_dm / smoothed_tr;
     let denominator = plus_di + minus_di;
-    let dx = if denominator.abs() <= 1e-15 {
+    // Same predicate, same fallback: zero DI sum → DX `0.0` (TA-Lib).
+    let dx = if crate::utils::is_zero(denominator) {
         0.0
     } else {
         100.0 * (plus_di - minus_di).abs() / denominator

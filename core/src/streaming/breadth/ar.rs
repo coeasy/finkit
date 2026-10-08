@@ -52,7 +52,7 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingAr {
         }
 
         let result = if self.count >= self.period {
-            if self.sum_ol.abs() <= 1e-15 {
+            if crate::utils::is_zero(self.sum_ol) {
                 None
             } else {
                 Some(self.sum_ho / self.sum_ol * 100.0)

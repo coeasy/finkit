@@ -96,6 +96,172 @@ pub enum AstNode {
     },
 }
 
+/// Replacement leaf used by the iterative teardown below: cheap to construct,
+/// carries no children, and never appears in a live AST afterwards.
+fn ast_placeholder() -> AstNode {
+    AstNode::Number(f64::NAN)
+}
+
+fn take_boxed(node: &mut Box<AstNode>) -> AstNode {
+    std::mem::replace(node.as_mut(), ast_placeholder())
+}
+
+impl AstNode {
+    /// Move every child subtree out of `self`, leaving a placeholder leaf in
+    /// each vacated slot.
+    ///
+    /// This is the machinery behind [`AstNode::dismantle_ast`]: children are
+    /// harvested onto an explicit worklist instead of being dropped through
+    /// recursive `Box` teardown.
+    fn take_children(&mut self) -> Vec<AstNode> {
+        match self {
+            AstNode::BinaryOp { left, right, .. }
+            | AstNode::IndexAccess {
+                array: left,
+                index: right,
+            } => vec![take_boxed(left), take_boxed(right)],
+            AstNode::UnaryOp { expr, .. }
+            | AstNode::Assignment { expr, .. }
+            | AstNode::CompoundAssignment { expr, .. }
+            | AstNode::Output { expr, .. } => vec![take_boxed(expr)],
+            AstNode::FunctionCall { args, .. } | AstNode::DrawGeneric { args, .. } => {
+                std::mem::take(args)
+            }
+            AstNode::Statements(statements) => std::mem::take(statements),
+            AstNode::DrawText { cond, price, .. } => {
+                vec![take_boxed(cond), take_boxed(price)]
+            }
+            AstNode::DrawIcon {
+                cond, price, icon, ..
+            } => {
+                vec![take_boxed(cond), take_boxed(price), take_boxed(icon)]
+            }
+            AstNode::StickLine {
+                cond,
+                price1,
+                price2,
+                ..
+            } => vec![take_boxed(cond), take_boxed(price1), take_boxed(price2)],
+            AstNode::IfThenElse {
+                cond,
+                then_branch,
+                else_branch,
+            } => vec![
+                take_boxed(cond),
+                take_boxed(then_branch),
+                take_boxed(else_branch),
+            ],
+            AstNode::ForLoop {
+                start, end, body, ..
+            } => {
+                let mut children = vec![take_boxed(start), take_boxed(end)];
+                children.extend(std::mem::take(body));
+                children
+            }
+            AstNode::WhileLoop { cond, body } => {
+                let mut children = vec![take_boxed(cond)];
+                children.extend(std::mem::take(body));
+                children
+            }
+            AstNode::Number(_)
+            | AstNode::StringLit(_)
+            | AstNode::Variable(_)
+            | AstNode::ParamDecl { .. } => Vec::new(),
+        }
+    }
+
+    /// Depth of the subtree rooted here, measured with an explicit stack.
+    ///
+    /// Deliberately iterative: the trees this guards against are exactly the
+    /// ones a recursive visitor would die on. See `parser::MAX_AST_DEPTH`.
+    pub(crate) fn ast_depth(&self) -> usize {
+        let mut max = 0usize;
+        let mut stack: Vec<(&AstNode, usize)> = vec![(self, 1)];
+        while let Some((node, depth)) = stack.pop() {
+            max = max.max(depth);
+            let child_depth = depth + 1;
+            match node {
+                AstNode::BinaryOp { left, right, .. }
+                | AstNode::IndexAccess {
+                    array: left,
+                    index: right,
+                } => {
+                    stack.push((left, child_depth));
+                    stack.push((right, child_depth));
+                }
+                AstNode::UnaryOp { expr, .. }
+                | AstNode::Assignment { expr, .. }
+                | AstNode::CompoundAssignment { expr, .. }
+                | AstNode::Output { expr, .. } => stack.push((expr, child_depth)),
+                AstNode::FunctionCall { args, .. } | AstNode::DrawGeneric { args, .. } => {
+                    stack.extend(args.iter().map(|arg| (arg, child_depth)));
+                }
+                AstNode::Statements(statements) => {
+                    stack.extend(statements.iter().map(|s| (s, child_depth)));
+                }
+                AstNode::DrawText { cond, price, .. } | AstNode::DrawIcon { cond, price, .. } => {
+                    stack.push((cond, child_depth));
+                    stack.push((price, child_depth));
+                }
+                AstNode::StickLine {
+                    cond,
+                    price1,
+                    price2,
+                    ..
+                } => {
+                    stack.push((cond, child_depth));
+                    stack.push((price1, child_depth));
+                    stack.push((price2, child_depth));
+                }
+                AstNode::IfThenElse {
+                    cond,
+                    then_branch,
+                    else_branch,
+                } => {
+                    stack.push((cond, child_depth));
+                    stack.push((then_branch, child_depth));
+                    stack.push((else_branch, child_depth));
+                }
+                AstNode::ForLoop {
+                    start, end, body, ..
+                } => {
+                    stack.push((start, child_depth));
+                    stack.push((end, child_depth));
+                    stack.extend(body.iter().map(|s| (s, child_depth)));
+                }
+                AstNode::WhileLoop { cond, body } => {
+                    stack.push((cond, child_depth));
+                    stack.extend(body.iter().map(|s| (s, child_depth)));
+                }
+                AstNode::Number(_)
+                | AstNode::StringLit(_)
+                | AstNode::Variable(_)
+                | AstNode::ParamDecl { .. } => {}
+            }
+        }
+        max
+    }
+
+    /// Tear this tree down with an explicit stack instead of recursive
+    /// `Box`-drop glue.
+    ///
+    /// The derived drop of a `Box<AstNode>` tree recurses once per level: a
+    /// deeply nested expression — a flat `1+1+…` chain the parser builds
+    /// iteratively, or an AST assembled programmatically — would overflow the
+    /// stack *while being dropped*, even after a check had already rejected
+    /// it. A stack overflow is an abort, which no FFI `catch_unwind` can
+    /// catch. The parser calls this on every tree it rejects for excessive
+    /// depth, so the rejected input never reaches recursive teardown.
+    pub(crate) fn dismantle_ast(self) {
+        let mut stack = vec![self];
+        while let Some(mut node) = stack.pop() {
+            stack.extend(node.take_children());
+            // `node` now holds only placeholder leaves; its own (recursive)
+            // drop is constant-depth.
+        }
+    }
+}
+
 impl AstNode {
     /// Whether this statement contributes the formula's numeric result.
     ///

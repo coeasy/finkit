@@ -158,7 +158,7 @@ pub fn natr_into(
     let mut previous_atr = tr_sum / period as f64;
 
     let seed_close = close[period];
-    output[period] = if seed_close.abs() > 1e-15 {
+    output[period] = if !crate::utils::is_zero(seed_close) {
         previous_atr / seed_close * 100.0
     } else {
         0.0
@@ -169,7 +169,7 @@ pub fn natr_into(
         let true_range = true_range_at(high, low, close, index);
         previous_atr += (true_range - previous_atr) * inverse_period;
         let current_close = close[index];
-        output[index] = if current_close.abs() > 1e-15 {
+        output[index] = if !crate::utils::is_zero(current_close) {
             previous_atr / current_close * 100.0
         } else {
             0.0

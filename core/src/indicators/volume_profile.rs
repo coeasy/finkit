@@ -117,7 +117,7 @@ pub fn market_profile_tpo(
         min_price = min_price.min(low[i]);
         max_price = max_price.max(high[i]);
     }
-    if (max_price - min_price).abs() < 1e-15 {
+    if (max_price - min_price).abs() < crate::utils::TA_IS_ZERO_BANDWIDTH {
         max_price = min_price + 1.0;
     }
     let price_range = max_price - min_price;
@@ -264,7 +264,7 @@ pub fn vwap_anchored_session(
         cum_tp_vol += typical_price * volume[i];
         cum_volume += volume[i];
 
-        if cum_volume.abs() > 1e-15 {
+        if !crate::utils::is_zero(cum_volume) {
             output[i] = cum_tp_vol / cum_volume;
         }
     }
@@ -341,7 +341,7 @@ pub fn volume_nodes(
         min_price = min_price.min(low[i]);
         max_price = max_price.max(high[i]);
     }
-    if (max_price - min_price).abs() < 1e-15 {
+    if (max_price - min_price).abs() < crate::utils::TA_IS_ZERO_BANDWIDTH {
         max_price = min_price + 1.0;
     }
     let price_range = max_price - min_price;

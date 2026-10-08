@@ -38,7 +38,7 @@ pub fn vix_like_volatility(
     for i in period..len {
         let mut log_returns = Vec::with_capacity(period);
         for j in (i + 1 - period)..=i {
-            if close[j - 1].abs() > 1e-15 && close[j] > 0.0 {
+            if !crate::utils::is_zero(close[j - 1]) && close[j] > 0.0 {
                 log_returns.push((close[j] / close[j - 1]).ln());
             }
         }
@@ -136,7 +136,7 @@ pub fn put_call_ratio(put_volume: &[f64], call_volume: &[f64]) -> Result<Array1<
     let mut output = init_output(len);
 
     for i in 0..len {
-        if call_volume[i].abs() > 1e-15 {
+        if !crate::utils::is_zero(call_volume[i]) {
             output[i] = put_volume[i] / call_volume[i];
         }
     }
@@ -184,7 +184,7 @@ pub fn volatility_index(
         let mut count = 0;
 
         for j in (i + 1 - period)..=i {
-            if low[j].abs() > 1e-15 && high[j] > 0.0 && high[j] > low[j] {
+            if !crate::utils::is_zero(low[j]) && high[j] > 0.0 && high[j] > low[j] {
                 let hl_ratio = (high[j] / low[j]).ln();
                 sum_sq += hl_ratio.powi(2);
                 count += 1;

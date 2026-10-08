@@ -37,20 +37,20 @@
     },
     "python": {
       "surfaces": [
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn operation_catalog_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn factor_catalog_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn operation_execute_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn composite_execute_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn factor_execute_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn factor_cross_sectional_execute_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn composite_stream_execute_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "fn factor_stream_execute_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_eval_contract_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_eval_temporal_contract_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_eval_panel_contract_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_eval_cross_sectional_contract_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_compatibility_report_json"},
-        {"path": "ffi/python-binding/src/lib.rs", "marker": "pub fn formula_stream_execute_json"}
+        {"path": "ffi/python-binding/src/json_api.rs", "marker": "fn operation_catalog_json"},
+        {"path": "ffi/python-binding/src/json_api.rs", "marker": "fn factor_catalog_json"},
+        {"path": "ffi/python-binding/src/json_api.rs", "marker": "fn operation_execute_json"},
+        {"path": "ffi/python-binding/src/json_api.rs", "marker": "fn composite_execute_json"},
+        {"path": "ffi/python-binding/src/json_api.rs", "marker": "fn factor_execute_json"},
+        {"path": "ffi/python-binding/src/json_api.rs", "marker": "fn factor_cross_sectional_execute_json"},
+        {"path": "ffi/python-binding/src/json_api.rs", "marker": "fn composite_stream_execute_json"},
+        {"path": "ffi/python-binding/src/json_api.rs", "marker": "fn factor_stream_execute_json"},
+        {"path": "ffi/python-binding/src/formula_contract.rs", "marker": "pub fn formula_eval_contract_json"},
+        {"path": "ffi/python-binding/src/formula_contract.rs", "marker": "pub fn formula_eval_temporal_contract_json"},
+        {"path": "ffi/python-binding/src/formula_contract.rs", "marker": "pub fn formula_eval_panel_contract_json"},
+        {"path": "ffi/python-binding/src/formula_contract.rs", "marker": "pub fn formula_eval_cross_sectional_contract_json"},
+        {"path": "ffi/python-binding/src/formula_contract.rs", "marker": "pub fn formula_compatibility_report_json"},
+        {"path": "ffi/python-binding/src/formula_contract.rs", "marker": "pub fn formula_stream_execute_json"}
       ]
     },
     "go": {

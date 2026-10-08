@@ -9,6 +9,7 @@
 //! maintained incrementally with only the rolling mean.
 
 use crate::impl_standard_methods;
+use crate::streaming::forming_bar::FormingBar;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 #[derive(Clone)]
@@ -22,9 +23,9 @@ pub struct StreamingAvgdev {
     sum: f64,
     count: usize,
     last_value: Option<f64>,
+    /// Forming-bar bookkeeping; see [`FormingBar`].
     #[cfg_attr(feature = "serde", serde(skip))]
-    snapshot: Option<SnapshotState>,
-    last_open_time: i64,
+    bar: FormingBar<SnapshotState>,
 }
 
 #[derive(Clone, Copy)]
@@ -34,7 +35,6 @@ struct SnapshotState {
     sum: f64,
     count: usize,
     last_value: Option<f64>,
-    last_open_time: i64,
     head_val: f64,
 }
 
@@ -50,34 +50,29 @@ impl StreamingAvgdev {
             sum: 0.0,
             count: 0,
             last_value: None,
-            snapshot: None,
-            last_open_time: 0,
+            bar: FormingBar::new(),
         }
     }
 
     pub fn compute_bar(&mut self, bar: &dyn Ohlcv) -> Option<f64> {
         let t = bar.open_time();
-        if t != 0 && t == self.last_open_time {
-            if let Some(snap) = self.snapshot.take() {
-                self.head = snap.head;
-                self.len = snap.len;
-                self.sum = snap.sum;
-                self.count = snap.count;
-                self.last_value = snap.last_value;
-                self.last_open_time = snap.last_open_time;
-                self.buf[snap.head] = snap.head_val;
-            }
+        if let Some(snap) = self.bar.take_rollback(t) {
+            self.head = snap.head;
+            self.len = snap.len;
+            self.sum = snap.sum;
+            self.count = snap.count;
+            self.last_value = snap.last_value;
+            self.buf[snap.head] = snap.head_val;
         }
-        self.snapshot = Some(SnapshotState {
+        let snap = SnapshotState {
             head: self.head,
             len: self.len,
             sum: self.sum,
             count: self.count,
             last_value: self.last_value,
-            last_open_time: self.last_open_time,
             head_val: self.buf[self.head],
-        });
-        self.last_open_time = t;
+        };
+        self.bar.begin(t, snap);
         self.next(bar.close())
     }
 }
@@ -134,8 +129,7 @@ impl StreamingIndicator for StreamingAvgdev {
         self.sum = 0.0;
         self.count = 0;
         self.last_value = None;
-        self.snapshot = None;
-        self.last_open_time = 0;
+        self.bar.clear();
     }
 
     fn is_ready(&self) -> bool {

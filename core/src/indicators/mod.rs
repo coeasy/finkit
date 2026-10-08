@@ -17,35 +17,6 @@
 //! assert_eq!(sma.len(), 10);
 //! ```
 
-/// Fast indexing macro for hot-path indicator loops.
-///
-/// When the `unchecked-indexing` feature is enabled, uses
-/// `get_unchecked` to skip bounds checks. Otherwise falls back to
-/// normal indexing. Callers must guarantee that `$i` is in bounds
-/// when the feature is active.
-#[macro_export]
-macro_rules! idx {
-    ($slice:expr, $i:expr) => {
-        if cfg!(feature = "unchecked-indexing") {
-            unsafe { *$slice.get_unchecked($i) }
-        } else {
-            $slice[$i]
-        }
-    };
-}
-
-/// Mutable version of [`idx!`] for writing to slices.
-#[macro_export]
-macro_rules! idx_mut {
-    ($slice:expr, $i:expr) => {
-        if cfg!(feature = "unchecked-indexing") {
-            unsafe { *$slice.get_unchecked_mut($i) }
-        } else {
-            $slice[$i]
-        }
-    };
-}
-
 // ── Indicator modules, gated by opt-in category features ──────────────────
 // Every category is enabled by default (see `indicators-all` in Cargo.toml),
 // so the public API is unchanged unless a consumer explicitly turns a

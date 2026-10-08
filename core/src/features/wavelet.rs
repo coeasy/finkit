@@ -103,7 +103,7 @@ pub fn dwt_features(data: &[f64], basis: WaveletBasis, max_level: usize) -> Resu
     energy.push(approx_energy);
 
     let total_energy: f64 = energy.iter().sum();
-    let energy_ratio = if total_energy > 1e-15 {
+    let energy_ratio = if total_energy > crate::utils::NUMERIC_EPSILON {
         energy.iter().map(|e| e / total_energy).collect()
     } else {
         vec![0.0; energy.len()]

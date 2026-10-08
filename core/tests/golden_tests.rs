@@ -774,11 +774,12 @@ fn golden_input_ohlcv_matches_generator() {
 /// Snapshot (regression) guard for the `stochrsi` SIMD SMA refactor.
 ///
 /// The baseline `%K`/`%D` values were captured from the ORIGINAL scalar
-/// `sma_nan_as_zero_into` implementation (via a `--nocapture` capture run)
-/// before swapping the two smoothing passes to the SIMD `simd_sma` kernel.
-/// Locking these numbers ensures the SIMD path cannot silently drift from the
-/// scalar semantics (NaN→0.0 warm-up handling preserved). Deterministic
-/// synthetic input, no RNG.
+/// NaN-as-zero SMA smoothing pass before swapping the two passes to the SIMD
+/// `simd_sma` kernel. That scalar helper has since been deleted -- these
+/// numbers are now the only contract, which is the point: locking them here
+/// makes the SIMD path fail loudly if it drifts from the NaN→0.0 warm-up
+/// semantics the refactor set out to preserve. Deterministic synthetic input,
+/// no RNG.
 #[test]
 fn golden_stochrsi_simd_snapshot() {
     let n = 64usize;

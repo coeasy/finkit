@@ -9,6 +9,11 @@ use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 pub struct StreamingPpo {
     fast_ema: StreamingEma,
     slow_ema: StreamingEma,
+    // Persisted for `Serialize`/`Deserialize`: the checkpoint layout is a
+    // tested contract (`core/tests/serde_roundtrip_tests.rs`), but no logic
+    // path reads this value. The derive is feature-gated, so a build without
+    // `serde` sees a write-only field and `dead_code` reports it.
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     fast_period: usize,
     slow_period: usize,
     count: usize,
@@ -40,7 +45,7 @@ impl StreamingIndicator for StreamingPpo {
             return None;
         };
 
-        if s.abs() < 1e-15 {
+        if crate::utils::is_zero(s) {
             self.last_value = Some(0.0);
             return Some(0.0);
         }

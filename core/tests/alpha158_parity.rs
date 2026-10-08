@@ -16,9 +16,12 @@
 //! * Qlib NaNs any window whose rolling standard deviation is within
 //!   `atol=2e-05` of zero. finkit NaNs a window whose variance is numerically
 //!   absent, which is scale-free where Qlib's threshold is not.
-//! * finkit's `/` operator NaNs a divisor below `1e-15` in magnitude. That is a
-//!   deliberate engine-wide guard, and it interacts with Qlib's `+1e-12`
-//!   idiom — see `the_division_guard_explains_the_wvma_family`.
+//! * finkit's `/` operator NaNs a divisor below `NUMERIC_EPSILON` (1e-15) in
+//!   magnitude. That is a deliberate engine-wide guard, and it interacts with
+//!   Qlib's `+1e-12` idiom — see `the_division_guard_explains_the_wvma_family`.
+//!   The band is finkit's own, *not* TA-Lib's 1e-8: Alpha158 regularises
+//!   denominators with `+1e-12`, so a normal divisor sits at ~1e-12 and a 1e-8
+//!   band would `NaN` out most of the library. See `utils::NUMERIC_EPSILON`.
 //!
 //! Collapsing those into "agreement to 1e-8" would require one side to pretend,
 //! so the gate asserts four separately falsifiable things instead:
@@ -44,6 +47,7 @@
 use finkit::factors::builtin::{factor_library, CompiledFactor};
 use finkit::factors::FactorDirection;
 use finkit::formula::FormulaContext;
+use finkit::utils::NUMERIC_EPSILON;
 use ndarray::Array1;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -260,8 +264,8 @@ fn finkit_withholds_no_steady_state_value() {
 /// on an all-zero window it returns a cancellation residue of about
 /// `-1.0e-12` rather than exactly `0`. The residue is harmless in itself
 /// (`1e-17` relative at this data's scale), but it pushes the denominator to
-/// `-4.4e-16`, which is below the `/` operator's `|rhs| < 1e-15` epsilon guard,
-/// and the guard returns `NaN`.
+/// `-4.4e-16`, which is below the `/` operator's `|rhs| < NUMERIC_EPSILON`
+/// guard, and the guard returns `NaN`.
 ///
 /// This test asserts that mechanism rather than assuming it: the bars where the
 /// denominator drops below the guard must be exactly the bars where `WVMA` is
@@ -269,10 +273,15 @@ fn finkit_withholds_no_steady_state_value() {
 /// says which half moved.
 ///
 /// The coincidence is a knife edge, which is worth knowing: the denominator is
-/// `residue + 1e-12`, so it only drops below the `1e-15` guard when the residue
-/// is slightly *more negative* than `-1e-12`. On this market that happens for
-/// `WVMA30` and for no other window, so the test requires the mechanism to fire
-/// somewhere in the family rather than at every window.
+/// `residue + 1e-12`, so it only drops below the `NUMERIC_EPSILON` guard when
+/// the residue is slightly *more negative* than `-1e-12`. On this market that
+/// happens for `WVMA30` and for no other window, so the test requires the
+/// mechanism to fire somewhere in the family rather than at every window.
+///
+/// It is also why the guard band cannot be widened to TA-Lib's 1e-8 here: at
+/// that width *every* window's `residue + 1e-12` denominator is zero-judged and
+/// the whole family goes `NaN`. That is a language-runtime contract, not a
+/// parity gap — see the two-band table in `core/src/utils.rs`.
 #[test]
 fn the_division_guard_explains_the_wvma_family() {
     let contract = contract();
@@ -298,7 +307,8 @@ fn the_division_guard_explains_the_wvma_family() {
         let mut guard_bars = 0usize;
         let mut withheld_bars = 0usize;
         for index in 0..contract.bars {
-            let below_guard = denominator[index].is_finite() && denominator[index].abs() < 1e-15;
+            let below_guard =
+                denominator[index].is_finite() && denominator[index].abs() < NUMERIC_EPSILON;
             if below_guard {
                 guard_bars += 1;
                 assert!(

@@ -378,7 +378,7 @@ pub fn rolling_beta_into(
         if count == window && invalid == 0 {
             let size = window as f64;
             let variance_right = sum_right_sq - sum_right * sum_right / size;
-            if variance_right.abs() >= 1e-15 {
+            if !crate::utils::is_zero(variance_right) {
                 let covariance = sum_product - sum_left * sum_right / size;
                 output[index] = covariance / variance_right;
             }
@@ -445,7 +445,7 @@ pub fn willr_into(
         let (highest, lowest) = state.update(high[index], low[index]);
         if state.is_ready() {
             let denominator = highest - lowest;
-            output[index] = if denominator > 1e-15 {
+            output[index] = if denominator > crate::utils::TA_IS_ZERO_BANDWIDTH {
                 (highest - close[index]) / denominator * -100.0
             } else {
                 0.0

@@ -49,7 +49,7 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingMassIndex {
             return None;
         };
 
-        if ema2_val.abs() <= 1e-15 {
+        if crate::utils::is_zero(ema2_val) {
             self.last_value = None;
             return None;
         }

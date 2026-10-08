@@ -36,13 +36,13 @@ impl StreamingIndicator for StreamingMcGinley {
         }
 
         let prev = self.prev_md;
-        let result = if prev.abs() <= 1e-15 {
+        let result = if crate::utils::is_zero(prev) {
             Some(close)
         } else {
             let ratio = close / prev;
             let r4 = ratio * ratio * ratio * ratio;
             let denom = self.period as f64 * r4;
-            Some(if denom.abs() <= 1e-15 {
+            Some(if crate::utils::is_zero(denom) {
                 close
             } else {
                 prev + (close - prev) / denom

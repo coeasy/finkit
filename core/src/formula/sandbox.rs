@@ -6,7 +6,27 @@ use std::time::{Duration, Instant};
 use crate::formula::types::FormulaError;
 
 /// Configurable limits for formula execution. `None` means unlimited.
-#[derive(Debug, Clone, Copy, Default)]
+///
+/// The default is **fully unlimited, by documented contract** — this is a
+/// deliberate choice, not an oversight:
+///
+/// 1. *Depth is bounded structurally upstream of the sandbox.* Every text
+///    front end (`parse_formula`, the Pine mapper) rejects ASTs deeper than
+///    `parser::MAX_AST_DEPTH` (1024) before evaluation, and lowering rejects
+///    deeper programmatic ASTs (`compute_ir::MAX_LOWER_DEPTH`, 2048). The tree
+///    path only ever evaluates parsed ASTs, so its recursion — the one limit
+///    whose breach aborts the process — is already bounded with the sandbox
+///    untouched. A bounded-by-default `max_recursion_depth` would add nothing.
+/// 2. *The all-`None` state doubles as a performance contract.* The engine's
+///    single-indicator fast paths are gated on `sandbox_unlimited`
+///    (`engine.rs`); a bounded default would silently route every user onto
+///    the general executor — a measured performance regression *and* a change
+///    of numeric code path.
+/// 3. Time and memory budgets are workload-dependent and cannot have safe
+///    universal defaults anyway.
+///
+/// Callers that want limits set them explicitly via the `with_*` builders.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ExecSandboxConfig {
     /// Wall-clock timeout in milliseconds.
     pub timeout_ms: Option<u64>,
@@ -17,7 +37,11 @@ pub struct ExecSandboxConfig {
 }
 
 impl ExecSandboxConfig {
-    /// No limits — default sandbox configuration.
+    /// No limits — the default sandbox configuration, a documented contract.
+    ///
+    /// See the type-level docs: depth is bounded structurally at parse and
+    /// lowering, and the all-`None` state doubles as the engine fast-path
+    /// eligibility flag, so `Default` stays fully unlimited.
     pub fn unlimited() -> Self {
         Self::default()
     }
@@ -340,9 +364,15 @@ mod tests {
 
     #[test]
     fn sandbox_limits_config_defaults_are_unlimited() {
+        // Documented contract: the default is fully unlimited. Crash-surface
+        // safety comes from the structural caps upstream of the sandbox
+        // (`parser::MAX_AST_DEPTH`, `compute_ir::MAX_LOWER_DEPTH`), and the
+        // all-`None` state doubles as the engine fast-path eligibility flag
+        // — a bounded default would silently disable those fast paths.
         let cfg = ExecSandboxConfig::default();
         assert!(cfg.timeout_ms.is_none());
         assert!(cfg.max_recursion_depth.is_none());
         assert!(cfg.max_memory_bytes.is_none());
+        assert_eq!(cfg, ExecSandboxConfig::unlimited());
     }
 }

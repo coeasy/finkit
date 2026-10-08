@@ -102,7 +102,7 @@ impl IncrementalPCA {
         let total: f64 = eigenvalues.iter().sum();
         let k = self.n_components.min(self.n_features);
 
-        if total <= 1e-15 {
+        if total <= crate::utils::NUMERIC_EPSILON {
             self.explained_variance_ratio_ = vec![0.0; k];
             return;
         }

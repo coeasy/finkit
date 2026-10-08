@@ -189,7 +189,7 @@ pub fn simple_slope(y: &[f64], x: &[f64]) -> Result<f64> {
     let sum_xy = valid.iter().map(|(yv, xv)| yv * xv).sum::<f64>();
     let sum_x2 = valid.iter().map(|(_, xv)| xv * xv).sum::<f64>();
     let denom = n * sum_x2 - sum_x * sum_x;
-    if denom.abs() < 1e-15 {
+    if denom.abs() < crate::utils::NUMERIC_EPSILON {
         return Err(TaError::ComputationError {
             message: "regression design is singular".to_string(),
         });

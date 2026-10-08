@@ -76,7 +76,7 @@ impl StreamingIndicator for StreamingKama {
             volatility += (self.ring_get(i) - self.ring_get(i - 1)).abs();
         }
 
-        let er = if volatility.abs() > 1e-15 {
+        let er = if !crate::utils::is_zero(volatility) {
             direction / volatility
         } else {
             0.0

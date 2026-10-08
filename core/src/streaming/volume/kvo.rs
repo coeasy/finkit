@@ -84,11 +84,12 @@ impl StreamingKvo {
             (trend, new_cm)
         };
 
-        let vf = if volume.is_nan() || dm.is_nan() || new_cm.is_nan() || new_cm.abs() <= 1e-15 {
-            0.0
-        } else {
-            volume * (2.0 * dm / new_cm - 1.0).abs() * trend as f64
-        };
+        let vf =
+            if volume.is_nan() || dm.is_nan() || new_cm.is_nan() || crate::utils::is_zero(new_cm) {
+                0.0
+            } else {
+                volume * (2.0 * dm / new_cm - 1.0).abs() * trend as f64
+            };
 
         let hlc_sum = if high.is_nan() || low.is_nan() || close.is_nan() {
             f64::NAN

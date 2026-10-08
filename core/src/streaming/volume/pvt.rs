@@ -46,7 +46,7 @@ impl StreamingIndicator<&dyn Ohlcv, f64> for StreamingPvt {
             return None;
         }
 
-        if self.prev_close.abs() > 1e-15 {
+        if !crate::utils::is_zero(self.prev_close) {
             self.current_pvt += volume * (close - self.prev_close) / self.prev_close;
         }
 

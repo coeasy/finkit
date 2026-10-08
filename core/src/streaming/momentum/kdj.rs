@@ -98,7 +98,7 @@ impl StreamingIndicator<(f64, f64, f64), KdjOutput> for StreamingKdj {
         let lowest = self.rolling_min.current().unwrap_or(f64::INFINITY);
 
         let denom = highest - lowest;
-        let rsv = if denom.abs() > 1e-15 {
+        let rsv = if !crate::utils::is_zero(denom) {
             (close - lowest) / denom * 100.0
         } else {
             50.0

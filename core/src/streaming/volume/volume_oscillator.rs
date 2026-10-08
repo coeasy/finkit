@@ -7,6 +7,11 @@ use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 /// VO = (SMA(volume, fast) - SMA(volume, slow)) / SMA(volume, slow) * 100
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingVolumeOscillator {
+    // Persisted for `Serialize`/`Deserialize`: the checkpoint layout is a
+    // tested contract (`core/tests/serde_roundtrip_tests.rs`), but no logic
+    // path reads this value. The derive is feature-gated, so a build without
+    // `serde` sees a write-only field and `dead_code` reports it.
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     fast_period: usize,
     slow_period: usize,
     fast_sma: StreamingSma,
@@ -36,7 +41,7 @@ impl StreamingIndicator for StreamingVolumeOscillator {
         let slow = self.slow_sma.next(input);
 
         match (fast, slow) {
-            (Some(f), Some(s)) if s.abs() > 1e-15 => {
+            (Some(f), Some(s)) if !crate::utils::is_zero(s) => {
                 let val = (f - s) / s * 100.0;
                 self.last_value = Some(val);
                 Some(val)

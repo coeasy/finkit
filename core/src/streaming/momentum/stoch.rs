@@ -115,7 +115,7 @@ impl StreamingIndicator<(f64, f64, f64), StochOutput> for StreamingStoch {
             let lowest = self.rolling_min.current().unwrap_or(f64::INFINITY);
 
             let denom = highest - lowest;
-            let fast_k = if denom.abs() > 1e-15 {
+            let fast_k = if !crate::utils::is_zero(denom) {
                 (close - lowest) / denom * 100.0
             } else {
                 50.0

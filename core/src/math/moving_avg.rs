@@ -1908,7 +1908,7 @@ pub fn mcginley(input: &[f64], period: usize) -> Result<Array1<f64>> {
         if prev.is_nan() {
             continue;
         }
-        if prev.abs() < 1e-15 {
+        if prev.abs() < crate::utils::NUMERIC_EPSILON {
             output[i] = close;
             prev = close;
             continue;
@@ -2052,7 +2052,7 @@ pub fn vidya(input: &[f64], period: usize, cmo_period: usize) -> Result<Array1<f
         }
 
         let denom = sum_up + sum_down;
-        let cmo_factor = if denom.abs() > 1e-15 {
+        let cmo_factor = if denom.abs() > crate::utils::NUMERIC_EPSILON {
             ((sum_up - sum_down) / denom).abs()
         } else {
             0.0
@@ -2108,13 +2108,13 @@ pub fn vwma(input: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>>
             pv_sum += input[j] * volume[j];
             vol_sum += volume[j];
         }
-        if vol_sum.abs() > 1e-15 {
+        if vol_sum.abs() > crate::utils::NUMERIC_EPSILON {
             output[period - 1] = pv_sum / vol_sum;
         }
         for i in period..len {
             pv_sum += input[i] * volume[i] - input[i - period] * volume[i - period];
             vol_sum += volume[i] - volume[i - period];
-            if vol_sum.abs() > 1e-15 {
+            if vol_sum.abs() > crate::utils::NUMERIC_EPSILON {
                 output[i] = pv_sum / vol_sum;
             }
         }
@@ -2130,7 +2130,7 @@ pub fn vwma(input: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>>
             pv_sum += input[j] * volume[j];
             vol_sum += volume[j];
         }
-        if !dirty && vol_sum.abs() > 1e-15 {
+        if !dirty && vol_sum.abs() > crate::utils::NUMERIC_EPSILON {
             output[period - 1] = pv_sum / vol_sum;
         }
 
@@ -2157,7 +2157,7 @@ pub fn vwma(input: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>>
                 pv_sum += new_v * new_vol - old_v * old_vol;
                 vol_sum += new_vol - old_vol;
             }
-            if !dirty && vol_sum.abs() > 1e-15 {
+            if !dirty && vol_sum.abs() > crate::utils::NUMERIC_EPSILON {
                 output[i] = pv_sum / vol_sum;
             }
         }
@@ -2200,14 +2200,14 @@ pub fn vwma_into(input: &[f64], volume: &[f64], period: usize, output: &mut [f64
             price_volume += input[index] * volume[index];
             total_volume += volume[index];
         }
-        if total_volume.abs() > 1e-15 {
+        if total_volume.abs() > crate::utils::NUMERIC_EPSILON {
             output[period - 1] = price_volume / total_volume;
         }
         for index in period..len {
             price_volume +=
                 input[index] * volume[index] - input[index - period] * volume[index - period];
             total_volume += volume[index] - volume[index - period];
-            if total_volume.abs() > 1e-15 {
+            if total_volume.abs() > crate::utils::NUMERIC_EPSILON {
                 output[index] = price_volume / total_volume;
             }
         }
@@ -2227,7 +2227,7 @@ pub fn vwma_into(input: &[f64], volume: &[f64], period: usize, output: &mut [f64
             price_volume += input[j] * volume[j];
             total_volume += volume[j];
         }
-        if valid && total_volume.abs() > 1e-15 {
+        if valid && total_volume.abs() > crate::utils::NUMERIC_EPSILON {
             output[index] = price_volume / total_volume;
         }
     }

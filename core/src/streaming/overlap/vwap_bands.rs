@@ -77,7 +77,7 @@ impl StreamingVwapBands {
             }
         }
 
-        if self.cumulative_vol.abs() <= 1e-15 || self.count < self.period {
+        if crate::utils::is_zero(self.cumulative_vol) || self.count < self.period {
             self.last_value = None;
             return None;
         }

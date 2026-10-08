@@ -47,12 +47,12 @@ impl StreamingBeta {
         self.count += 1;
 
         if let (Some(pa), Some(pb)) = (self.prev_asset, self.prev_bench) {
-            let ar = if pa.abs() > 1e-15 {
+            let ar = if !crate::utils::is_zero(pa) {
                 (asset - pa) / pa
             } else {
                 0.0
             };
-            let br = if pb.abs() > 1e-15 {
+            let br = if !crate::utils::is_zero(pb) {
                 (benchmark - pb) / pb
             } else {
                 0.0
@@ -88,7 +88,7 @@ impl StreamingBeta {
             let cov = self.sum_ab - self.sum_a * self.sum_b / n;
             let var_b = self.sum_b2 - self.sum_b * self.sum_b / n;
 
-            if var_b.abs() > 1e-15 {
+            if !crate::utils::is_zero(var_b) {
                 Some(cov / var_b)
             } else {
                 None

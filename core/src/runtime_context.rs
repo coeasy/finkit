@@ -202,9 +202,15 @@ struct ArtifactEntry {
 ///
 /// Formula, factor, composite and research planners each grew their own cache
 /// with its own key type and its own eviction rule, so "is this already
-/// compiled?" had a different answer in every layer. This is the one cache the
-/// runtime context owns; a frontend picks a `namespace` and stores whatever
-/// `Send + Sync` artifact it compiles.
+/// compiled?" had a different answer in every layer. This is the cache the
+/// runtime context owns for its *own* plans: a frontend picks a `namespace`
+/// and stores whatever `Send + Sync` artifact it compiles. Today the only
+/// consumer is the unified runtime (`FINPLAN*` namespaces); the formula engine
+/// still keeps its accelerators (`semantic_plan_cache`, `FormulaPlanCache`,
+/// `bytecode_cache` — all bounded, see `formula/engine.rs`), because their
+/// keys are source strings the context never sees. Convergence onto this
+/// store remains the goal; the engine caches are bounded in the meantime, so
+/// the "is it bounded?" answer is uniform even where the cache is not.
 ///
 /// Eviction is least-recently-used and the store never grows past its
 /// capacity, so a context that sees unbounded distinct requests retains

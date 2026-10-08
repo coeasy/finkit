@@ -65,7 +65,7 @@ pub fn linear_regression(x: &[f64], y: &[f64]) -> Result<LinRegResult> {
     }
 
     let denom = n * sum_x2 - sum_x * sum_x;
-    if denom.abs() < 1e-15 {
+    if denom.abs() < crate::utils::NUMERIC_EPSILON {
         return Err(TaError::ComputationError {
             message: "Cannot compute regression: all x values are identical".to_string(),
         });
@@ -83,7 +83,7 @@ pub fn linear_regression(x: &[f64], y: &[f64]) -> Result<LinRegResult> {
         .map(|(yi, pi)| (yi - pi).powi(2))
         .sum();
 
-    let r_squared = if ss_tot.abs() < 1e-15 {
+    let r_squared = if ss_tot.abs() < crate::utils::NUMERIC_EPSILON {
         1.0
     } else {
         1.0 - ss_res / ss_tot
@@ -572,7 +572,11 @@ pub fn quantile_regression(x: &[f64], y: &[f64], tau: f64) -> Result<QuantileReg
             sxy += dx * (y[i] - mean_y);
             sxx += dx * dx;
         }
-        slope = if sxx.abs() > 1e-15 { sxy / sxx } else { 0.0 };
+        slope = if sxx.abs() > crate::utils::NUMERIC_EPSILON {
+            sxy / sxx
+        } else {
+            0.0
+        };
         intercept = mean_y - slope * mean_x;
     }
 
@@ -605,7 +609,7 @@ pub fn quantile_regression(x: &[f64], y: &[f64], tau: f64) -> Result<QuantileReg
         }
 
         let denom = sw * swxx - swx * swx;
-        if denom.abs() < 1e-15 {
+        if denom.abs() < crate::utils::NUMERIC_EPSILON {
             break;
         }
 
@@ -664,7 +668,7 @@ pub fn theil_sen(x: &[f64], y: &[f64]) -> Result<TheilSenResult> {
     for i in 0..n - 1 {
         for j in (i + 1)..n {
             let dx = x[j] - x[i];
-            if dx.abs() > 1e-15 {
+            if dx.abs() > crate::utils::NUMERIC_EPSILON {
                 slopes.push((y[j] - y[i]) / dx);
             }
         }
@@ -819,5 +823,43 @@ mod tests {
     fn test_theil_sen_invalid() {
         assert!(theil_sen(&[1.0], &[2.0]).is_err());
         assert!(theil_sen(&[1.0, 2.0], &[1.0]).is_err());
+    }
+
+    /// V5 Batch 1 ③ gate: the LINREG family has one numeric semantics across
+    /// its paths. `linreg_slope` with a clean input routes through the SIMD
+    /// kernel (`simd_linreg_slope`, warm_start == 0); the same data prefixed
+    /// with a NaN warm-up run routes through the hand-written recurrence
+    /// (`warm_start > 0`). Both implement the same regression — the gate
+    /// asserts they agree to the family's golden tolerance, so neither path
+    /// can drift. (The window contents after the warm-up prefix are identical
+    /// by construction, so this is a pure path-consistency check, not a
+    /// warm-up-semantics one.)
+    #[test]
+    fn simd_seeded_and_warm_started_linreg_paths_agree() {
+        let len = 160usize;
+        let period = 14usize;
+        let input: Vec<f64> = (0..len)
+            .map(|i| 50.0 + (i as f64 * 0.37).sin() * 9.0 + i as f64 * 0.05)
+            .collect();
+
+        let via_simd = linreg_slope(&input, period).unwrap();
+
+        // Same windows, reached after a NaN warm-up prefix: every window of
+        // the prefixed series starting at `warm_start` equals the
+        // corresponding window of the clean series.
+        let warm_start = 23usize;
+        let mut prefixed = vec![f64::NAN; warm_start];
+        prefixed.extend_from_slice(&input);
+        let via_warm_start = linreg_slope(&prefixed, period).unwrap();
+
+        for index in (warm_start + period - 1)..len {
+            let simd_value = via_simd[index];
+            let warm_value = via_warm_start[index + warm_start];
+            assert!(
+                (simd_value - warm_value).abs() <= 1e-12,
+                "linreg_slope paths disagree at clean index {index}: \
+                 simd {simd_value} vs warm-started {warm_value}"
+            );
+        }
     }
 }

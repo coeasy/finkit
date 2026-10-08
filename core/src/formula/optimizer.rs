@@ -404,7 +404,9 @@ impl FormulaOptimizer {
             // x * 2.0 -> x + x
             BinaryOperator::Mul => {
                 if let AstNode::Number(n) = right {
-                    if (*n - 2.0).abs() < 1e-15 && !matches!(left, AstNode::Number(_)) {
+                    if (*n - 2.0).abs() < crate::utils::NUMERIC_EPSILON
+                        && !matches!(left, AstNode::Number(_))
+                    {
                         return Some(AstNode::BinaryOp {
                             op: BinaryOperator::Add,
                             left: Box::new(left.clone()),
@@ -413,7 +415,9 @@ impl FormulaOptimizer {
                     }
                 }
                 if let AstNode::Number(n) = left {
-                    if (*n - 2.0).abs() < 1e-15 && !matches!(right, AstNode::Number(_)) {
+                    if (*n - 2.0).abs() < crate::utils::NUMERIC_EPSILON
+                        && !matches!(right, AstNode::Number(_))
+                    {
                         return Some(AstNode::BinaryOp {
                             op: BinaryOperator::Add,
                             left: Box::new(right.clone()),
@@ -426,7 +430,9 @@ impl FormulaOptimizer {
             // x / 2.0 -> x * 0.5
             BinaryOperator::Div => {
                 if let AstNode::Number(n) = right {
-                    if (*n - 2.0).abs() < 1e-15 && !matches!(left, AstNode::Number(_)) {
+                    if (*n - 2.0).abs() < crate::utils::NUMERIC_EPSILON
+                        && !matches!(left, AstNode::Number(_))
+                    {
                         return Some(AstNode::BinaryOp {
                             op: BinaryOperator::Mul,
                             left: Box::new(left.clone()),
@@ -439,7 +445,9 @@ impl FormulaOptimizer {
             // x ^ 2 -> x * x
             BinaryOperator::Pow => {
                 if let AstNode::Number(n) = right {
-                    if (*n - 2.0).abs() < 1e-15 && !matches!(left, AstNode::Number(_)) {
+                    if (*n - 2.0).abs() < crate::utils::NUMERIC_EPSILON
+                        && !matches!(left, AstNode::Number(_))
+                    {
                         return Some(AstNode::BinaryOp {
                             op: BinaryOperator::Mul,
                             left: Box::new(left.clone()),
@@ -791,14 +799,14 @@ impl FormulaOptimizer {
             BinaryOperator::Sub => Some(left - right),
             BinaryOperator::Mul => Some(left * right),
             BinaryOperator::Div => {
-                if right.abs() < 1e-15 {
+                if right.abs() < crate::utils::NUMERIC_EPSILON {
                     None
                 } else {
                     Some(left / right)
                 }
             }
             BinaryOperator::Mod => {
-                if right.abs() < 1e-15 {
+                if right.abs() < crate::utils::NUMERIC_EPSILON {
                     None
                 } else {
                     // Floor-based, matching every runtime kernel: folding must

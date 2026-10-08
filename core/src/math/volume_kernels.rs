@@ -479,7 +479,7 @@ pub fn vwap_into(
         let typical_price = (high[i] + low[i] + close[i]) * (1.0 / 3.0);
         cum_tp_vol = typical_price * volume[i] + cum_tp_vol;
         cum_volume += volume[i];
-        output[i] = if cum_volume.abs() > 1e-15 {
+        output[i] = if cum_volume.abs() > crate::utils::NUMERIC_EPSILON {
             cum_tp_vol / cum_volume
         } else {
             0.0

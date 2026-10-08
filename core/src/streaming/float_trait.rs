@@ -58,6 +58,15 @@ pub trait Float:
     fn sqrt(self) -> Self;
     fn is_nan(self) -> bool;
     fn to_f64(self) -> f64;
+    /// The per-type comparison epsilon, used where a stream-internal value is
+    /// treated as zero (Wilder's RSI average loss, the only caller).
+    ///
+    /// Deliberately *not* one of the two named bands in [`crate::utils`]: that
+    /// trait is implemented for both `f32` and `f64`, and `1e-15` is below
+    /// `f32`'s own resolution (`~1.2e-7`), so pinning it to either band would
+    /// silently change every `f32` stream. Aligning it is a deliberate
+    /// follow-up, tracked with the streaming surface rather than the TA-Lib
+    /// parity surface.
     fn epsilon() -> Self;
 }
 

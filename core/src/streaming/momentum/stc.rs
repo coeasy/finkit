@@ -10,6 +10,11 @@ use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 /// Uses O(1) amortized monotonic deques for rolling max/min.
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingStc {
+    // Persisted for `Serialize`/`Deserialize`: the checkpoint layout is a
+    // tested contract (`core/tests/serde_roundtrip_tests.rs`), but no logic
+    // path reads this value. The derive is feature-gated, so a build without
+    // `serde` sees a write-only field and `dead_code` reports it.
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     fast_period: usize,
     slow_period: usize,
     cycle: usize,
@@ -79,7 +84,7 @@ impl StreamingStc {
     #[inline]
     fn stoch_k(value: f64, lowest: f64, highest: f64) -> f64 {
         let range = highest - lowest;
-        if range.abs() > 1e-15 {
+        if !crate::utils::is_zero(range) {
             (value - lowest) / range * 100.0
         } else {
             50.0

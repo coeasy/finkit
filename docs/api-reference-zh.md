@@ -2004,6 +2004,16 @@ for _ in 0..iterations {
 一起内联进单个 HTML 文档。这份载荷就是 Rust 与任意 Web 前端之间的公开契约；随包发布的
 `visualization/frontend/lightweight-charts-adapter.js` 是**参考消费者**，不是唯一可用实现。
 
+> **共有两条 HTML 输出路径，产出的是不同的文档。** 下面这份 Lightweight Charts 载荷来自
+> `renderer::ChartRenderer`，入参是 `KlineData` + `[IndicatorConfig]`。而 `KlineChart`
+> 管线——`chart::KlineChart::to_html_string()` / `save_as_html()`，也就是
+> `finkit-cli chart --chart-format html` 实际走的路径——由已算好的 `DrawList` + `ChartScene`
+> 生成**另一种**自包含文档（`render/html.rs::HtmlRenderer`），其中包含浮动数据窗与场景命中区域。
+> `ChartRenderer` **不在** CLI 路径上，`KlineChart` 产出的文档也不携带这份 Lightweight Charts 载荷。
+> 二选一取决于你要什么：要载荷（自行解析、驱动自选前端库），还是要整条管线的文档
+> （带叠加层与交互元数据的成品图）。GPU 与 canvas 变体是同一个 `KlineChart` 上的
+> `save_as_webgpu_html()` 与 `save_as_canvas_html()`。
+
 可以直接生成完整文档，也可以只取载荷：
 
 ```rust

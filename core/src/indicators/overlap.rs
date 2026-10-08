@@ -2936,7 +2936,7 @@ pub fn efficiency_ratio(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     for i in period..len {
         let direction = (input[i] - input[i - period]).abs();
-        output[i] = if vol_sum > 1e-15 {
+        output[i] = if vol_sum > crate::utils::TA_IS_ZERO_BANDWIDTH {
             direction / vol_sum
         } else {
             0.0

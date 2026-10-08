@@ -606,7 +606,7 @@ impl BytecodeVM {
             }),
             OpCode::Div => self.exec_binary_op(ctx, |a, b, r| {
                 for i in 0..a.len() {
-                    r[i] = if b[i].abs() < 1e-15 {
+                    r[i] = if b[i].abs() < crate::utils::NUMERIC_EPSILON {
                         f64::NAN
                     } else {
                         a[i] / b[i]
@@ -751,7 +751,7 @@ impl BytecodeVM {
                     3 => {
                         let mut r = Array1::zeros(current.len());
                         for i in 0..current.len() {
-                            if rhs[i].abs() < 1e-15 {
+                            if rhs[i].abs() < crate::utils::NUMERIC_EPSILON {
                                 r[i] = f64::NAN;
                             } else {
                                 r[i] = current[i] / rhs[i];

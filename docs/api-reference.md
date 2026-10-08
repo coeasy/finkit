@@ -1422,6 +1422,20 @@ public contract between Rust and any web frontend; the adapter shipped in
 `visualization/frontend/lightweight-charts-adapter.js` is the reference consumer,
 not the only possible one.
 
+> **There are two HTML outputs and they are different documents.** The
+> Lightweight Charts payload below comes from `renderer::ChartRenderer`, which
+> takes a `KlineData` + `[IndicatorConfig]` pair. The `KlineChart` pipeline —
+> `chart::KlineChart::to_html_string()` / `save_as_html()`, which is what
+> `finkit-cli chart --chart-format html` calls — builds a *different*,
+> self-contained document from a computed `DrawList` + `ChartScene`
+> (`render/html.rs::HtmlRenderer`), including the floating data window and the
+> scene's hit regions. `ChartRenderer` is **not** on the CLI path, and the
+> `KlineChart` document does not carry the Lightweight Charts payload. Choose by
+> what you need: the payload (parse it yourself, drive your own frontend library)
+> or the full pipeline document (rendered chart with overlays and interaction
+> metadata). The GPU and canvas variants are `save_as_webgpu_html()` and
+> `save_as_canvas_html()` on the same `KlineChart`.
+
 Generate a complete document, or take the payload on its own:
 
 ```rust

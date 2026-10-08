@@ -14,9 +14,6 @@ import builtins as _builtins
 from . import finkit as _native
 from .finkit import *  # noqa: F401,F403 — re-export native module
 
-KlineData = _native.PyKlineData
-KlineChart = _native.PyKlineChart
-
 _native_all = getattr(
     _native,
     "__all__",
@@ -866,7 +863,11 @@ def register_accessor():
     TaAccessor._register()
 
 
-__all__ = list(_native_all) + [
+# `KlineData`/`KlineChart` arrive with the native star-import above (the
+# `#[pyclass(name = ...)]` on the Rust structs makes those the registered names),
+# so they are listed here only to document the assured surface; `dict.fromkeys`
+# keeps a name from appearing twice when the native module already exports it.
+__all__ = list(dict.fromkeys(list(_native_all) + [
     "KlineData",
     "KlineChart",
     "FinkitError",
@@ -880,7 +881,7 @@ __all__ = list(_native_all) + [
     "reduce_min",
     "reduce_max",
     "reduce_stddev",
-]
+]))
 if "stddev" in globals() and "stddev" not in __all__:
     __all__.append("stddev")
 if "correl" in globals() and "correl" not in __all__:

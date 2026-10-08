@@ -130,7 +130,7 @@ pub fn rsi_scalar(data: &[f64], period: usize, out: &mut [f64]) {
 
 #[inline]
 fn rsi_from_averages(avg_gain: f64, avg_loss: f64) -> f64 {
-    if avg_loss.abs() < 1e-15 {
+    if avg_loss.abs() < crate::utils::NUMERIC_EPSILON {
         100.0
     } else {
         // Algebraically equivalent to 100 - 100 / (1 + gain / loss), but
@@ -313,7 +313,7 @@ pub fn stoch_scalar(
 
         let fk = if i >= fastk_start {
             let denom = highest - lowest;
-            if denom > 1e-15 {
+            if denom > crate::utils::NUMERIC_EPSILON {
                 (close[i] - lowest) / denom * 100.0
             } else {
                 50.0
@@ -439,7 +439,7 @@ fn stoch_monotonic_fast_into(
 
         let fk = if i >= fastk_start {
             let denom = highest - lowest;
-            if denom > 1e-15 {
+            if denom > crate::utils::NUMERIC_EPSILON {
                 (unsafe { *close_ptr.add(i) } - lowest) / denom * 100.0
             } else {
                 50.0
@@ -505,7 +505,7 @@ pub fn cci_scalar(high: &[f64], low: &[f64], close: &[f64], period: usize, out: 
             mean_dev += (tp - tp_mean).abs();
         }
         mean_dev *= inv_p;
-        if mean_dev.abs() > 1e-15 {
+        if mean_dev.abs() > crate::utils::NUMERIC_EPSILON {
             out[first] = (tp_buf[period - 1] - tp_mean) / (0.015 * mean_dev);
         }
     }
@@ -523,7 +523,7 @@ pub fn cci_scalar(high: &[f64], low: &[f64], close: &[f64], period: usize, out: 
             mean_dev += (tp - tp_mean).abs();
         }
         mean_dev *= inv_p;
-        if mean_dev.abs() > 1e-15 {
+        if mean_dev.abs() > crate::utils::NUMERIC_EPSILON {
             out[i] = (new_tp - tp_mean) / (0.015 * mean_dev);
         }
     }
@@ -817,7 +817,7 @@ unsafe fn stoch_avx2(
 
         let fk = if i >= fastk_start {
             let denom = highest - lowest;
-            if denom > 1e-15 {
+            if denom > crate::utils::NUMERIC_EPSILON {
                 (*close_ptr.add(i) - lowest) / denom * 100.0
             } else {
                 50.0

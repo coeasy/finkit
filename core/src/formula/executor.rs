@@ -572,7 +572,7 @@ fn apply_scalar_op(op: &BinaryOperator, l: f64, r: f64) -> Result<f64, FormulaEr
         BinaryOperator::Sub => Ok(l - r),
         BinaryOperator::Mul => Ok(l * r),
         BinaryOperator::Div => {
-            if r.abs() < 1e-15 {
+            if r.abs() < crate::utils::NUMERIC_EPSILON {
                 Ok(f64::NAN)
             } else {
                 Ok(l / r)
@@ -620,7 +620,7 @@ fn apply_scalar_array_op(
         }
         BinaryOperator::Div => {
             for i in 0..len {
-                result[i] = if arr[i].abs() < 1e-15 {
+                result[i] = if arr[i].abs() < crate::utils::NUMERIC_EPSILON {
                     f64::NAN
                 } else {
                     scalar / arr[i]
@@ -729,7 +729,7 @@ fn apply_array_scalar_op(
             }
         }
         BinaryOperator::Div => {
-            if scalar.abs() < 1e-15 {
+            if scalar.abs() < crate::utils::NUMERIC_EPSILON {
                 for i in 0..len {
                     result[i] = f64::NAN;
                 }

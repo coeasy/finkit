@@ -39,7 +39,7 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingAd {
         crate::streaming_measure!("ad", self.count, {
             self.count += 1;
             let range = bar.high() - bar.low();
-            if range.abs() > 1e-15 {
+            if !crate::utils::is_zero(range) {
                 let clv = ((bar.close() - bar.low()) - (bar.high() - bar.close())) / range;
                 self.cumulative += clv * bar.volume();
             }

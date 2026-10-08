@@ -16,7 +16,7 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 png = { version = "0.17", optional = true }
 fontdue = "0.9"
-finkit = { path = "../core" }
+finkit = { path = "../core", default-features = false, features = ["std", "formula", "indicators-all"] }
 
 [features]
 default = ["svg"]

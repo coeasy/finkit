@@ -469,6 +469,14 @@ $CLI chart --input ohlcv.csv --chart-format svg --output chart.svg
 $CLI chart --input ohlcv.csv --chart-format html --output chart.html
 ```
 
+Both formats go through the same `KlineChart` pipeline, which keeps CLI output on
+one scene/rendering path with the Python, Node and WASM bindings. `--chart-format
+html` therefore writes the **pipeline document** (draw list + chart scene, with the
+floating data window and hit regions) — not the Lightweight Charts payload that
+`finkit_visualization::renderer::ChartRenderer` produces. See
+[api-reference.md](api-reference.md) §"Web chart payload" for the difference and for
+`save_as_webgpu_html()` / `save_as_canvas_html()`, the GPU and canvas variants.
+
 ## 11. Node.js source usage
 
 The Node package source is under `ffi/node-binding` and uses NAPI-RS.

@@ -181,7 +181,7 @@ pub fn rsi_sweep(data: &[f64], periods: &[usize]) -> Result<Vec<Vec<f64>>> {
                     avg_gains[j] *= inv_periods[j];
                     avg_losses[j] *= inv_periods[j];
 
-                    if avg_losses[j].abs() < 1e-15 {
+                    if crate::utils::is_zero(avg_losses[j]) {
                         results[j][i] = 100.0;
                     } else {
                         results[j][i] = 100.0 - 100.0 / (1.0 + avg_gains[j] / avg_losses[j]);
@@ -192,7 +192,7 @@ pub fn rsi_sweep(data: &[f64], periods: &[usize]) -> Result<Vec<Vec<f64>>> {
                 avg_gains[j] = avg_gains[j] * period_minus_1_ratio[j] + gain * inv_periods[j];
                 avg_losses[j] = avg_losses[j] * period_minus_1_ratio[j] + loss * inv_periods[j];
 
-                if avg_losses[j].abs() < 1e-15 {
+                if crate::utils::is_zero(avg_losses[j]) {
                     results[j][i] = 100.0;
                 } else {
                     results[j][i] = 100.0 - 100.0 / (1.0 + avg_gains[j] / avg_losses[j]);

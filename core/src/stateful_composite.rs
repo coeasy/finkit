@@ -890,7 +890,8 @@ impl VwmaState {
             self.sum_product -= old_product;
             self.sum_volume -= old_volume;
         }
-        if self.values.len() == self.period && self.sum_volume.abs() > 1e-15 {
+        if self.values.len() == self.period && self.sum_volume.abs() > crate::utils::NUMERIC_EPSILON
+        {
             Ok(self.sum_product / self.sum_volume)
         } else {
             Ok(f64::NAN)

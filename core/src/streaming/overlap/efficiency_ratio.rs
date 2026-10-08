@@ -55,7 +55,7 @@ impl StreamingIndicator<f64, f64> for StreamingEfficiencyRatio {
             volatility += (self.ring[idx_curr] - self.ring[idx_prev]).abs();
         }
 
-        let er = if volatility > 1e-15 {
+        let er = if volatility > crate::utils::TA_IS_ZERO_BANDWIDTH {
             direction / volatility
         } else {
             0.0

@@ -523,6 +523,11 @@ impl IndicatorMeta for StreamingBandpass {
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingInstantaneousTrendline {
+    // Persisted for `Serialize`/`Deserialize`: the checkpoint layout is a
+    // tested contract (`core/tests/serde_roundtrip_tests.rs`), but no logic
+    // path reads this value. The derive is feature-gated, so a build without
+    // `serde` sees a write-only field and `dead_code` reports it.
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     alpha: f64,
     c0: f64,
     c1: f64,

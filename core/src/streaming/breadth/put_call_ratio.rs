@@ -32,7 +32,7 @@ impl StreamingIndicator<(f64, f64)> for StreamingPutCallRatio {
         let (put_vol, call_vol) = input;
         self.count += 1;
 
-        let val = if call_vol.abs() > 1e-15 {
+        let val = if !crate::utils::is_zero(call_vol) {
             put_vol / call_vol
         } else {
             0.0

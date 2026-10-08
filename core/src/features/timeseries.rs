@@ -37,7 +37,7 @@ pub fn pct_change(data: &[f64], n: usize) -> Array1<f64> {
     let len = data.len();
     let mut out = Array1::from_elem(len, f64::NAN);
     for i in n..len {
-        if data[i - n].abs() > 1e-15 {
+        if data[i - n].abs() > crate::utils::NUMERIC_EPSILON {
             out[i] = (data[i] - data[i - n]) / data[i - n];
         } else {
             out[i] = 0.0;

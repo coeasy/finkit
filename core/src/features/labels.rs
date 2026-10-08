@@ -33,7 +33,7 @@ pub fn forward_return(close: &[f64], n: usize) -> Array1<f64> {
 pub fn forward_return_arithmetic(close: &[f64], n: usize) -> Array1<f64> {
     if n == 0 {
         return Array1::from_iter(close.iter().map(|&value| {
-            if value.is_finite() && value.abs() > 1e-15 {
+            if value.is_finite() && value.abs() > crate::utils::NUMERIC_EPSILON {
                 0.0
             } else {
                 f64::NAN
@@ -80,7 +80,7 @@ pub fn triple_barrier(
 
     for i in 0..len {
         let entry_price = close[i];
-        let vol = daily_vol[i].max(1e-8);
+        let vol = daily_vol[i].max(crate::utils::TA_IS_ZERO_BANDWIDTH);
         let upper_barrier = entry_price * (1.0 + pt_factor * vol);
         let lower_barrier = entry_price * (1.0 - sl_factor * vol);
         let end = (i + max_hold).min(len - 1);
@@ -136,7 +136,7 @@ pub fn fixed_horizon_label(close: &[f64], horizon: usize, threshold: f64) -> Arr
     let len = close.len();
     let mut out = Array1::from_elem(len, f64::NAN);
     for i in 0..len.saturating_sub(horizon) {
-        if close[i].abs() > 1e-15 {
+        if close[i].abs() > crate::utils::NUMERIC_EPSILON {
             let ret = (close[i + horizon] - close[i]) / close[i];
             out[i] = if ret > threshold {
                 1.0
@@ -155,7 +155,7 @@ pub fn binary_label(close: &[f64], n: usize, threshold: f64) -> Array1<f64> {
     let len = close.len();
     let mut out = Array1::from_elem(len, f64::NAN);
     for i in 0..len.saturating_sub(n) {
-        if close[i].abs() > 1e-15 {
+        if close[i].abs() > crate::utils::NUMERIC_EPSILON {
             let ret = (close[i + n] - close[i]) / close[i];
             out[i] = if ret > threshold { 1.0 } else { 0.0 };
         }

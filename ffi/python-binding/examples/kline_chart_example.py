@@ -27,7 +27,7 @@ def generate_kline_data(n=100):
         closes.append(round(c, 2))
         volumes.append(round(v, 2))
         price = c
-    return ta.PyKlineData(
+    return ta.KlineData(
         dates=dates,
         opens=opens,
         highs=highs,
@@ -39,7 +39,7 @@ def generate_kline_data(n=100):
 def main():
     data = generate_kline_data(100)
 
-    chart = ta.PyKlineChart(data, language="zh", title="K线图示例", width=1200, height=600)
+    chart = ta.KlineChart(data, language="zh", title="K线图示例", width=1200, height=600)
 
     chart.add_ma([5, 10, 20])
     chart.add_macd(12, 26, 9)

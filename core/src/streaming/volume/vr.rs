@@ -73,7 +73,7 @@ impl StreamingVr {
     #[inline]
     fn compute(&self) -> Option<f64> {
         let denom = self.down_vol + 0.5 * self.flat_vol;
-        if denom.abs() <= 1e-15 {
+        if crate::utils::is_zero(denom) {
             None
         } else {
             Some((self.up_vol + 0.5 * self.flat_vol) / denom * 100.0)

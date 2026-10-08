@@ -61,6 +61,13 @@
 `docs/formula-runtime-contract.md`）。
 
 - `formula_engine_integration.rs` - 公式引擎集成测试
+- `adx_nan_golden.rs` - **ADX 族语义金标**（V5 Batch 1 ①）：公开 `adx_into`
+  与 canonical `AdxState` 内核逐位一致（干净 OHLC / 含 NaN OHLC / 平坦市场
+  fallback），锁定合并后的 TA-Lib 语义（fmax 吞 NaN + `TA_IS_ZERO` 1e-8）
+- `formula_input_bounds.rs` - **崩溃面门禁**（V5 Batch 6）：超限输入必须返回
+  typed error 而非 abort —— 源长度上限（1 MiB）、扁平长链的 AST 深度上限
+  （1024，含迭代式 dismantle 防拒绝后的递归析构溢出）、程序化深 AST 在
+  lowering 中的类型化 `LoweringDepthExceeded`、合法深度公式两路径照常求值
 - `formula_differential_tests.rs` - 手写公式集的四路径差分（tree / bytecode / JIT / plan）
 - `formula_draw_parity.rs` - `DRAW` 类语句：两路径返回序列必须一致（tree 给
   `Scalar(0.0)`），plan 侧尚未复现的绘图命令逐项列举成双向门禁 —— 修好一条就必须删掉一条，

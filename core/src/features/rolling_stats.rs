@@ -27,7 +27,7 @@ fn rs_statistic(segment: &[f64]) -> Option<f64> {
     let range = max_cum - min_cum;
     let variance = segment.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
     let std = variance.sqrt();
-    if std > 1e-15 {
+    if std > crate::utils::NUMERIC_EPSILON {
         Some(range / std)
     } else {
         None
@@ -62,7 +62,7 @@ pub fn rolling_skewness(data: &[f64], window: usize) -> Array1<f64> {
         m2 /= n;
         m3 /= n;
         let std = m2.sqrt();
-        if std > 1e-15 {
+        if std > crate::utils::NUMERIC_EPSILON {
             out[i] = m3 / (std * std * std);
         } else {
             out[i] = 0.0;
@@ -94,7 +94,7 @@ pub fn rolling_kurtosis(data: &[f64], window: usize) -> Array1<f64> {
         }
         m2 /= n;
         m4 /= n;
-        if m2 > 1e-15 {
+        if m2 > crate::utils::NUMERIC_EPSILON {
             out[i] = m4 / (m2 * m2) - 3.0;
         } else {
             out[i] = 0.0;
@@ -118,7 +118,7 @@ pub fn rolling_entropy(data: &[f64], window: usize, num_bins: usize) -> Array1<f
         let max_val = slice.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
         let range = max_val - min_val;
 
-        if range < 1e-15 {
+        if range < crate::utils::NUMERIC_EPSILON {
             out[i] = 0.0;
             continue;
         }
@@ -166,7 +166,7 @@ pub fn rolling_zscore(data: &[f64], window: usize) -> Array1<f64> {
         let mean = slice.iter().sum::<f64>() / w;
         let (_, sum_dx_dx, _) = crate::math::centred_moments(slice, slice);
         let std = (sum_dx_dx / w).max(0.0).sqrt();
-        out[i] = if std > 1e-15 {
+        out[i] = if std > crate::utils::NUMERIC_EPSILON {
             (data[i] - mean) / std
         } else {
             0.0
@@ -255,7 +255,7 @@ pub fn acf(data: &[f64], max_lag: usize) -> Vec<f64> {
     }
     let mean = data.iter().sum::<f64>() / n as f64;
     let var: f64 = data.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n as f64;
-    if var < 1e-15 {
+    if var < crate::utils::NUMERIC_EPSILON {
         if max_lag > 0 {
             out[1..=max_lag].fill(0.0);
         }
@@ -297,7 +297,11 @@ pub fn pacf(data: &[f64], max_lag: usize) -> Vec<f64> {
         for j in 1..k {
             den -= phi[j] * r[j];
         }
-        let pk = if den.abs() < 1e-15 { 0.0 } else { num / den };
+        let pk = if den.abs() < crate::utils::NUMERIC_EPSILON {
+            0.0
+        } else {
+            num / den
+        };
         out[k] = pk;
 
         let mut phi_new = vec![0.0f64; k + 1];
@@ -471,7 +475,7 @@ fn solve_linear_system(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>
                 pivot_row = row;
             }
         }
-        if pivot_val < 1e-15 {
+        if pivot_val < crate::utils::NUMERIC_EPSILON {
             return None;
         }
         if pivot_row != col {
@@ -483,7 +487,7 @@ fn solve_linear_system(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>
         let pivot_row = a[col][col..].to_vec();
         for (row_idx, row) in a.iter_mut().enumerate().take(n).skip(col + 1) {
             let factor = row[col] / pivot;
-            if factor.abs() < 1e-15 {
+            if factor.abs() < crate::utils::NUMERIC_EPSILON {
                 continue;
             }
             for (row_k, pivot_k) in row.iter_mut().skip(col).zip(pivot_row.iter()) {
@@ -500,7 +504,7 @@ fn solve_linear_system(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>
             sum -= a[row][col] * x[col];
         }
         let diag = a[row][row];
-        if diag.abs() < 1e-15 {
+        if diag.abs() < crate::utils::NUMERIC_EPSILON {
             return None;
         }
         x[row] = sum / diag;
@@ -580,7 +584,11 @@ fn ols_with_intercept(
     let mut t_stats = vec![0.0; k];
     for i in 0..k {
         let se = (sigma2 * xtx_inv[i][i]).sqrt();
-        t_stats[i] = if se > 1e-15 { beta[i] / se } else { f64::NAN };
+        t_stats[i] = if se > crate::utils::NUMERIC_EPSILON {
+            beta[i] / se
+        } else {
+            f64::NAN
+        };
     }
 
     Ok((beta, t_stats, n))
@@ -1345,7 +1353,7 @@ pub fn mann_kendall(data: &[f64]) -> Result<MkResult> {
     let mut i = 0;
     while i < n {
         let mut j = i;
-        while j < n - 1 && (sorted[j + 1] - sorted[j]).abs() < 1e-15 {
+        while j < n - 1 && (sorted[j + 1] - sorted[j]).abs() < crate::utils::NUMERIC_EPSILON {
             j += 1;
         }
         let group_size = j - i + 1;
@@ -1579,7 +1587,7 @@ pub fn granger_causality(x: &[f64], y: &[f64], max_lag: usize) -> Result<Granger
     let df1 = max_lag as f64;
     let df2 = (t - 2 * max_lag - 1) as f64;
 
-    if df2 <= 0.0 || rss_u < 1e-15 {
+    if df2 <= 0.0 || rss_u < crate::utils::NUMERIC_EPSILON {
         return Ok(GrangerResult {
             f_stat: 0.0,
             p_value: 1.0,
@@ -1675,7 +1683,7 @@ fn solve_system(a: &mut [f64], b: &mut [f64], n: usize) -> Vec<f64> {
         }
 
         let pivot = a[col * n + col];
-        if pivot.abs() < 1e-15 {
+        if pivot.abs() < crate::utils::NUMERIC_EPSILON {
             continue;
         }
 
@@ -1694,7 +1702,7 @@ fn solve_system(a: &mut [f64], b: &mut [f64], n: usize) -> Vec<f64> {
         for j in (i + 1)..n {
             sum -= a[i * n + j] * x[j];
         }
-        if a[i * n + i].abs() > 1e-15 {
+        if a[i * n + i].abs() > crate::utils::NUMERIC_EPSILON {
             x[i] = sum / a[i * n + i];
         }
     }
@@ -1762,7 +1770,7 @@ fn regularized_incomplete_beta(a: f64, b: f64, x: f64) -> f64 {
         let delta = c * d;
         f_val *= delta;
 
-        if (delta - 1.0).abs() < 1e-8 {
+        if (delta - 1.0).abs() < crate::utils::TA_IS_ZERO_BANDWIDTH {
             break;
         }
     }
@@ -1921,7 +1929,7 @@ fn pearson_ic(x: &[f64], y: &[f64]) -> f64 {
     let (cross, sum_dx_dx, sum_dy_dy) = crate::math::centred_moments(x, y);
     let denom = (sum_dx_dx * sum_dy_dy).sqrt();
 
-    if denom < 1e-15 {
+    if denom < crate::utils::NUMERIC_EPSILON {
         return 0.0;
     }
 

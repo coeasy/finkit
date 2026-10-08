@@ -62,7 +62,8 @@ pub fn cmf(
     #[inline(always)]
     fn compute_mfv(h: f64, l: f64, c: f64, v: f64) -> (f64, f64, bool) {
         let range = h - l;
-        if range.abs() > 1e-15 && !h.is_nan() && !l.is_nan() && !c.is_nan() && !v.is_nan() {
+        if !crate::utils::is_zero(range) && !h.is_nan() && !l.is_nan() && !c.is_nan() && !v.is_nan()
+        {
             let mfv = ((c - l) - (h - c)) / range * v;
             (mfv, v, true)
         } else {
@@ -89,7 +90,7 @@ pub fn cmf(
         }
     }
 
-    if valid_count == period && sum_vol.abs() > 1e-15 {
+    if valid_count == period && !crate::utils::is_zero(sum_vol) {
         output[period - 1] = sum_mfv / sum_vol;
     }
 
@@ -109,7 +110,7 @@ pub fn cmf(
             sum_vol += vol;
             valid_count += 1;
         }
-        if valid_count == period && sum_vol.abs() > 1e-15 {
+        if valid_count == period && !crate::utils::is_zero(sum_vol) {
             output[i] = sum_mfv / sum_vol;
         }
     }
@@ -184,7 +185,7 @@ pub fn eom(high: &[f64], low: &[f64], volume: &[f64], period: usize) -> Result<A
     for i in 1..len {
         let distance = (high[i] + low[i]) - (high[i - 1] + low[i - 1]);
         let range = high[i] - low[i];
-        if range.abs() > 1e-15 && volume[i].abs() > 1e-15 {
+        if !crate::utils::is_zero(range) && !crate::utils::is_zero(volume[i]) {
             raw[i] = distance * 0.5 * range * EOM_DIVISOR / volume[i];
         }
     }
@@ -304,7 +305,11 @@ pub fn kvo(
         };
 
         // Compute vf[i]
-        let vf_i = if volume[i].is_nan() || dm_i.is_nan() || cm_i.is_nan() || cm_i.abs() <= 1e-15 {
+        let vf_i = if volume[i].is_nan()
+            || dm_i.is_nan()
+            || cm_i.is_nan()
+            || crate::utils::is_zero(cm_i)
+        {
             0.0
         } else {
             volume[i] * (2.0 * dm_i / cm_i - 1.0).abs() * trend_i as f64
@@ -395,7 +400,7 @@ pub fn nvi(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
             let c = close[i];
             let cp = close[i - 1];
             if volume[i] < volume[i - 1]
-                && cp.abs() > 1e-15
+                && !crate::utils::is_zero(cp)
                 && !c.is_nan()
                 && !cp.is_nan()
                 && !volume[i].is_nan()
@@ -448,7 +453,7 @@ pub fn pvi(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
             let c = close[i];
             let cp = close[i - 1];
             if volume[i] > volume[i - 1]
-                && cp.abs() > 1e-15
+                && !crate::utils::is_zero(cp)
                 && !c.is_nan()
                 && !cp.is_nan()
                 && !volume[i].is_nan()
@@ -574,7 +579,7 @@ pub fn pvt(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
             if c.is_nan() || cp.is_nan() || volume[i].is_nan() {
                 output[i] = f64::NAN;
                 acc = f64::NAN;
-            } else if cp.abs() <= 1e-15 {
+            } else if crate::utils::is_zero(cp) {
                 output[i] = acc;
             } else {
                 acc += volume[i] * (c - cp) / cp;
@@ -655,7 +660,7 @@ pub fn mfi_ext(
         }
 
         if i >= period {
-            let mf_ratio = if sum_neg.abs() > 1e-15 {
+            let mf_ratio = if !crate::utils::is_zero(sum_neg) {
                 sum_pos / sum_neg
             } else {
                 0.0
@@ -722,7 +727,7 @@ pub fn volume_oscillator(
 
     // Calculate oscillator
     for i in slow_period - 1..len {
-        if !fast_sma[i].is_nan() && !slow_sma[i].is_nan() && slow_sma[i].abs() > 1e-15 {
+        if !fast_sma[i].is_nan() && !slow_sma[i].is_nan() && !crate::utils::is_zero(slow_sma[i]) {
             output[i] = (fast_sma[i] - slow_sma[i]) / slow_sma[i] * 100.0;
         }
     }
@@ -1014,7 +1019,7 @@ pub fn twiggs_money_flow(
         let true_low = low[i].min(close[i - 1]);
         let tr = true_high - true_low;
 
-        let ad_val = if tr > 1e-15 {
+        let ad_val = if tr > crate::utils::TA_IS_ZERO_BANDWIDTH {
             volume[i] * (2.0 * close[i] - true_high - true_low) / tr
         } else {
             0.0
@@ -1029,7 +1034,7 @@ pub fn twiggs_money_flow(
             ema_vol = alpha * volume[i] + (1.0 - alpha) * ema_vol;
         }
 
-        if i >= period && ema_vol.abs() > 1e-15 {
+        if i >= period && !crate::utils::is_zero(ema_vol) {
             output[i] = ema_ad / ema_vol;
         }
     }
@@ -1122,7 +1127,7 @@ pub fn vzo(close: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>> 
 
     let mut output = init_output(len);
     for i in 0..len {
-        if !ema_vp[i].is_nan() && !ema_tv[i].is_nan() && ema_tv[i].abs() > 1e-15 {
+        if !ema_vp[i].is_nan() && !ema_tv[i].is_nan() && !crate::utils::is_zero(ema_tv[i]) {
             output[i] = (ema_vp[i] / ema_tv[i]) * 100.0;
         }
     }
@@ -1212,7 +1217,7 @@ pub fn volume_roc(volume: &[f64], period: usize) -> Result<Array1<f64>> {
 
     for i in period..len {
         let prev = volume[i - period];
-        if prev.abs() > 1e-15 {
+        if !crate::utils::is_zero(prev) {
             output[i] = (volume[i] - prev) / prev * 100.0;
         } else {
             output[i] = 0.0;

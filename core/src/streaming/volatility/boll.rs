@@ -1,4 +1,5 @@
 use crate::impl_standard_methods;
+use crate::streaming::forming_bar::FormingBar;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -25,9 +26,9 @@ pub struct StreamingBoll {
     inv_n: f64,
     inv_n_minus_1: f64,
     last_value: Option<BollOutput>,
+    /// Forming-bar bookkeeping; see [`FormingBar`].
     #[cfg_attr(feature = "serde", serde(skip))]
-    snapshot: Option<SnapshotState>,
-    last_open_time: i64,
+    bar: FormingBar<SnapshotState>,
 }
 
 #[derive(Clone, Copy)]
@@ -38,7 +39,6 @@ struct SnapshotState {
     sum_sq: f64,
     count: usize,
     last_value: Option<BollOutput>,
-    last_open_time: i64,
     head_val: f64,
 }
 
@@ -57,36 +57,31 @@ impl StreamingBoll {
             inv_n: 1.0 / period as f64,
             inv_n_minus_1: 1.0 / (period as f64 - 1.0),
             last_value: None,
-            snapshot: None,
-            last_open_time: 0,
+            bar: FormingBar::new(),
         }
     }
 
     pub fn compute_bar(&mut self, bar: &dyn Ohlcv) -> Option<BollOutput> {
         let t = bar.open_time();
-        if t != 0 && t == self.last_open_time {
-            if let Some(snap) = self.snapshot.take() {
-                self.head = snap.head;
-                self.len = snap.len;
-                self.sum = snap.sum;
-                self.sum_sq = snap.sum_sq;
-                self.count = snap.count;
-                self.last_value = snap.last_value;
-                self.last_open_time = snap.last_open_time;
-                self.buffer[snap.head] = snap.head_val;
-            }
+        if let Some(snap) = self.bar.take_rollback(t) {
+            self.head = snap.head;
+            self.len = snap.len;
+            self.sum = snap.sum;
+            self.sum_sq = snap.sum_sq;
+            self.count = snap.count;
+            self.last_value = snap.last_value;
+            self.buffer[snap.head] = snap.head_val;
         }
-        self.snapshot = Some(SnapshotState {
+        let snap = SnapshotState {
             head: self.head,
             len: self.len,
             sum: self.sum,
             sum_sq: self.sum_sq,
             count: self.count,
             last_value: self.last_value,
-            last_open_time: self.last_open_time,
             head_val: self.buffer[self.head],
-        });
-        self.last_open_time = t;
+        };
+        self.bar.begin(t, snap);
         self.next(bar.close())
     }
 }
@@ -144,8 +139,7 @@ impl StreamingIndicator<f64, BollOutput> for StreamingBoll {
         self.sum_sq = 0.0;
         self.count = 0;
         self.last_value = None;
-        self.snapshot = None;
-        self.last_open_time = 0;
+        self.bar.clear();
     }
 
     fn is_ready(&self) -> bool {

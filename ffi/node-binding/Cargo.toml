@@ -26,4 +26,4 @@ napi-build = "2"
 
 [features]
 default = ["formula"]
-formula = ["finkit/formula", "dep:ndarray"]
+formula = ["finkit/formula", "finkit/formula-jit", "finkit/formula-simd", "dep:ndarray"]

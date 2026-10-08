@@ -38,7 +38,7 @@ impl StreamingIndicator<(f64, f64, f64), f64> for StreamingAdr {
         let range_val = match self.mode {
             AdrMode::Absolute => high - low,
             AdrMode::Percent => {
-                if close.abs() > 1e-15 {
+                if !crate::utils::is_zero(close) {
                     (high - low) / close * 100.0
                 } else {
                     0.0

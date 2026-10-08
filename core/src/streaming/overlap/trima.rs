@@ -11,12 +11,18 @@
 //! also O(1) per input.
 
 use crate::impl_standard_methods;
+use crate::streaming::forming_bar::FormingBar;
 use crate::streaming::overlap::sma::StreamingSma;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingTrima {
+    // Persisted for `Serialize`/`Deserialize`: the checkpoint layout is a
+    // tested contract (`core/tests/serde_roundtrip_tests.rs`), but no logic
+    // path reads this value. The derive is feature-gated, so a build without
+    // `serde` sees a write-only field and `dead_code` reports it.
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     period: usize,
     first_period: usize,
     second_period: usize,
@@ -24,9 +30,9 @@ pub struct StreamingTrima {
     outer: StreamingSma,
     count: usize,
     last_value: Option<f64>,
+    /// Forming-bar bookkeeping; see [`FormingBar`].
     #[cfg_attr(feature = "serde", serde(skip))]
-    snapshot: Option<SnapshotState>,
-    last_open_time: i64,
+    bar: FormingBar<SnapshotState>,
 }
 
 #[derive(Clone, Copy)]
@@ -35,7 +41,6 @@ struct SnapshotState {
     outer: super::sma::SmaSnapshot,
     count: usize,
     last_value: Option<f64>,
-    last_open_time: i64,
 }
 
 impl StreamingTrima {
@@ -55,30 +60,25 @@ impl StreamingTrima {
             outer: StreamingSma::new(second_period),
             count: 0,
             last_value: None,
-            snapshot: None,
-            last_open_time: 0,
+            bar: FormingBar::new(),
         }
     }
 
     pub fn compute_bar(&mut self, bar: &dyn Ohlcv) -> Option<f64> {
         let t = bar.open_time();
-        if t != 0 && t == self.last_open_time {
-            if let Some(snap) = self.snapshot.take() {
-                self.inner.restore(snap.inner);
-                self.outer.restore(snap.outer);
-                self.count = snap.count;
-                self.last_value = snap.last_value;
-                self.last_open_time = snap.last_open_time;
-            }
+        if let Some(snap) = self.bar.take_rollback(t) {
+            self.inner.restore(snap.inner);
+            self.outer.restore(snap.outer);
+            self.count = snap.count;
+            self.last_value = snap.last_value;
         }
-        self.snapshot = Some(SnapshotState {
+        let snap = SnapshotState {
             inner: self.inner.snapshot(),
             outer: self.outer.snapshot(),
             count: self.count,
             last_value: self.last_value,
-            last_open_time: self.last_open_time,
-        });
-        self.last_open_time = t;
+        };
+        self.bar.begin(t, snap);
         self.next(bar.close())
     }
 }
@@ -104,8 +104,7 @@ impl StreamingIndicator for StreamingTrima {
         self.outer.reset();
         self.count = 0;
         self.last_value = None;
-        self.snapshot = None;
-        self.last_open_time = 0;
+        self.bar.clear();
     }
 
     fn is_ready(&self) -> bool {

@@ -17,6 +17,34 @@ pub struct FormulaParser;
 /// of levels; 256 leaves orders of magnitude of headroom.
 const MAX_NESTING_DEPTH: usize = 256;
 
+/// Maximum size of a native-dialect formula source, in bytes (1 MiB).
+///
+/// The nesting budget above bounds depth but not breadth: a flat source of a
+/// million `1+1+` terms carries no parenthesis nesting, yet it builds a
+/// left-nested [`AstNode`] whose depth equals the number of terms. Bounding the
+/// input keeps every downstream walk bounded too. The cap matches the Pine
+/// parser's budget (`formula/pine/parser.rs`), so no dialect accepts a source
+/// the other rejects — no deliberate formula is a megabyte of text.
+const MAX_SOURCE_BYTES: usize = 1 << 20;
+
+/// Deepest [`AstNode`] tree `parse_formula` returns.
+///
+/// Even with the source-size cap, a ~1 MiB flat chain still parses into a tree
+/// hundreds of thousands of levels deep, and both consumers of the AST recurse
+/// over that depth: the plan path lowers it recursively
+/// (`compute_ir::FormulaLowerer`), the tree path evaluates it recursively
+/// (`executor::execute_val`), and the rejected tree would even recurse on
+/// `Box`-drop teardown. A stack overflow is an abort no `catch_unwind` can
+/// catch at the FFI boundary. The limit is checked *iteratively* (see
+/// [`AstNode::ast_depth`]), the rejected tree is torn down iteratively (see
+/// [`AstNode::dismantle_ast`]), and the cap sits at a quarter of the lowerer's
+/// defense-in-depth budget (`compute_ir::MAX_LOWER_DEPTH`), so every accepted
+/// parse is also lowerable and evaluable. The budget was tuned against
+/// *measured* frame cost: lowering a chain near the previous 4096 budget
+/// overflowed a 2 MiB thread stack. Real formulas nest a handful of levels;
+/// 1024 leaves orders of magnitude of headroom.
+const MAX_AST_DEPTH: usize = 1024;
+
 fn nesting_depth(source: &str) -> usize {
     let mut depth = 0usize;
     let mut max = 0usize;
@@ -33,7 +61,29 @@ fn nesting_depth(source: &str) -> usize {
     max
 }
 
+/// Enforce the structural AST-depth cap on a successfully parsed tree.
+///
+/// Shared by every dialect front end (`parse_formula` and the Pine mapper):
+/// whichever front end builds the tree must reject it the same way. On
+/// violation the tree is dismantled iteratively *before* the error is
+/// returned — dropping it normally would recurse once per level and overflow
+/// the very stack the cap exists to protect.
+pub(crate) fn enforce_ast_depth(ast: AstNode) -> Result<AstNode, String> {
+    if ast.ast_depth() > MAX_AST_DEPTH {
+        ast.dismantle_ast();
+        return Err(format!(
+            "Parse error: expression depth exceeds the limit of {MAX_AST_DEPTH} levels"
+        ));
+    }
+    Ok(ast)
+}
+
 pub fn parse_formula(source: &str) -> Result<AstNode, String> {
+    if source.len() > MAX_SOURCE_BYTES {
+        return Err(format!(
+            "Parse error: source exceeds the size limit of {MAX_SOURCE_BYTES} bytes"
+        ));
+    }
     if nesting_depth(source) > MAX_NESTING_DEPTH {
         return Err(format!(
             "Parse error: nesting depth exceeds the limit of {MAX_NESTING_DEPTH} levels"
@@ -43,7 +93,8 @@ pub fn parse_formula(source: &str) -> Result<AstNode, String> {
     let pairs =
         FormulaParser::parse(Rule::program, source).map_err(|e| format!("Parse error: {}", e))?;
 
-    parse_program(pairs)
+    let ast = parse_program(pairs)?;
+    enforce_ast_depth(ast)
 }
 
 fn parse_program(pairs: Pairs<Rule>) -> Result<AstNode, String> {

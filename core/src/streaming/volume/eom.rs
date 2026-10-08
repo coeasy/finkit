@@ -42,11 +42,11 @@ impl StreamingEom {
         let distance = (high + low) / 2.0 - (prev_high + prev_low) / 2.0;
         let range = high - low;
 
-        if range.abs() <= 1e-15 || volume.abs() <= 1e-15 {
+        if crate::utils::is_zero(range) || crate::utils::is_zero(volume) {
             0.0
         } else {
             let box_ratio = (volume / EOM_DIVISOR) / range;
-            if box_ratio.abs() <= 1e-15 {
+            if crate::utils::is_zero(box_ratio) {
                 0.0
             } else {
                 distance / box_ratio

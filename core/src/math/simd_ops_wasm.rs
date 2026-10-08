@@ -269,7 +269,7 @@ unsafe fn rsi_simd128(input: &[f64], period: usize, output: &mut [f64]) {
     }
 
     let mut prev = input[count];
-    output[count] = if avg_loss < 1e-15 {
+    output[count] = if avg_loss < crate::utils::NUMERIC_EPSILON {
         100.0
     } else {
         100.0 * avg_gain / (avg_gain + avg_loss)
@@ -282,7 +282,7 @@ unsafe fn rsi_simd128(input: &[f64], period: usize, output: &mut [f64]) {
         let l = if diff < 0.0 { -diff } else { 0.0 };
         avg_gain = (g - avg_gain).mul_add(kk, avg_gain);
         avg_loss = (l - avg_loss).mul_add(kk, avg_loss);
-        output[i] = if avg_loss < 1e-15 {
+        output[i] = if avg_loss < crate::utils::NUMERIC_EPSILON {
             100.0
         } else {
             100.0 * avg_gain / (avg_gain + avg_loss)

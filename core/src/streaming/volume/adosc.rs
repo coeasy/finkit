@@ -8,6 +8,11 @@ use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 #[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingAdosc {
+    // Persisted for `Serialize`/`Deserialize`: the checkpoint layout is a
+    // tested contract (`core/tests/serde_roundtrip_tests.rs`), but no logic
+    // path reads this value. The derive is feature-gated, so a build without
+    // `serde` sees a write-only field and `dead_code` reports it.
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     fast_period: usize,
     slow_period: usize,
     ad_cumulative: f64,
@@ -37,7 +42,7 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingAdosc {
         self.count += 1;
 
         let range = bar.high() - bar.low();
-        if range.abs() > 1e-15 {
+        if !crate::utils::is_zero(range) {
             let clv = ((bar.close() - bar.low()) - (bar.high() - bar.close())) / range;
             self.ad_cumulative += clv * bar.volume();
         }

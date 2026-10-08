@@ -31,7 +31,7 @@ impl<T: Ohlcv> StreamingIndicator<T> for StreamingBop {
     fn next(&mut self, input: T) -> Option<f64> {
         self.count += 1;
         let range = input.high() - input.low();
-        let val = if range.abs() > 1e-15 {
+        let val = if !crate::utils::is_zero(range) {
             (input.close() - input.open()) / range
         } else {
             0.0

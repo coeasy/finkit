@@ -61,7 +61,7 @@ impl StreamingIndicator<(f64, f64), FisherOutput> for StreamingFisher {
         let mid = (high + low) / 2.0;
         let range = highest - lowest;
 
-        let normalized = if range.abs() > 1e-15 {
+        let normalized = if !crate::utils::is_zero(range) {
             2.0 * ((mid - lowest) / range - 0.5)
         } else {
             0.0

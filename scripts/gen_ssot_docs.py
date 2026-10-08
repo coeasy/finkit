@@ -34,10 +34,14 @@ INDICATORS_DIR = ROOT / "core" / "src" / "indicators"
 STREAMING_MOD = ROOT / "core" / "src" / "streaming" / "mod.rs"
 STREAMING_DIR = ROOT / "core" / "src" / "streaming"
 FORMULA_MOD = ROOT / "core" / "src" / "formula" / "mod.rs"
+# The router. `get_builtin_functions` folds its `canonical_overrides()` vector
+# into the table, so the names in that vector are part of the formula surface
+# even though the router writes no `map.insert` call of its own.
+FORMULA_ROUTER = ROOT / "core" / "src" / "formula" / "functions.rs"
 FORMULA_FUNCTION_SOURCES = (
-    ROOT / "core" / "src" / "formula" / "functions.rs",
-    ROOT / "core" / "src" / "formula" / "functions_legacy.rs",
-    ROOT / "core" / "src" / "formula" / "functions_talib_081.rs",
+    ROOT / "core" / "src" / "formula" / "functions",
+    ROOT / "core" / "src" / "formula" / "functions_legacy",
+    ROOT / "core" / "src" / "formula" / "functions_talib_081",
 )
 FEATURES_MOD = ROOT / "core" / "src" / "features" / "mod.rs"
 PINE_BUILTIN = ROOT / "core" / "src" / "formula" / "pine" / "builtin_table.rs"
@@ -65,6 +69,53 @@ OUT_VERSION_MATRIX = GENERATED_DIR / "version-matrix.md"
 
 PUB_MOD_RE = re.compile(r"^pub\s+mod\s+(\w+)\s*;")
 PUB_FN_RE = re.compile(r"^pub\s+fn\s+(\w+)\s*\(")
+PUB_STRUCT_RE = re.compile(r"^pub\s+struct\s+(\w+)")
+
+
+def module_files(base: Path) -> list[Path]:
+    """Every `.rs` file that contributes to the Rust module at `base`.
+
+    `pub mod foo;` resolves to either `foo.rs`, or `foo/mod.rs` plus its
+    submodules -- and this tree contains both shapes, because the largest
+    modules were split from a single file into a directory of submodules so they
+    could be reviewed. A scanner that only ever looks for `<name>.rs` therefore
+    reports an **empty** catalogue for every module that was ever split, and it
+    reports it silently: that is how the formula catalogue fell from 452
+    functions to 48 and the indicator catalogue from 389 to 326 with nothing
+    raising a hand. Every module lookup must go through here.
+    """
+    flat = base.with_suffix(".rs")
+    if flat.is_file():
+        return [flat]
+    if base.is_dir():
+        return sorted(base.rglob("*.rs"))
+    return []
+
+
+def rust_fn_body(text: str, fn_name: str) -> str:
+    """The brace-matched body of `fn <fn_name>(...)`, or `""` if it is absent.
+
+    Used to scope an extraction to one function instead of a whole file: the
+    canonical-override table is one `vec![..]` inside `canonical_overrides`, and
+    the same quoted uppercase names appear in comments and in `#[cfg(test)]`
+    fixtures nearby, so a file-wide scan would pick those up as real entries.
+    """
+    head = re.search(rf"\bfn\s+{re.escape(fn_name)}\s*[(<]", text)
+    if head is None:
+        return ""
+    open_brace = text.find("{", head.end())
+    if open_brace < 0:
+        return ""
+    depth = 0
+    for index in range(open_brace, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[open_brace + 1 : index]
+    return ""
 FFI_STATUS_ENUM_RE = re.compile(
     r"pub\s+enum\s+FfiStatus\s*\{([^}]+)\}",
     re.DOTALL,
@@ -177,14 +228,12 @@ def parse_indicator_modules() -> list[str]:
 
 
 def scan_module_functions(module_name: str) -> list[str]:
-    path = INDICATORS_DIR / f"{module_name}.rs"
-    if not path.is_file():
-        return []
     functions: list[str] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        m = PUB_FN_RE.match(line.strip())
-        if m:
-            functions.append(m.group(1))
+    for path in module_files(INDICATORS_DIR / module_name):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            m = PUB_FN_RE.match(line.strip())
+            if m:
+                functions.append(m.group(1))
     return sorted(set(functions))
 
 
@@ -209,15 +258,12 @@ def parse_streaming_modules() -> list[str]:
 
 def scan_streaming_structs(module_name: str) -> list[str]:
     """Scan streaming module for public struct definitions (indicator classes)."""
-    path = STREAMING_DIR / f"{module_name}.rs"
-    if not path.is_file():
-        return []
     structs: list[str] = []
-    struct_re = re.compile(r"^pub\s+struct\s+(\w+)")
-    for line in path.read_text(encoding="utf-8").splitlines():
-        m = struct_re.match(line.strip())
-        if m:
-            structs.append(m.group(1))
+    for path in module_files(STREAMING_DIR / module_name):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            m = PUB_STRUCT_RE.match(line.strip())
+            if m:
+                structs.append(m.group(1))
     return sorted(set(structs))
 
 
@@ -243,8 +289,17 @@ def parse_formula_functions() -> list[str]:
     `get_builtin_functions()`:
 
     1. every `map.insert("NAME", ...)` site in either formula source;
-    2. plus, for each registry spec whose canonical name is registered, that
+    2. plus the names in the router's `canonical_overrides()` vector, which
+       `get_builtin_functions` folds in after the legacy table and which the
+       router registers with no `map.insert` of its own;
+    3. plus, for each registry spec whose canonical name is registered, that
        spec's aliases -- mirroring the `map.get(spec.name)` guard.
+
+    Step 2 is why this function reads a *list literal* as well as insert sites.
+    When the router moved from `map.insert("NAME", fn)` to returning a
+    `Vec<(&str, FormulaFn)>`, every override -- and, through step 3, every alias
+    those names carry -- disappeared from the catalogue: 452 functions became
+    416 with nothing failing.
 
     An earlier line-based regex matched *any* uppercase literal followed by
     `,`/`)`, which both invented entries from error-message strings
@@ -255,12 +310,22 @@ def parse_formula_functions() -> list[str]:
     """
     insert_re = re.compile(r'map\.insert\(\s*"([A-Z_0-9]+)"')
     registered: set[str] = set()
-    for source in FORMULA_FUNCTION_SOURCES:
-        if not source.is_file():
-            continue
-        # Match against the whole file, not line by line: `map.insert(` and its
-        # name argument are frequently split across lines.
-        registered.update(insert_re.findall(source.read_text(encoding="utf-8")))
+    for base in FORMULA_FUNCTION_SOURCES:
+        for source in module_files(base):
+            # Match against the whole file, not line by line: `map.insert(`
+            # and its name argument are frequently split across lines.
+            registered.update(insert_re.findall(source.read_text(encoding="utf-8")))
+
+    if FORMULA_ROUTER.is_file():
+        # `("NAME", fn_name as FormulaFn)` -- rustfmt splits the longer entries
+        # across lines, so match against the whole body rather than line by
+        # line, and require the `as FormulaFn` tail so a bare quoted name in a
+        # comment or a `#[cfg(test)]` fixture cannot be read as a registration.
+        override_re = re.compile(r'"([A-Z_0-9]+)"\s*,\s*\w+\s+as\s+FormulaFn')
+        body = rust_fn_body(
+            FORMULA_ROUTER.read_text(encoding="utf-8"), "canonical_overrides"
+        )
+        registered.update(override_re.findall(body))
 
     if FUNCTION_REGISTRY_SOURCE.is_file():
         spec_re = re.compile(

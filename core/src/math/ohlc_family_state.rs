@@ -152,7 +152,7 @@ impl OhlcFamilyState {
         }
         if logical_index >= self.period {
             sample.atr = self.atr;
-            sample.natr = if close.abs() > 1e-15 {
+            sample.natr = if close.abs() > crate::utils::NUMERIC_EPSILON {
                 self.atr / close * 100.0
             } else {
                 0.0
@@ -171,7 +171,7 @@ impl OhlcFamilyState {
             self.smooth_plus_dm = self.smooth_plus_dm - self.smooth_plus_dm / p + plus_dm;
             self.smooth_minus_dm = self.smooth_minus_dm - self.smooth_minus_dm / p + minus_dm;
 
-            let (plus_di, minus_di) = if self.smooth_tr.abs() > 1e-15 {
+            let (plus_di, minus_di) = if self.smooth_tr.abs() > crate::utils::NUMERIC_EPSILON {
                 (
                     self.smooth_plus_dm / self.smooth_tr * 100.0,
                     self.smooth_minus_dm / self.smooth_tr * 100.0,
@@ -180,7 +180,7 @@ impl OhlcFamilyState {
                 (0.0, 0.0)
             };
             let di_sum = plus_di + minus_di;
-            let dx = if di_sum.abs() > 1e-15 {
+            let dx = if di_sum.abs() > crate::utils::NUMERIC_EPSILON {
                 (plus_di - minus_di).abs() / di_sum * 100.0
             } else {
                 0.0

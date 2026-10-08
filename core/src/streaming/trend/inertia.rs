@@ -28,6 +28,11 @@ pub struct StreamingInertia {
     rvi_sum_xy: f64,
     // TSF precomputed constants
     sx: f64,
+    // Persisted for `Serialize`/`Deserialize`: the checkpoint layout is a
+    // tested contract (`core/tests/serde_roundtrip_tests.rs`), but no logic
+    // path reads this value. The derive is feature-gated, so a build without
+    // `serde` sees a write-only field and `dead_code` reports it.
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     sx2: f64,
     n: f64,
     denom: f64,
@@ -102,7 +107,11 @@ impl StreamingIndicator<(f64, f64, f64, f64), f64> for StreamingInertia {
 
         let num = wavg4(c0 - o0, c1 - o1, c2 - o2, c3 - o3);
         let den = wavg4(h0 - l0, h1 - l1, h2 - l2, h3 - l3);
-        let ratio = if den.abs() > 1e-15 { num / den } else { 0.0 };
+        let ratio = if !crate::utils::is_zero(den) {
+            num / den
+        } else {
+            0.0
+        };
 
         // Update SMA ring buffer for ratio
         let old_ratio = self.ratio_ring[self.ratio_ring_idx];
@@ -153,7 +162,7 @@ impl StreamingIndicator<(f64, f64, f64, f64), f64> for StreamingInertia {
             return None;
         }
 
-        if self.denom.abs() < 1e-15 {
+        if crate::utils::is_zero(self.denom) {
             self.last_value = Some(rvi_val);
             return self.last_value;
         }

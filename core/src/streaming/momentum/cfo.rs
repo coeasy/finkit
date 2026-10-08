@@ -58,7 +58,7 @@ impl StreamingIndicator<f64, f64> for StreamingCfo {
             return None;
         }
 
-        if self.denom.abs() < 1e-15 {
+        if crate::utils::is_zero(self.denom) {
             self.last_value = Some(0.0);
             return self.last_value;
         }
@@ -67,7 +67,7 @@ impl StreamingIndicator<f64, f64> for StreamingCfo {
         let intercept = (self.sum_y - slope * self.sx) / self.n;
         let tsf_val = intercept + slope * self.n;
 
-        let cfo = if input.abs() > 1e-15 {
+        let cfo = if !crate::utils::is_zero(input) {
             ((input - tsf_val) / input) * 100.0
         } else {
             0.0

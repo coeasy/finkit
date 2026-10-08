@@ -76,20 +76,10 @@ strip = true
 sdist-include = ["Cargo.lock"]
 include = ["finkit/py.typed"]
 
-[tool.maturin.target.x86_64-pc-windows-msvc]
-features = ["pyo3/extension-module", "abi3"]
-
-[tool.maturin.target.i686-pc-windows-msvc]
-features = ["pyo3/extension-module", "abi3"]
-
-[tool.maturin.target.x86_64-unknown-linux-gnu]
-features = ["pyo3/extension-module", "abi3"]
-
-[tool.maturin.target.aarch64-unknown-linux-gnu]
-features = ["pyo3/extension-module", "abi3"]
-
-[tool.maturin.target.x86_64-apple-darwin]
-features = ["pyo3/extension-module", "abi3"]
-
-[tool.maturin.target.aarch64-apple-darwin]
-features = ["pyo3/extension-module", "abi3"]
+# No `[tool.maturin.target.<triple>]` blocks: every platform previously
+# repeated the global `features` list verbatim (6 copies — a DRY violation
+# where one edit could silently miss the others). Maturin applies the global
+# `[tool.maturin]` configuration to every target unless a per-target block
+# overrides it, so the global block alone is the single source of truth. If a
+# platform ever genuinely needs different features, reintroduce exactly that
+# one block and record why.

@@ -516,7 +516,7 @@ pub fn rs_ratio(close: &[f64], benchmark_close: &[f64], period: usize) -> Result
         }
         let stock_ret = close[i] / close[i - period];
         let bench_ret = benchmark_close[i] / benchmark_close[i - period];
-        if bench_ret.abs() > 1e-15 {
+        if !crate::utils::is_zero(bench_ret) {
             output[i] = stock_ret / bench_ret;
         }
     }
@@ -901,7 +901,7 @@ pub fn volume_ratio(volume: &[f64], vol_ma5: &[f64]) -> Result<Array1<f64>> {
     for i in 0..len {
         let v = if volume[i].is_nan() { 0.0 } else { volume[i] };
         let m = vol_ma5[i];
-        if m.is_finite() && m > 1e-15 {
+        if m.is_finite() && m > crate::utils::TA_IS_ZERO_BANDWIDTH {
             out[i] = v / m;
         }
     }
@@ -938,7 +938,7 @@ pub fn committee_ratio(bid_amount: &[f64], ask_amount: &[f64]) -> Result<Array1<
             ask_amount[i]
         };
         let total = b + a;
-        if total > 1e-15 {
+        if total > crate::utils::TA_IS_ZERO_BANDWIDTH {
             out[i] = (b - a) / total;
         }
     }

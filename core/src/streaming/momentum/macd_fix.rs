@@ -6,6 +6,7 @@
 //! `indicators::momentum::macdfix` entry point.
 
 use crate::impl_standard_methods;
+use crate::streaming::forming_bar::FormingBar;
 use crate::streaming::momentum::macd::MacdOutput;
 use crate::streaming::traits::{IndicatorMeta, Ohlcv, StreamingIndicator};
 
@@ -32,9 +33,9 @@ pub struct StreamingMacdFix {
     signal_seeded: bool,
     count: usize,
     last_value: Option<MacdOutput>,
+    /// Forming-bar bookkeeping; see [`FormingBar`].
     #[cfg_attr(feature = "serde", serde(skip))]
-    snapshot: Option<SnapshotState>,
-    last_open_time: i64,
+    bar: FormingBar<SnapshotState>,
 }
 
 #[derive(Clone, Copy)]
@@ -50,7 +51,6 @@ struct SnapshotState {
     signal_seeded: bool,
     count: usize,
     last_value: Option<MacdOutput>,
-    last_open_time: i64,
 }
 
 impl StreamingMacdFix {
@@ -73,30 +73,26 @@ impl StreamingMacdFix {
             signal_seeded: false,
             count: 0,
             last_value: None,
-            snapshot: None,
-            last_open_time: 0,
+            bar: FormingBar::new(),
         }
     }
 
     pub fn compute_bar(&mut self, bar: &dyn Ohlcv) -> Option<MacdOutput> {
         let t = bar.open_time();
-        if t != 0 && t == self.last_open_time {
-            if let Some(snap) = self.snapshot.take() {
-                self.slow_sum = snap.slow_sum;
-                self.fast_sum = snap.fast_sum;
-                self.fast_ema = snap.fast_ema;
-                self.slow_ema = snap.slow_ema;
-                self.ema_seeded = snap.ema_seeded;
-                self.macd_count = snap.macd_count;
-                self.sig_sum = snap.sig_sum;
-                self.signal_ema = snap.signal_ema;
-                self.signal_seeded = snap.signal_seeded;
-                self.count = snap.count;
-                self.last_value = snap.last_value;
-                self.last_open_time = snap.last_open_time;
-            }
+        if let Some(snap) = self.bar.take_rollback(t) {
+            self.slow_sum = snap.slow_sum;
+            self.fast_sum = snap.fast_sum;
+            self.fast_ema = snap.fast_ema;
+            self.slow_ema = snap.slow_ema;
+            self.ema_seeded = snap.ema_seeded;
+            self.macd_count = snap.macd_count;
+            self.sig_sum = snap.sig_sum;
+            self.signal_ema = snap.signal_ema;
+            self.signal_seeded = snap.signal_seeded;
+            self.count = snap.count;
+            self.last_value = snap.last_value;
         }
-        self.snapshot = Some(SnapshotState {
+        let snap = SnapshotState {
             slow_sum: self.slow_sum,
             fast_sum: self.fast_sum,
             fast_ema: self.fast_ema,
@@ -108,9 +104,8 @@ impl StreamingMacdFix {
             signal_seeded: self.signal_seeded,
             count: self.count,
             last_value: self.last_value,
-            last_open_time: self.last_open_time,
-        });
-        self.last_open_time = t;
+        };
+        self.bar.begin(t, snap);
         self.next(bar.close())
     }
 }
@@ -185,8 +180,7 @@ impl StreamingIndicator<f64, MacdOutput> for StreamingMacdFix {
         self.signal_seeded = false;
         self.count = 0;
         self.last_value = None;
-        self.snapshot = None;
-        self.last_open_time = 0;
+        self.bar.clear();
     }
 
     fn is_ready(&self) -> bool {

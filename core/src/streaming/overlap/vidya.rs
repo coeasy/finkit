@@ -96,7 +96,7 @@ impl StreamingVidya {
     #[inline]
     fn cmo_factor(&self) -> f64 {
         let denom = self.sum_up + self.sum_down;
-        if denom.abs() <= 1e-15 {
+        if crate::utils::is_zero(denom) {
             0.0
         } else {
             ((self.sum_up - self.sum_down) / denom).abs()

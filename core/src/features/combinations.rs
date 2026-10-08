@@ -8,7 +8,7 @@ pub fn feature_ratio(a: &[f64], b: &[f64]) -> Array1<f64> {
     assert_eq!(a.len(), b.len());
     let mut out = Array1::zeros(a.len());
     for i in 0..a.len() {
-        if b[i].abs() > 1e-15 {
+        if b[i].abs() > crate::utils::NUMERIC_EPSILON {
             out[i] = a[i] / b[i];
         } else {
             out[i] = f64::NAN;
@@ -44,7 +44,7 @@ pub fn rolling_correlation(a: &[f64], b: &[f64], window: usize) -> Array1<f64> {
         let (cov, var_a, var_b) = crate::math::centred_moments(sa, sb);
 
         let denom = (var_a * var_b).sqrt();
-        if denom > 1e-15 {
+        if denom > crate::utils::NUMERIC_EPSILON {
             out[i] = cov / denom;
         } else {
             out[i] = 0.0;

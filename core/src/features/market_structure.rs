@@ -128,7 +128,7 @@ fn directional_strength_from_close(close: &[f64], period: usize) -> Vec<f64> {
             }
         }
         let total = up + down;
-        if total > 1e-15 {
+        if total > crate::utils::NUMERIC_EPSILON {
             let dx = (up - down).abs() / total * 100.0;
             *score = adx_to_strength(dx);
         }
@@ -150,7 +150,7 @@ fn is_pivot_extremum(data: &[f64], index: usize, half: usize, find_max: bool) ->
 }
 
 fn touch_strength(level: f64, series: &[f64], tolerance_pct: f64) -> f64 {
-    if !level.is_finite() || level.abs() < 1e-15 {
+    if !level.is_finite() || level.abs() < crate::utils::NUMERIC_EPSILON {
         return 0.0;
     }
     let band = level.abs() * tolerance_pct;

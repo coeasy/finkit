@@ -59,7 +59,7 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingWillR {
             let highest = self.maxq.current().unwrap_or(f64::NEG_INFINITY);
             let lowest = self.minq.current().unwrap_or(f64::INFINITY);
             let denom = highest - lowest;
-            let result = if denom.abs() > 1e-15 {
+            let result = if !crate::utils::is_zero(denom) {
                 Some((highest - self.last_close) / denom * -100.0)
             } else {
                 Some(0.0)

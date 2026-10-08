@@ -1830,7 +1830,7 @@ pub fn ehlers_sidewinder(input: &[f64], period: usize) -> Result<Array1<f64>> {
         for j in (i - period + 1)..=i {
             volatility += (input[j] - input[j - 1]).abs();
         }
-        er[i] = if volatility > 1e-15 {
+        er[i] = if volatility > crate::utils::TA_IS_ZERO_BANDWIDTH {
             direction / volatility
         } else {
             0.0

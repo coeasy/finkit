@@ -71,7 +71,7 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingCr {
         self.prev_close = bar.close();
 
         let result = if self.count > self.period {
-            if self.sum_down.abs() <= 1e-15 {
+            if crate::utils::is_zero(self.sum_down) {
                 None
             } else {
                 Some(self.sum_up / self.sum_down * 100.0)

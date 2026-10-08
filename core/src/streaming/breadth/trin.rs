@@ -32,7 +32,7 @@ impl StreamingIndicator<(f64, f64, f64, f64)> for StreamingTrin {
         let (advances, declines, adv_vol, dec_vol) = input;
         self.count += 1;
 
-        if declines.abs() < 1e-15 || dec_vol.abs() < 1e-15 {
+        if crate::utils::is_zero(declines) || crate::utils::is_zero(dec_vol) {
             let val = 0.0;
             self.last_value = Some(val);
             return Some(val);
@@ -41,7 +41,7 @@ impl StreamingIndicator<(f64, f64, f64, f64)> for StreamingTrin {
         let ad_ratio = advances / declines;
         let vol_ratio = adv_vol / dec_vol;
 
-        let val = if vol_ratio.abs() > 1e-15 {
+        let val = if !crate::utils::is_zero(vol_ratio) {
             ad_ratio / vol_ratio
         } else {
             0.0

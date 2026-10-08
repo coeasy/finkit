@@ -49,7 +49,7 @@ impl StreamingIndicator<(f64, f64, f64, f64), f64> for StreamingTwiggsMf {
         let true_low = low.min(self.prev_close);
         let tr = true_high - true_low;
 
-        let ad_val = if tr > 1e-15 {
+        let ad_val = if tr > crate::utils::TA_IS_ZERO_BANDWIDTH {
             volume * (2.0 * close - true_high - true_low) / tr
         } else {
             0.0
@@ -66,7 +66,7 @@ impl StreamingIndicator<(f64, f64, f64, f64), f64> for StreamingTwiggsMf {
 
         self.prev_close = close;
 
-        if self.count > self.period && self.ema_vol.abs() > 1e-15 {
+        if self.count > self.period && !crate::utils::is_zero(self.ema_vol) {
             let tmf = self.ema_ad / self.ema_vol;
             self.last_value = Some(tmf);
             Some(tmf)

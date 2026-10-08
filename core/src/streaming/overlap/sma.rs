@@ -1,3 +1,4 @@
+use crate::streaming::forming_bar::FormingBar;
 use crate::streaming::price_source::PriceSource;
 use crate::streaming::traits::{Ohlcv, StreamingIndicator};
 use crate::{impl_indicator_meta, impl_standard_methods};
@@ -14,9 +15,9 @@ pub struct StreamingSma {
     inv_period: f64,
     count: usize,
     last_value: Option<f64>,
+    /// Forming-bar bookkeeping; see [`FormingBar`].
     #[cfg_attr(feature = "serde", serde(skip))]
-    snapshot: Option<SnapshotState>,
-    last_open_time: i64,
+    bar: FormingBar<SnapshotState>,
     price_source: PriceSource,
 }
 
@@ -27,7 +28,6 @@ struct SnapshotState {
     len: usize,
     count: usize,
     last_value: Option<f64>,
-    last_open_time: i64,
     head_val: f64,
 }
 
@@ -42,8 +42,7 @@ impl StreamingSma {
             inv_period: 1.0 / period as f64,
             count: 0,
             last_value: None,
-            snapshot: None,
-            last_open_time: 0,
+            bar: FormingBar::new(),
             price_source: PriceSource::Close,
         }
     }
@@ -58,8 +57,7 @@ impl StreamingSma {
             inv_period: 1.0 / period as f64,
             count: 0,
             last_value: None,
-            snapshot: None,
-            last_open_time: 0,
+            bar: FormingBar::new(),
             price_source,
         }
     }
@@ -70,27 +68,23 @@ impl StreamingSma {
     /// rolls back to the pre-bar state and recomputes using the new bar's close.
     pub fn compute_bar(&mut self, bar: &dyn Ohlcv) -> Option<f64> {
         let t = bar.open_time();
-        if t != 0 && t == self.last_open_time {
-            if let Some(snap) = self.snapshot.take() {
-                self.sum = snap.sum;
-                self.head = snap.head;
-                self.len = snap.len;
-                self.count = snap.count;
-                self.last_value = snap.last_value;
-                self.last_open_time = snap.last_open_time;
-                self.buffer[snap.head] = snap.head_val;
-            }
+        if let Some(snap) = self.bar.take_rollback(t) {
+            self.sum = snap.sum;
+            self.head = snap.head;
+            self.len = snap.len;
+            self.count = snap.count;
+            self.last_value = snap.last_value;
+            self.buffer[snap.head] = snap.head_val;
         }
-        self.snapshot = Some(SnapshotState {
+        let snap = SnapshotState {
             sum: self.sum,
             head: self.head,
             len: self.len,
             count: self.count,
             last_value: self.last_value,
-            last_open_time: self.last_open_time,
             head_val: self.buffer[self.head],
-        });
-        self.last_open_time = t;
+        };
+        self.bar.begin(t, snap);
         self.next(self.price_source.extract(bar))
     }
 
@@ -103,7 +97,7 @@ impl StreamingSma {
             len: self.len,
             count: self.count,
             last_value: self.last_value,
-            last_open_time: self.last_open_time,
+            last_open_time: self.bar.open_time(),
             head_val: self.buffer[self.head],
         }
     }
@@ -115,7 +109,10 @@ impl StreamingSma {
         self.len = snap.len;
         self.count = snap.count;
         self.last_value = snap.last_value;
-        self.last_open_time = snap.last_open_time;
+        // A restore adopts the snapshot's bar identity without armoring a
+        // rollback: the caller is putting back a state it captured, not
+        // starting a fold it would need to undo.
+        self.bar.set_open_time(snap.last_open_time);
         self.buffer[snap.head] = snap.head_val;
     }
 }
@@ -175,27 +172,23 @@ impl StreamingIndicator for StreamingSma {
     }
 
     fn next_with_time(&mut self, input: f64, open_time: i64) -> Option<f64> {
-        if open_time != 0 && open_time == self.last_open_time {
-            if let Some(snap) = self.snapshot.take() {
-                self.sum = snap.sum;
-                self.head = snap.head;
-                self.len = snap.len;
-                self.count = snap.count;
-                self.last_value = snap.last_value;
-                self.last_open_time = snap.last_open_time;
-                self.buffer[snap.head] = snap.head_val;
-            }
+        if let Some(snap) = self.bar.take_rollback(open_time) {
+            self.sum = snap.sum;
+            self.head = snap.head;
+            self.len = snap.len;
+            self.count = snap.count;
+            self.last_value = snap.last_value;
+            self.buffer[snap.head] = snap.head_val;
         }
-        self.snapshot = Some(SnapshotState {
+        let snap = SnapshotState {
             sum: self.sum,
             head: self.head,
             len: self.len,
             count: self.count,
             last_value: self.last_value,
-            last_open_time: self.last_open_time,
             head_val: self.buffer[self.head],
-        });
-        self.last_open_time = open_time;
+        };
+        self.bar.begin(open_time, snap);
         self.next(input)
     }
 
@@ -205,8 +198,7 @@ impl StreamingIndicator for StreamingSma {
         self.sum = 0.0;
         self.count = 0;
         self.last_value = None;
-        self.snapshot = None;
-        self.last_open_time = 0;
+        self.bar.clear();
     }
 
     fn is_ready(&self) -> bool {

@@ -57,7 +57,7 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingVwma {
             self.head = (self.head + 1) % cap;
         }
 
-        let result = if self.len == self.period && self.sum_vol.abs() > 1e-15 {
+        let result = if self.len == self.period && !crate::utils::is_zero(self.sum_vol) {
             Some(self.sum_pv / self.sum_vol)
         } else {
             None

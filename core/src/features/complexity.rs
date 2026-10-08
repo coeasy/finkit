@@ -67,7 +67,7 @@ pub fn fractal_dimension_higuchi(data: &[f64], max_k: usize) -> Result<f64> {
     let sum_xx: f64 = log_k.iter().map(|x| x * x).sum();
 
     let denom = n_pts * sum_xx - sum_x * sum_x;
-    if denom.abs() < 1e-15 {
+    if denom.abs() < crate::utils::NUMERIC_EPSILON {
         return Ok(1.0);
     }
 
@@ -104,7 +104,7 @@ pub fn fractal_dimension_box(data: &[f64], num_scales: usize) -> Result<f64> {
     let min_val = data.iter().cloned().fold(f64::INFINITY, f64::min);
     let max_val = data.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     let range = max_val - min_val;
-    if range < 1e-15 {
+    if range < crate::utils::NUMERIC_EPSILON {
         return Ok(1.0);
     }
 
@@ -113,7 +113,7 @@ pub fn fractal_dimension_box(data: &[f64], num_scales: usize) -> Result<f64> {
 
     for s in 1..=num_scales {
         let box_size = range / (2.0_f64.powi(s as i32));
-        if box_size < 1e-15 {
+        if box_size < crate::utils::NUMERIC_EPSILON {
             break;
         }
 
@@ -152,7 +152,7 @@ pub fn fractal_dimension_box(data: &[f64], num_scales: usize) -> Result<f64> {
     let sum_xx: f64 = log_eps.iter().map(|x| x * x).sum();
 
     let denom = n_pts * sum_xx - sum_x * sum_x;
-    if denom.abs() < 1e-15 {
+    if denom.abs() < crate::utils::NUMERIC_EPSILON {
         return Ok(1.0);
     }
 
@@ -702,7 +702,7 @@ pub fn dfa(data: &[f64], order: usize) -> Result<f64> {
     let sum_xx: f64 = log_s.iter().map(|x| x * x).sum();
 
     let denom = n_pts * sum_xx - sum_x * sum_x;
-    if denom.abs() < 1e-15 {
+    if denom.abs() < crate::utils::NUMERIC_EPSILON {
         return Ok(0.5);
     }
 
@@ -773,7 +773,7 @@ fn solve_linear_system(a: &mut [f64], b: &mut [f64], n: usize) -> Vec<f64> {
         }
 
         let pivot = a[col * n + col];
-        if pivot.abs() < 1e-15 {
+        if pivot.abs() < crate::utils::NUMERIC_EPSILON {
             continue;
         }
 
@@ -793,7 +793,7 @@ fn solve_linear_system(a: &mut [f64], b: &mut [f64], n: usize) -> Vec<f64> {
         for j in (i + 1)..n {
             sum -= a[i * n + j] * x[j];
         }
-        if a[i * n + i].abs() > 1e-15 {
+        if a[i * n + i].abs() > crate::utils::NUMERIC_EPSILON {
             x[i] = sum / a[i * n + i];
         }
     }
@@ -994,7 +994,7 @@ pub fn lyapunov_exponent(data: &[f64], m: usize, tau: usize, max_iter: usize) ->
     let sum_xx: f64 = time_idx.iter().map(|x| x * x).sum();
 
     let denom = n_pts * sum_xx - sum_x * sum_x;
-    if denom.abs() < 1e-15 {
+    if denom.abs() < crate::utils::NUMERIC_EPSILON {
         return Ok(0.0);
     }
 
@@ -1011,7 +1011,7 @@ fn estimate_mean_period(data: &[f64]) -> usize {
     for &v in data.iter() {
         var += (v - mean) * (v - mean);
     }
-    if var < 1e-15 {
+    if var < crate::utils::NUMERIC_EPSILON {
         return 1;
     }
 

@@ -185,7 +185,7 @@ fn fisher_core(
             let mid = (high[i] + low[i]) * FISHER_HALF;
             let range = hi - lo;
 
-            let normalized = if range > 1e-15 {
+            let normalized = if range > crate::utils::TA_IS_ZERO_BANDWIDTH {
                 (mid - lo) / range * 2.0 - 1.0
             } else {
                 0.0
@@ -343,7 +343,10 @@ pub fn tsi(input: &[f64], long_period: usize, short_period: usize) -> Result<Arr
         }
 
         // Compute TSI when both pipelines have valid values
-        if !mom_short_ema.is_nan() && !abs_short_ema.is_nan() && abs_short_ema.abs() > 1e-15 {
+        if !mom_short_ema.is_nan()
+            && !abs_short_ema.is_nan()
+            && !crate::utils::is_zero(abs_short_ema)
+        {
             output[i] = 100.0 * mom_short_ema / abs_short_ema;
         }
     }
@@ -370,12 +373,12 @@ pub fn coppock(
     let len = input.len();
     let mut combined = init_output(len);
     for i in roc_start..len {
-        let long_val = if input[i - long_roc].abs() > 1e-15 {
+        let long_val = if !crate::utils::is_zero(input[i - long_roc]) {
             (input[i] - input[i - long_roc]) / input[i - long_roc] * 100.0
         } else {
             f64::NAN
         };
-        let short_val = if input[i - short_roc].abs() > 1e-15 {
+        let short_val = if !crate::utils::is_zero(input[i - short_roc]) {
             (input[i] - input[i - short_roc]) / input[i - short_roc] * 100.0
         } else {
             f64::NAN
@@ -435,7 +438,7 @@ pub struct KstResult {
 
 #[inline]
 fn roc_at(input: &[f64], i: usize, period: usize) -> f64 {
-    if input[i - period].abs() > 1e-15 {
+    if !crate::utils::is_zero(input[i - period]) {
         (input[i] - input[i - period]) / input[i - period] * 100.0
     } else {
         f64::NAN
@@ -673,7 +676,7 @@ fn stc_core(
             let hi = macd_ring[max1[mh1 % cap]];
             let lo = macd_ring[min1[nh1 % cap]];
             let range = hi - lo;
-            let k1 = if range > 1e-15 {
+            let k1 = if range > crate::utils::TA_IS_ZERO_BANDWIDTH {
                 (macd_val - lo) / range * STC_STOCH_SCALE
             } else {
                 STC_STOCH_MID
@@ -712,7 +715,7 @@ fn stc_core(
                 let hi2 = s1_ring[max2[mh2 % cap]];
                 let lo2 = s1_ring[min2[nh2 % cap]];
                 let range2 = hi2 - lo2;
-                let k2 = if range2 > 1e-15 {
+                let k2 = if range2 > crate::utils::TA_IS_ZERO_BANDWIDTH {
                     (smooth1_prev - lo2) / range2 * STC_STOCH_SCALE
                 } else {
                     STC_STOCH_MID
@@ -876,7 +879,7 @@ fn chop_core(
             let range = high[max_dq[mh % cap]] - low[min_dq[nh % cap]];
             let ratio = tr_sum / range;
             let chop_val = ratio.log10() * inv_log_period;
-            if range > 1e-15 && tr_sum > 0.0 {
+            if range > crate::utils::TA_IS_ZERO_BANDWIDTH && tr_sum > 0.0 {
                 output[i] = chop_val;
             }
         }
@@ -974,7 +977,7 @@ pub fn connors_rsi(
 
     let mut roc = vec![f64::NAN; len];
     for i in 1..len {
-        if close[i - 1].abs() > 1e-15 {
+        if !crate::utils::is_zero(close[i - 1]) {
             roc[i] = (close[i] - close[i - 1]) / close[i - 1] * 100.0;
         }
     }
@@ -1060,7 +1063,7 @@ pub fn stoch_rsi(
             && !rsi_min[i].is_nan()
         {
             let range = rsi_max[i] - rsi_min[i];
-            if range.abs() > 1e-15 {
+            if !crate::utils::is_zero(range) {
                 (rsi_slice[i] - rsi_min[i]) / range
             } else {
                 0.5
@@ -1167,7 +1170,7 @@ pub fn rvi(
             high[i - 2] - low[i - 2],
             high[i - 3] - low[i - 3],
         );
-        if denom.abs() > 1e-15 {
+        if !crate::utils::is_zero(denom) {
             ratio[i] = num / denom;
         }
     }
@@ -1824,7 +1827,7 @@ pub fn vortex(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result
         }
 
         if i >= period {
-            if tr_sum > 1e-15 {
+            if tr_sum > crate::utils::TA_IS_ZERO_BANDWIDTH {
                 vi_plus[i] = vm_plus_sum / tr_sum;
                 vi_minus[i] = vm_minus_sum / tr_sum;
             } else {
@@ -1958,7 +1961,7 @@ pub fn inertia(
             high[i - 2] - low[i - 2],
             high[i - 3] - low[i - 3],
         );
-        ratio[i] = if denom.abs() > 1e-15 {
+        ratio[i] = if !crate::utils::is_zero(denom) {
             num / denom
         } else {
             0.0
@@ -1991,7 +1994,7 @@ pub fn inertia(
     let sx2 = np1 * (np1 + 1.0) * (2.0 * np1 + 1.0) / 6.0;
     let denom = n * sx2 - sx * sx;
 
-    if denom.abs() < 1e-15 {
+    if crate::utils::is_zero(denom) {
         return Ok(Array1::from_vec(output));
     }
 
@@ -2104,7 +2107,7 @@ pub fn squeeze_momentum(
     let sx2 = np1 * (np1 + 1.0) * (2.0 * np1 + 1.0) / 6.0;
     let denom = n * sx2 - sx * sx;
 
-    if denom.abs() > 1e-15 {
+    if !crate::utils::is_zero(denom) {
         let first_valid = min_len - 1;
         let linreg_start = first_valid + bb_period - 1;
 
@@ -2392,7 +2395,7 @@ pub fn chande_forecast_oscillator(input: &[f64], period: usize) -> Result<Array1
     let sx2 = np1 * (np1 + 1.0) * (2.0 * np1 + 1.0) / 6.0;
     let denom = n * sx2 - sx * sx;
 
-    if denom.abs() < 1e-15 {
+    if crate::utils::is_zero(denom) {
         return Ok(Array1::from_vec(output));
     }
 
@@ -2407,7 +2410,7 @@ pub fn chande_forecast_oscillator(input: &[f64], period: usize) -> Result<Array1
     let slope = (n * sxy - sx * sy) / denom;
     let intercept = (sy - slope * sx) / n;
     let tsf_val = intercept + slope * n;
-    output[first_idx] = if input[first_idx].abs() > 1e-15 {
+    output[first_idx] = if !crate::utils::is_zero(input[first_idx]) {
         ((input[first_idx] - tsf_val) / input[first_idx]) * 100.0
     } else {
         0.0
@@ -2422,7 +2425,7 @@ pub fn chande_forecast_oscillator(input: &[f64], period: usize) -> Result<Array1
         let slope = (n * sxy - sx * sy) / denom;
         let intercept = (sy - slope * sx) / n;
         let tsf_val = intercept + slope * n;
-        output[i] = if input[i].abs() > 1e-15 {
+        output[i] = if !crate::utils::is_zero(input[i]) {
             ((input[i] - tsf_val) / input[i]) * 100.0
         } else {
             0.0

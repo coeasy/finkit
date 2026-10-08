@@ -82,7 +82,7 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingMinusDi {
         self.smooth_dm = self.smooth_dm - self.smooth_dm / p + minus_dm;
         self.smooth_tr = self.smooth_tr - self.smooth_tr / p + tr;
 
-        let value = if self.smooth_tr.abs() > 1e-15 {
+        let value = if !crate::utils::is_zero(self.smooth_tr) {
             self.smooth_dm / self.smooth_tr * 100.0
         } else {
             0.0

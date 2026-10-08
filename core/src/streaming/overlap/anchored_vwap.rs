@@ -47,7 +47,7 @@ impl StreamingIndicator<&dyn Ohlcv> for StreamingAnchoredVwap {
         self.cumulative_tp_vol += tp * bar.volume();
         self.cumulative_vol += bar.volume();
 
-        let result = if self.cumulative_vol.abs() > 1e-15 {
+        let result = if !crate::utils::is_zero(self.cumulative_vol) {
             Some(self.cumulative_tp_vol / self.cumulative_vol)
         } else {
             None

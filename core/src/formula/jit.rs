@@ -267,7 +267,7 @@ impl JitCompiler {
                     } else {
                         let mut r = Array1::zeros(left.len());
                         for i in 0..left.len() {
-                            if right[i].abs() < 1e-15 {
+                            if right[i].abs() < crate::utils::NUMERIC_EPSILON {
                                 r[i] = f64::NAN;
                             } else {
                                 r[i] = left[i] / right[i];
@@ -634,7 +634,7 @@ impl JitCompiler {
                         3 => {
                             let mut r = Array1::zeros(current.len());
                             for i in 0..current.len() {
-                                if rhs[i].abs() < 1e-15 {
+                                if rhs[i].abs() < crate::utils::NUMERIC_EPSILON {
                                     r[i] = f64::NAN;
                                 } else {
                                     r[i] = current[i] / rhs[i];
@@ -854,14 +854,14 @@ impl JitCompiler {
             OpCode::Sub => Some(a - b),
             OpCode::Mul => Some(a * b),
             OpCode::Div => {
-                if b.abs() < 1e-15 {
+                if b.abs() < crate::utils::NUMERIC_EPSILON {
                     Some(f64::NAN)
                 } else {
                     Some(a / b)
                 }
             }
             OpCode::Mod => {
-                if b.abs() < 1e-15 {
+                if b.abs() < crate::utils::NUMERIC_EPSILON {
                     Some(f64::NAN)
                 } else {
                     // Floor-based, matching every runtime kernel: folding must

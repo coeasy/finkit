@@ -114,7 +114,13 @@ APPROXIMATE = {"REFX", "BACKSET", "FUTURE"}
 # `EXPMEMA` gap silently moved TDX coverage by 0.9 points. A registration site,
 # a dispatch table or a mapping table cannot be talked into existence.
 REPO_SOURCES = (
-    ("repo:functions_legacy", ROOT / "core" / "src" / "formula" / "functions_legacy.rs"),
+    # The legacy catalogue is a directory module now (split by indicator
+    # family). The router table still lives in its `mod.rs`, so a single path
+    # keeps substantiating every `repo:functions_legacy` row.
+    (
+        "repo:functions_legacy",
+        ROOT / "core" / "src" / "formula" / "functions_legacy" / "mod.rs",
+    ),
     ("repo:functions_talib_081", ROOT / "core" / "src" / "formula" / "functions_talib_081.rs"),
     ("repo:compat", ROOT / "core" / "src" / "formula" / "compat.rs"),
     ("repo:analysis", ROOT / "core" / "src" / "formula" / "analysis.rs"),

@@ -57,7 +57,7 @@ impl StreamingIndicator for StreamingTsi {
             return None;
         };
 
-        let result = if smooth_abs.abs() > 1e-15 {
+        let result = if !crate::utils::is_zero(smooth_abs) {
             Some(100.0 * smooth_mom / smooth_abs)
         } else {
             None

@@ -12,7 +12,7 @@ workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-finkit = { path = "../../core" }
+finkit = { path = "../../core", default-features = false, features = ["std", "serde", "formula", "formula-jit", "formula-simd", "indicators-all"] }
 libc = "0.2"
 ndarray = { workspace = true }
 serde = { workspace = true }

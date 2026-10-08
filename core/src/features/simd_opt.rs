@@ -79,7 +79,7 @@ pub fn batch_zscore_simd(data: &[f64]) -> Array1<f64> {
     let var = sum_dx_dx / n as f64;
     let std = var.max(0.0).sqrt();
 
-    if std < 1e-15 {
+    if std < crate::utils::NUMERIC_EPSILON {
         return Array1::zeros(n);
     }
 
@@ -126,7 +126,7 @@ pub fn batch_minmax_simd(data: &[f64]) -> Array1<f64> {
     }
 
     let range = max_val - min_val;
-    if range < 1e-15 {
+    if range < crate::utils::NUMERIC_EPSILON {
         return Array1::from_elem(n, 0.5);
     }
 
@@ -161,7 +161,7 @@ pub fn correlation_simd(a: &[f64], b: &[f64]) -> f64 {
     let (cov, sum_da_da, sum_db_db) = crate::math::centred_moments(a, b);
     let denom = (sum_da_da * sum_db_db).sqrt();
 
-    if denom > 1e-15 {
+    if denom > crate::utils::NUMERIC_EPSILON {
         cov / denom
     } else {
         0.0

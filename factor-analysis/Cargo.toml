@@ -12,7 +12,17 @@ homepage.workspace = true
 workspace = true
 
 [dependencies]
-finkit = { path = "../core" }
+# Declared explicitly rather than inherited from `finkit`'s `default`, so this
+# crate's build state does not depend on whichever features an unrelated
+# workspace member happens to unify in. The set must cover everything the
+# sources actually reach: `finkit::features` (needs `indicators-all` +
+# `formula`), `finkit::compute` / `performance` / `returns` /
+# `semantic_graph` / `unified_runtime` (need `std`), `finkit::math`, and the
+# `serde` derives on `finkit::unified_runtime::DirtyRange` that
+# `src/artifacts.rs` round-trips. `cargo test -p finkit-factor-analysis`
+# builds this crate *alone*, so a set that is merely "correct once the
+# workspace is unified" fails CI.
+finkit = { path = "../core", default-features = false, features = ["std", "serde", "formula", "indicators-all"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true

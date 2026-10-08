@@ -12,6 +12,7 @@
 
 use crate::impl_standard_methods;
 use crate::indicators::overlap::MaType;
+use crate::streaming::forming_bar::FormingBar;
 use crate::streaming::momentum::macd::MacdOutput;
 use crate::streaming::overlap::alma::StreamingAlma;
 use crate::streaming::overlap::dema::StreamingDema;
@@ -31,17 +32,14 @@ use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 pub struct UnsupportedMaType(pub MaType);
 
 /// Streaming MACDEXT. See module docs for the supported MA type subset.
-#[allow(dead_code)]
 pub struct StreamingMacdExt {
-    fast_kind: MaKind,
-    slow_kind: MaKind,
     fast_state: MaState,
     slow_state: MaState,
     signal_state: MaState,
     count: usize,
     last_value: Option<MacdOutput>,
-    snapshot: Option<SnapshotState>,
-    last_open_time: i64,
+    /// Forming-bar bookkeeping; see [`FormingBar`].
+    bar: FormingBar<SnapshotState>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,7 +79,6 @@ struct SnapshotState {
     signal_state: MaState,
     count: usize,
     last_value: Option<MacdOutput>,
-    last_open_time: i64,
 }
 
 impl MaState {
@@ -220,15 +217,12 @@ impl StreamingMacdExt {
         let slow_kind = kind_from(slow_ma_type)?;
         let signal_kind = kind_from(signal_ma_type)?;
         Ok(Self {
-            fast_kind,
-            slow_kind,
             fast_state: MaState::new(fast_kind, fast_period),
             slow_state: MaState::new(slow_kind, slow_period),
             signal_state: MaState::new(signal_kind, signal_period),
             count: 0,
             last_value: None,
-            snapshot: None,
-            last_open_time: 0,
+            bar: FormingBar::new(),
         })
     }
 
@@ -239,26 +233,21 @@ impl StreamingMacdExt {
     /// repeated quote updates do not accumulate duplicate observations.
     pub fn compute_bar(&mut self, bar: &dyn crate::streaming::traits::Ohlcv) -> Option<MacdOutput> {
         let timestamp = bar.open_time();
-        if timestamp != 0 && timestamp == self.last_open_time {
-            if let Some(snapshot) = self.snapshot.take() {
-                self.fast_state = snapshot.fast_state;
-                self.slow_state = snapshot.slow_state;
-                self.signal_state = snapshot.signal_state;
-                self.count = snapshot.count;
-                self.last_value = snapshot.last_value;
-                self.last_open_time = snapshot.last_open_time;
-            }
+        if let Some(snapshot) = self.bar.take_rollback(timestamp) {
+            self.fast_state = snapshot.fast_state;
+            self.slow_state = snapshot.slow_state;
+            self.signal_state = snapshot.signal_state;
+            self.count = snapshot.count;
+            self.last_value = snapshot.last_value;
         }
-
-        self.snapshot = Some(SnapshotState {
+        let snap = SnapshotState {
             fast_state: self.fast_state.clone(),
             slow_state: self.slow_state.clone(),
             signal_state: self.signal_state.clone(),
             count: self.count,
             last_value: self.last_value,
-            last_open_time: self.last_open_time,
-        });
-        self.last_open_time = timestamp;
+        };
+        self.bar.begin(timestamp, snap);
         self.next(bar.close())
     }
 }
@@ -294,8 +283,7 @@ impl StreamingIndicator<f64, MacdOutput> for StreamingMacdExt {
         self.signal_state.reset();
         self.count = 0;
         self.last_value = None;
-        self.snapshot = None;
-        self.last_open_time = 0;
+        self.bar.clear();
     }
 
     fn is_ready(&self) -> bool {

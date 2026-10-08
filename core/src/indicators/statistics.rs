@@ -151,7 +151,7 @@ pub fn zscore(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     let mean = sum * inv_n;
     let var = ((sum_sq - sum * mean) * inv_n_minus_1).max(0.0);
     let std_dev = var.sqrt();
-    if std_dev > 1e-15 {
+    if std_dev > crate::utils::TA_IS_ZERO_BANDWIDTH {
         output[warm_start + timeperiod - 1] = (input[warm_start + timeperiod - 1] - mean) / std_dev;
     }
 
@@ -164,7 +164,7 @@ pub fn zscore(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
         let mean = sum * inv_n;
         let var = ((sum_sq - sum * mean) * inv_n_minus_1).max(0.0);
         let std_dev = var.sqrt();
-        if std_dev > 1e-15 {
+        if std_dev > crate::utils::TA_IS_ZERO_BANDWIDTH {
             output[i] = (input[i] - mean) / std_dev;
         }
     }
@@ -229,7 +229,7 @@ pub fn zscore_into(input: &[f64], timeperiod: usize, output: &mut [f64]) -> Resu
         let mean = sum * inv_n;
         let variance = ((sum_sq - sum * mean) * inv_n_minus_1).max(0.0);
         let std_dev = variance.sqrt();
-        if std_dev > 1e-15 {
+        if std_dev > crate::utils::TA_IS_ZERO_BANDWIDTH {
             output[index] = (input[index] - mean) / std_dev;
         }
     }
@@ -679,7 +679,7 @@ pub fn tsf(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
     let denom = p * sum_x2 - sum_x * sum_x;
     let last_x = (timeperiod - 1) as f64;
 
-    if denom.abs() < 1e-15 {
+    if crate::utils::is_zero(denom) {
         return Ok(output);
     }
 
@@ -887,7 +887,11 @@ pub fn skewness(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
         let m3 = sum_cu * inv_n_pop - 3.0 * mean * sum_sq * inv_n_pop + 2.0 * mean * mean * mean; // 3rd central moment
                                                                                                   // skewness = m3 / m2^1.5
         let denom = m2 * m2.sqrt();
-        output[i] = if denom > 1e-15 { m3 / denom } else { 0.0 };
+        output[i] = if denom > crate::utils::TA_IS_ZERO_BANDWIDTH {
+            m3 / denom
+        } else {
+            0.0
+        };
     }
     Ok(output)
 }
@@ -960,7 +964,11 @@ pub fn kurtosis(input: &[f64], timeperiod: usize) -> Result<Array1<f64>> {
             - 3.0 * mean.powi(4);
         // excess kurtosis = m4 / m2^2 - 3
         let denom = m2 * m2;
-        output[i] = if denom > 1e-15 { m4 / denom - 3.0 } else { 0.0 };
+        output[i] = if denom > crate::utils::TA_IS_ZERO_BANDWIDTH {
+            m4 / denom - 3.0
+        } else {
+            0.0
+        };
     }
     Ok(output)
 }

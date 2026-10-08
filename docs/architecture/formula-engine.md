@@ -1,8 +1,25 @@
 # Finkit — Formula engine internals
 
-The formula engine implements a 4-stage pipeline that compiles the
-`MA(CLOSE, 20)` style source into native code paths, with on-the-fly
-specialisation for hot loops.
+The formula engine compiles `MA(CLOSE, 20)`-style source into an executable
+compute plan. **Production execution goes through the compiled-plan path;
+the tree-walking interpreter is the reference implementation.**
+
+## Frozen surfaces (decided 2026-09-21)
+
+Two legacy entry points are **frozen**: they stay (four language bindings
+export them as public API) but neither grows, and `eval()` never routes
+into them:
+
+- `formula-jit` / `FormulaEngine::eval_jit` — peephole-optimised bytecode
+  interpretation. Despite the name there is **no native codegen**.
+- `formula-simd` / `FormulaEngine::eval_simd` — an *exact alias* of
+  `eval`. There is no SIMD formula-evaluation path behind this feature;
+  real SIMD lives in the numeric kernels (`math::simd_kernels`) on the
+  normal execution path.
+
+There is **no hot-loop detection and no iteration-count promotion** —
+earlier descriptions of a "hot loop ≥ 1M → JIT" pipeline were aspirational
+and never matched the code.
 
 ## Pipeline
 
@@ -11,30 +28,40 @@ flowchart TB
   src[Source string<br/>MA(CLOSE, 20)]
   src -->|pest| tokens[Tokens]
   tokens -->|pest| ast[AST]
-  ast -->|constant fold + DCE| opt[Optimised AST]
-  opt -->|bytecode| bc[Bytecode]
-  opt -.->|JIT| jit[Native code]
-  bc --> vm[VM dispatch]
-  jit --> vm
-  vm -->|hot loop detection| simd[SIMD path]
-  vm --> out[Array1 result]
+  ast -->|constant fold + CSE + DCE| opt[Optimised AST]
+  opt -->|lower| graph[SemanticGraph]
+  graph --> plan[ComputePlan]
+  opt --> tree[Tree interpreter<br/>reference path]
+  plan --> exec[Plan executor]
+  tree --> out[Array1 result]
+  exec --> out
 ```
 
 ## Stages
 
 1. **Parse** (`formula/parser.rs`): pest-generated PEG grammar in
-   `formula/grammar.pest`. Produces a `pest::Pair` tree.
+   `formula/grammar.pest`. Produces a `pest::Pair` tree. Input budgets are
+   enforced here: source size (1 MiB), bracket nesting (256) and —
+   iteratively, after the parse — AST depth (1024). Breaching any of them
+   is a typed parse error, not a crash; rejected deep trees are torn down
+   iteratively so their drop cannot overflow the stack either.
 2. **AST** (`formula/ast.rs`): typed nodes (`Call`, `Ident`, `Literal`,
    `Ref`, `Binary`, `Unary`).
 3. **Optimise** (`formula/optimizer.rs`): constant folding, common
    subexpression elimination, dead-code elimination, type-specialisation
    (`MA(CLOSE, 20)` → `sma_inplace`).
-4. **Codegen** (`formula/bytecode.rs`, `formula/jit.rs`): produces
-   bytecode for the VM. Hot loops (≥ 1M iterations) are promoted to JIT.
-5. **Execute** (`formula/executor.rs`): VM dispatch with inline caches.
-   The first N iterations of any inner loop are profiled; if they pass
-   the `HOT_LOOP_THRESHOLD`, the loop is converted to a SIMD path
-   (`formula/simd.rs`).
+4. **Lower** (`formula/compute_ir.rs`): the AST is lowered into a
+   `SemanticGraph` (validation, CSE, layering) and compiled into a
+   `ComputePlan` — the reusable production artifact. Lowering walks the
+   tree recursively, so the depth is checked *while* lowering
+   (`MAX_LOWER_DEPTH`); a too-deep AST fails with the typed
+   `ComputePlanError::LoweringDepthExceeded` instead of exhausting the
+   stack.
+5. **Execute** (`formula/executor.rs`, `formula/unified_dispatch.rs`): the
+   plan executor evaluates the compiled graph; the tree interpreter
+   (`execute_val`) remains the reference path every differential gate
+   compares against. Frozen legacy modes: bytecode VM dispatch
+   (`formula/bytecode.rs`) and the frozen `eval_jit` entry point.
 
 ## Memory pool
 

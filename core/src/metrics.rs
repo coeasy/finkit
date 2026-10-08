@@ -136,40 +136,9 @@ pub fn option_is_some<T>(o: &Option<T>) -> bool {
     o.is_some()
 }
 
-/// Time the execution of `$body`, increment the per-name counter, and record
-/// the duration histogram. No-op when the `metrics` feature is disabled.
-///
-/// # Example
-///
-/// ```ignore
-/// use finkit::metrics::timed;
-/// let r = timed("rsi", || { /* computation */ 42.0 });
-/// ```
-#[cfg(feature = "metrics")]
-#[macro_export]
-macro_rules! timed {
-    ($name:expr, $body:expr) => {{
-        let __start = $crate::metrics::__std::time::Instant::now();
-        let __result = { $body };
-        $crate::metrics::indicator_called($name);
-        $crate::metrics::record_indicator_duration($name, __start.elapsed().as_secs_f64());
-        __result
-    }};
-}
-
-/// No-op fallback when the `metrics` feature is disabled. The expression is
-/// still evaluated so callers don't need to special-case build configurations.
-#[cfg(not(feature = "metrics"))]
-#[macro_export]
-macro_rules! timed {
-    ($name:expr, $body:expr) => {{
-        $body
-    }};
-}
-
-/// Statically-resolved path to `std` for use by the `timed!` macro. When the
-/// `metrics` feature is disabled this resolves to `core`; otherwise it
-/// resolves to `std`.
+/// Statically-resolved path to `std` for use by the `streaming_measure!`
+/// macro. When the `metrics` feature is disabled this resolves to `core`;
+/// otherwise it resolves to `std`.
 #[doc(hidden)]
 pub mod __std {
     #[cfg(feature = "metrics")]

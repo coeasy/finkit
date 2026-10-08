@@ -293,7 +293,6 @@ enum FormulaState {
     Rsi {
         input: FormulaStateInput,
         indicator: StreamingRsi,
-        started: bool,
     },
     Max {
         input: FormulaStateInput,
@@ -392,9 +391,7 @@ impl FormulaState {
             // `NaN.max(0.0) == 0.0`) instead of skipping it, so it must NOT be
             // gated: feeding the `NaN` straight in reproduces `rsi_scalar`
             // exactly, whereas skipping would shift its warm-up by the run.
-            Self::Rsi {
-                input, indicator, ..
-            } => indicator.next(row[input.slot()]),
+            Self::Rsi { input, indicator } => indicator.next(row[input.slot()]),
             Self::Max {
                 input,
                 indicator,
@@ -1421,7 +1418,7 @@ fn apply_stateful_binary(op: &BinaryOperator, left: f64, right: f64) -> f64 {
         BinaryOperator::Sub => left - right,
         BinaryOperator::Mul => left * right,
         BinaryOperator::Div => {
-            if right.abs() < 1e-15 {
+            if right.abs() < crate::utils::NUMERIC_EPSILON {
                 f64::NAN
             } else {
                 left / right
@@ -1577,7 +1574,6 @@ fn compile_state(expression: &AstNode) -> FactorResult<(FormulaState, Vec<Formul
                 FormulaState::Rsi {
                     input: value,
                     indicator: StreamingRsi::new(period),
-                    started: false,
                 },
                 vec![value],
             )

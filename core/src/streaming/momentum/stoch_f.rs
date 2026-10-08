@@ -75,7 +75,7 @@ impl StreamingIndicator<(f64, f64, f64), StochOutput> for StreamingStochF {
         let lowest = self.rolling_min.current().unwrap_or(f64::INFINITY);
 
         let range = highest - lowest;
-        let k = if range.abs() > 1e-15 {
+        let k = if !crate::utils::is_zero(range) {
             ((close - lowest) / range) * 100.0
         } else {
             50.0

@@ -93,7 +93,8 @@
 
 **有意不归档 4 份**（不是漏归）：
 `finkit-outperform-talib-architecture-v3.md`（`benchmark_talib_arch_v3_gate.py` 依赖其加速比语义，
-是**活规格**）、`runtime-carrier-adoption-plan-2026-09-20.md`（R4 仍在进行）、
+是**活规格**）、`runtime-carrier-adoption-plan-2026-09-20.md`（该文档自身状态已更新为 R1–R4 全部完成、
+平行轨道 5 crate 已删除；它同时是 `core/src/factor_graph.rs` / `factor_provider.rs` 模块文档所指向的规格），
 `finkit-vs-talib-performance-optimization-plan.md`（`apply_talib_performance_plan.py` 依据）、
 `talib-0.8.0-coverage-audit-2026-09-19.md`（事实快照且被索引）。
 

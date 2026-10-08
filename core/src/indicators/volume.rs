@@ -303,7 +303,7 @@ pub fn volume_profile(
         max_price = max_price.max(high[i]);
     }
 
-    if (max_price - min_price).abs() < 1e-15 {
+    if (max_price - min_price).abs() < crate::utils::TA_IS_ZERO_BANDWIDTH {
         max_price = min_price + 1.0;
     }
 
@@ -442,7 +442,7 @@ pub fn vwap(high: &[f64], low: &[f64], close: &[f64], volume: &[f64]) -> Result<
         cum_tp_vol += typical_price * volume[i];
         cum_volume += volume[i];
 
-        if cum_volume.abs() > 1e-15 {
+        if !crate::utils::is_zero(cum_volume) {
             output[i] = cum_tp_vol / cum_volume;
         }
     }
@@ -512,7 +512,7 @@ pub fn anchored_vwap(
         cum_tp_vol += typical_price * volume[i];
         cum_volume += volume[i];
 
-        if cum_volume.abs() > 1e-15 {
+        if !crate::utils::is_zero(cum_volume) {
             output[i] = cum_tp_vol / cum_volume;
         }
     }
@@ -647,7 +647,7 @@ pub fn vwap_mtf(
         cum_tp_vol += typical_price * volume[i];
         cum_volume += volume[i];
 
-        if cum_volume.abs() > 1e-15 {
+        if !crate::utils::is_zero(cum_volume) {
             output[i] = cum_tp_vol / cum_volume;
         }
     }

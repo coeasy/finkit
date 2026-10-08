@@ -155,7 +155,7 @@ impl StreamingIndicator<&dyn Ohlcv, RviOutput> for StreamingRvi {
             return None;
         };
 
-        if sma_denom.abs() <= 1e-15 {
+        if crate::utils::is_zero(sma_denom) {
             self.last_value = None;
             return None;
         }

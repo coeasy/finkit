@@ -95,11 +95,11 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingDx {
 
         // Degenerate window handling matches `dx_into` exactly: a flat TR yields
         // 0.0 (not NaN, not `None`) once the smoothing has started.
-        let value = if self.smooth_tr.abs() > 1e-15 {
+        let value = if !crate::utils::is_zero(self.smooth_tr) {
             let plus_di = self.smooth_plus_dm / self.smooth_tr * 100.0;
             let minus_di = self.smooth_minus_dm / self.smooth_tr * 100.0;
             let sum = plus_di + minus_di;
-            if sum.abs() > 1e-15 {
+            if !crate::utils::is_zero(sum) {
                 (plus_di - minus_di).abs() / sum * 100.0
             } else {
                 0.0

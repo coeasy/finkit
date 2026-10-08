@@ -40,7 +40,7 @@ impl StreamingLinRegIntercept {
     fn compute_intercept(&self) -> Option<f64> {
         let n = self.period as f64;
         let denom = n * self.sum_x2 - self.sum_x * self.sum_x;
-        if denom.abs() < 1e-15 {
+        if crate::utils::is_zero(denom) {
             return None;
         }
 

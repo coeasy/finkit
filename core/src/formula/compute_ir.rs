@@ -28,6 +28,25 @@ use std::collections::BTreeMap;
 /// which is exactly the kind of split that makes a "drop-in faster path" a lie.
 use super::executor::MAX_LOOP_ITERATIONS as MAX_UNROLLED_LOOP_ITERATIONS;
 
+/// Deepest AST the lowerer will walk, checked *while* lowering.
+///
+/// Lowering recurses over the AST (`lower` → `lower_inner` → `lower`), so its
+/// stack use grows with tree depth. The check therefore lives inside `lower`
+/// itself — pushing depth, testing, and recording a typed
+/// [`ComputePlanError::LoweringDepthExceeded`] via the usual `fail` channel —
+/// instead of the previous post-hoc `sandbox_check_depth` call, which ran only
+/// after lowering had already consumed the stack it was meant to protect.
+///
+/// The limit sits four times above the parser's own structural cap
+/// (`parser::MAX_AST_DEPTH`, 1024), so every source the parser accepts also
+/// lowers: this constant is defense-in-depth for ASTs built programmatically
+/// and handed to [`FormulaComputePlan::compile_with_registry`] directly,
+/// bypassing the parser. The budget was tuned against *measured* frame cost —
+/// the `lower_inner` frames are fat (a large `match` over every AST form), and
+/// a chain near the previous 8192 budget overflowed a 2 MiB thread stack
+/// before the check could fire. 2048 frames stay well inside small threads.
+const MAX_LOWER_DEPTH: usize = 2048;
+
 /// Validated semantic compute plan derived from one formula AST.
 #[derive(Debug, Clone)]
 pub struct FormulaComputePlan {
@@ -271,12 +290,27 @@ impl<'a> FormulaLowerer<'a> {
 
     /// Lower one AST node, tracking how deeply the walk nested.
     ///
-    /// The nesting depth is recorded because the sandbox's recursion limit is
-    /// checked against it on the plan path. Lowering is the plan path's
-    /// equivalent of the tree path's recursive `execute_val`: it is where a
-    /// deeply nested formula would consume stack, so it is also where the limit
-    /// has to be applied.
+    /// The depth is validated *here*, on entry, not after the walk completes:
+    /// lowering is the plan path's equivalent of the tree path's recursive
+    /// `execute_val`, so a deeply nested formula consumes stack exactly here.
+    /// Checking on entry stops the recursion before it nests any deeper than
+    /// [`MAX_LOWER_DEPTH`] and records a typed
+    /// [`ComputePlanError::LoweringDepthExceeded`] through the ordinary `fail`
+    /// channel, which `compile_with_registry` surfaces after the (harmless)
+    /// placeholder graph is built. The previous design only *recorded*
+    /// `max_depth` and checked it afterwards — by then the stack had already
+    /// been spent.
     fn lower(&mut self, ast: &AstNode) -> ComputeNodeId {
+        if self.depth >= MAX_LOWER_DEPTH {
+            let depth = self.depth + 1;
+            self.fail(ComputePlanError::LoweringDepthExceeded {
+                depth,
+                max: MAX_LOWER_DEPTH,
+            });
+            // Placeholder so the ancestors unwind normally; the recorded
+            // failure makes the plan value irrelevant.
+            return self.add_number(f64::NAN);
+        }
         self.depth += 1;
         self.max_depth = self.max_depth.max(self.depth);
         let node = self.lower_inner(ast);

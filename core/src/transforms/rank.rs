@@ -19,7 +19,7 @@ impl Transform for Rank {
         let mut i = 0;
         while i < n {
             let mut j = i;
-            while j < n && (indexed[j].1 - indexed[i].1).abs() < 1e-15 {
+            while j < n && (indexed[j].1 - indexed[i].1).abs() < crate::utils::NUMERIC_EPSILON {
                 j += 1;
             }
             let avg_rank = (i + 1 + j) as f64 / 2.0;

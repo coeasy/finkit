@@ -25,7 +25,7 @@ impl StreamingIndicator for StreamingBias {
     #[inline]
     fn next(&mut self, input: f64) -> Option<f64> {
         let ma = self.sma.next(input)?;
-        if ma.abs() <= 1e-15 {
+        if crate::utils::is_zero(ma) {
             self.last_value = None;
             return None;
         }

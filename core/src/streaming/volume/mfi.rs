@@ -98,7 +98,7 @@ impl StreamingMfi {
                 return None;
             }
 
-            let result = Some(if self.sum_neg.abs() > 1e-15 {
+            let result = Some(if !crate::utils::is_zero(self.sum_neg) {
                 let ratio = self.sum_pos / self.sum_neg;
                 100.0 - 100.0 / (1.0 + ratio)
             } else {

@@ -217,7 +217,7 @@ impl StreamingIndicator<(f64, f64, f64), SqueezeMomentumOutput> for StreamingSqu
             self.delta_count += 1;
         }
 
-        if self.delta_count < self.bb_period || self.denom.abs() < 1e-15 {
+        if self.delta_count < self.bb_period || crate::utils::is_zero(self.denom) {
             let out = SqueezeMomentumOutput {
                 momentum: 0.0,
                 squeeze_on,

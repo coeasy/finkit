@@ -60,7 +60,7 @@ impl StreamingIndicator for StreamingRoc {
             }
 
             let prev = self.oldest();
-            let result = if prev.abs() > 1e-15 {
+            let result = if !crate::utils::is_zero(prev) {
                 Some((input - prev) / prev * 100.0)
             } else {
                 Some(0.0)
@@ -162,7 +162,7 @@ impl StreamingIndicator for StreamingRocp {
             }
 
             let prev = self.oldest();
-            let result = if prev.abs() > 1e-15 {
+            let result = if !crate::utils::is_zero(prev) {
                 Some((input - prev) / prev)
             } else {
                 Some(0.0)
@@ -264,7 +264,7 @@ impl StreamingIndicator for StreamingRocr {
             }
 
             let prev = self.oldest();
-            let result = if prev.abs() > 1e-15 {
+            let result = if !crate::utils::is_zero(prev) {
                 Some(input / prev)
             } else {
                 Some(0.0)
@@ -366,7 +366,7 @@ impl StreamingIndicator for StreamingRocr100 {
             }
 
             let prev = self.oldest();
-            let result = if prev.abs() > 1e-15 {
+            let result = if !crate::utils::is_zero(prev) {
                 Some((input / prev) * 100.0)
             } else {
                 Some(0.0)

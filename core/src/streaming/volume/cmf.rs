@@ -37,7 +37,7 @@ impl StreamingCmf {
     #[inline]
     fn money_flow_multiplier(high: f64, low: f64, close: f64) -> f64 {
         let range = high - low;
-        if range.abs() <= 1e-15 || high.is_nan() || low.is_nan() || close.is_nan() {
+        if crate::utils::is_zero(range) || high.is_nan() || low.is_nan() || close.is_nan() {
             f64::NAN
         } else {
             ((close - low) - (high - close)) / range
@@ -108,7 +108,7 @@ impl StreamingIndicator<(f64, f64, f64, f64)> for StreamingCmf {
 
         let result = if self.valid_mfv == self.period
             && self.valid_vol == self.period
-            && self.sum_vol.abs() > 1e-15
+            && !crate::utils::is_zero(self.sum_vol)
         {
             Some(self.sum_mfv / self.sum_vol)
         } else {

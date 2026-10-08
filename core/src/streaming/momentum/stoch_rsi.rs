@@ -72,7 +72,7 @@ impl StreamingIndicator for StreamingStochRsi {
             .fold(f64::INFINITY, f64::min);
 
         let range = max - min;
-        let raw_k = if range.abs() > 1e-15 {
+        let raw_k = if !crate::utils::is_zero(range) {
             ((rsi - min) / range) * 100.0
         } else {
             50.0

@@ -87,6 +87,14 @@ MANUAL_TOOLS = {
         "manual tool: documented for `docker build -f scripts/bench-vs-talib.dockerfile`; "
         "docker-compose.yml and the Makefile use the root Dockerfile instead"
     ),
+    "scripts/_apply_zero_guard_policy.py": (
+        "manual tool: the one-shot codemod that performed the two-band zero-guard "
+        "migration. It has already run, and `check_zero_guard_policy.py` now keeps the "
+        "result from regressing -- but the script is the only place that records *why* "
+        "the TA-Lib surface and the formula surface need different bands (the Alpha158 "
+        "`+1e-12` denominators), so it is kept for the next policy revision rather than "
+        "deleted the way a spent codemod normally would be"
+    ),
 }
 
 # Files that are themselves part of the reference machinery: a mention here is

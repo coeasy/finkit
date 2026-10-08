@@ -344,6 +344,19 @@ pub enum ComputePlanError {
         /// Why the bounds cannot be unrolled.
         reason: String,
     },
+    /// The AST is deeper than the lowerer can safely walk.
+    ///
+    /// Lowering recurses over the AST, so its C-stack use grows with tree
+    /// depth. The depth is checked *while* lowering (see
+    /// `formula/compute_ir.rs::MAX_LOWER_DEPTH`), not after, so the failure is
+    /// a typed error instead of a stack overflow — an abort that no FFI panic
+    /// guard can catch.
+    LoweringDepthExceeded {
+        /// Depth at which lowering stopped.
+        depth: usize,
+        /// The lowerer's maximum supported depth.
+        max: usize,
+    },
 }
 
 impl fmt::Display for ComputePlanError {
@@ -364,6 +377,11 @@ impl fmt::Display for ComputePlanError {
             Self::UnsupportedLoop { variable, reason } => {
                 write!(f, "unsupported `for` loop over `{variable}`: {reason}")
             }
+            Self::LoweringDepthExceeded { depth, max } => write!(
+                f,
+                "expression depth {} exceeds the lowering limit of {} levels",
+                depth, max
+            ),
         }
     }
 }

@@ -69,7 +69,7 @@ impl StreamingIndicator<(f64, f64), f64> for StreamingVzo {
                 self.ema_tv = self.tv_sum / self.period as f64;
                 self.ema_started = true;
 
-                if self.ema_tv.abs() > 1e-15 {
+                if !crate::utils::is_zero(self.ema_tv) {
                     let val = (self.ema_vp / self.ema_tv) * 100.0;
                     self.last_value = Some(val);
                     return Some(val);
@@ -83,7 +83,7 @@ impl StreamingIndicator<(f64, f64), f64> for StreamingVzo {
         self.ema_vp = self.alpha * vp + (1.0 - self.alpha) * self.ema_vp;
         self.ema_tv = self.alpha * volume + (1.0 - self.alpha) * self.ema_tv;
 
-        if self.ema_tv.abs() > 1e-15 {
+        if !crate::utils::is_zero(self.ema_tv) {
             let val = (self.ema_vp / self.ema_tv) * 100.0;
             self.last_value = Some(val);
             Some(val)

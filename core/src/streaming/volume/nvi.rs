@@ -53,7 +53,7 @@ impl StreamingIndicator<&dyn Ohlcv, f64> for StreamingNvi {
             return None;
         }
 
-        if volume < self.prev_volume && self.prev_close.abs() > 1e-15 {
+        if volume < self.prev_volume && !crate::utils::is_zero(self.prev_close) {
             self.current_nvi *= 1.0 + (close - self.prev_close) / self.prev_close;
         }
 

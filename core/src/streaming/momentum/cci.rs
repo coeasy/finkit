@@ -102,7 +102,7 @@ impl StreamingIndicator<(f64, f64, f64)> for StreamingCci {
             let tp_mean = self.sum / self.period as f64;
             let mean_dev = self.mean_dev_sum / self.period as f64;
 
-            let result = if mean_dev.abs() < 1e-15 {
+            let result = if crate::utils::is_zero(mean_dev) {
                 Some(0.0)
             } else {
                 Some((tp - tp_mean) / (0.015 * mean_dev))

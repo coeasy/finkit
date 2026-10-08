@@ -258,7 +258,7 @@ fn percentile(values: &[f64], pct: f64) -> f64 {
 }
 
 fn gaussian_pdf(x: f64, mean: f64, std: f64) -> f64 {
-    let s = std.max(1e-8);
+    let s = std.max(crate::utils::TA_IS_ZERO_BANDWIDTH);
     let z = (x - mean) / s;
     (-0.5 * z * z).exp() / (s * (2.0 * std::f64::consts::PI).sqrt())
 }

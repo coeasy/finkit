@@ -180,7 +180,7 @@ pub fn kdj(
             let max_h = unsafe { *high.get_unchecked(*max_dq.get_unchecked(max_head)) };
             let min_l = unsafe { *low.get_unchecked(*min_dq.get_unchecked(min_head)) };
             let denom = max_h - min_l;
-            let rsv = if denom > 1e-15 {
+            let rsv = if denom > crate::utils::TA_IS_ZERO_BANDWIDTH {
                 (unsafe { *close.get_unchecked(i) } - min_l) / denom * 100.0
             } else {
                 50.0
@@ -224,14 +224,14 @@ pub fn bias(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let mut sum: f64 = input[..period].iter().sum();
     let ma_val = sum * inv_period;
-    if ma_val.abs() > 1e-15 {
+    if !crate::utils::is_zero(ma_val) {
         output[period - 1] = (input[period - 1] - ma_val) / ma_val * 100.0;
     }
 
     for i in period..len {
         sum += input[i] - input[i - period];
         let ma_val = sum * inv_period;
-        if ma_val.abs() > 1e-15 {
+        if !crate::utils::is_zero(ma_val) {
             output[i] = (input[i] - ma_val) / ma_val * 100.0;
         }
     }
@@ -312,7 +312,7 @@ pub fn vr(close: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>> {
     }
     let half_flat = 0.5 * flat_vol;
     let denom_init = down_vol + half_flat;
-    if denom_init.abs() > 1e-15 {
+    if !crate::utils::is_zero(denom_init) {
         output[period] = (up_vol + half_flat) / denom_init * 100.0;
     }
 
@@ -348,7 +348,7 @@ pub fn vr(close: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>> {
 
             let half_flat = 0.5 * flat_vol;
             let denom = down_vol + half_flat;
-            if denom.abs() > 1e-15 {
+            if !crate::utils::is_zero(denom) {
                 *output.get_unchecked_mut(i) = (up_vol + half_flat) / denom * 100.0;
             }
         }
@@ -375,7 +375,7 @@ pub fn vr(close: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>> {
         }
 
         let denom = down_vol + 0.5 * flat_vol;
-        if denom.abs() > 1e-15 {
+        if !crate::utils::is_zero(denom) {
             output[i] = (up_vol + 0.5 * flat_vol) / denom * 100.0;
         }
     }
@@ -442,7 +442,7 @@ pub fn cr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Arr
             sum_down += d_down;
         }
     }
-    if sum_down.abs() > 1e-15 {
+    if !crate::utils::is_zero(sum_down) {
         output[period] = sum_up / sum_down * 100.0;
     }
 
@@ -467,7 +467,7 @@ pub fn cr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Arr
             if d_down_leave > 0.0 {
                 sum_down -= d_down_leave;
             }
-            if sum_down.abs() > 1e-15 {
+            if !crate::utils::is_zero(sum_down) {
                 *output.get_unchecked_mut(i) = sum_up / sum_down * 100.0;
             }
         }
@@ -479,7 +479,7 @@ pub fn cr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Arr
         let leaving = i - period;
         sum_up -= (high[leaving] - mid[leaving]).max(0.0);
         sum_down -= (mid[leaving] - low[leaving]).max(0.0);
-        if sum_down.abs() > 1e-15 {
+        if !crate::utils::is_zero(sum_down) {
             output[i] = sum_up / sum_down * 100.0;
         }
     }
@@ -546,7 +546,7 @@ pub fn ar(open: &[f64], high: &[f64], low: &[f64], period: usize) -> Result<Arra
 
     // SIMD 初始化: sum_ho + sum_ol 4-bar batch
     let (mut sum_ho, mut sum_ol) = simd_ops::simd_dual_diff_init(high, open, low, period);
-    if sum_ol.abs() > 1e-15 {
+    if !crate::utils::is_zero(sum_ol) {
         output[period - 1] = sum_ho / sum_ol * 100.0;
     }
 
@@ -559,7 +559,7 @@ pub fn ar(open: &[f64], high: &[f64], low: &[f64], period: usize) -> Result<Arra
             let leaving = i - period;
             sum_ho -= *high.get_unchecked(leaving) - *open.get_unchecked(leaving);
             sum_ol -= *open.get_unchecked(leaving) - *low.get_unchecked(leaving);
-            if sum_ol.abs() > 1e-15 {
+            if !crate::utils::is_zero(sum_ol) {
                 *output.get_unchecked_mut(i) = sum_ho / sum_ol * 100.0;
             }
         }
@@ -571,7 +571,7 @@ pub fn ar(open: &[f64], high: &[f64], low: &[f64], period: usize) -> Result<Arra
         let leaving = i - period;
         sum_ho -= high[leaving] - open[leaving];
         sum_ol -= open[leaving] - low[leaving];
-        if sum_ol.abs() > 1e-15 {
+        if !crate::utils::is_zero(sum_ol) {
             output[i] = sum_ho / sum_ol * 100.0;
         }
     }
@@ -605,7 +605,7 @@ pub fn br(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Arr
 
     // SIMD 初始化: max(0, high-close_prev) + max(0, close_prev-low) 4-bar batch
     let (mut sum_up, mut sum_down) = simd_ops::simd_dual_max_init(high, close, low, period);
-    if sum_down.abs() > 1e-15 {
+    if !crate::utils::is_zero(sum_down) {
         output[period] = sum_up / sum_down * 100.0;
     }
 
@@ -630,7 +630,7 @@ pub fn br(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Arr
             if d_down_leave > 0.0 {
                 sum_down -= d_down_leave;
             }
-            if sum_down.abs() > 1e-15 {
+            if !crate::utils::is_zero(sum_down) {
                 *output.get_unchecked_mut(i) = sum_up / sum_down * 100.0;
             }
         }
@@ -642,7 +642,7 @@ pub fn br(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Arr
         let leaving = i - period;
         sum_up -= (high[leaving] - close[leaving - 1]).max(0.0);
         sum_down -= (close[leaving - 1] - low[leaving]).max(0.0);
-        if sum_down.abs() > 1e-15 {
+        if !crate::utils::is_zero(sum_down) {
             output[i] = sum_up / sum_down * 100.0;
         }
     }

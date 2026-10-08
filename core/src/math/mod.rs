@@ -144,7 +144,7 @@ pub(crate) fn three_way_sign(value: f64) -> f64 {
 /// NOT call this; see `unified_dispatch`'s `MOD`-vs-`%` note.
 #[inline]
 pub(crate) fn floor_remainder(dividend: f64, divisor: f64) -> f64 {
-    if divisor.abs() < 1e-15 {
+    if divisor.abs() < crate::utils::NUMERIC_EPSILON {
         f64::NAN
     } else {
         dividend - (dividend / divisor).floor() * divisor

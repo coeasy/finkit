@@ -88,7 +88,7 @@ impl StreamingIndicator<(f64, f64, f64), VortexOutput> for StreamingVortex {
             self.prev_close = close;
 
             if self.count > self.period {
-                let result = if self.tr_sum > 1e-15 {
+                let result = if self.tr_sum > crate::utils::TA_IS_ZERO_BANDWIDTH {
                     Some(VortexOutput {
                         vi_plus: self.vm_plus_sum / self.tr_sum,
                         vi_minus: self.vm_minus_sum / self.tr_sum,

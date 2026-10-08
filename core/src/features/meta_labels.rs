@@ -68,7 +68,7 @@ pub fn event_labels(close: &[f64], events: &[usize], horizon: usize) -> Vec<i8> 
                 return 0;
             }
             let entry = close[idx];
-            if entry.abs() <= 1e-15 {
+            if entry.abs() <= crate::utils::NUMERIC_EPSILON {
                 return 0;
             }
             let ret = (close[end] - entry) / entry;

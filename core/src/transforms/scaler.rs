@@ -15,7 +15,7 @@ impl Transform for StandardScaler {
         let mean = input.iter().sum::<f64>() / n;
         let variance = input.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0);
         let std = variance.sqrt();
-        if std < 1e-15 {
+        if std < crate::utils::NUMERIC_EPSILON {
             return vec![0.0; input.len()];
         }
         input.iter().map(|x| (x - mean) / std).collect()
@@ -33,7 +33,7 @@ impl Transform for MinMaxScaler {
         let min = input.iter().copied().fold(f64::INFINITY, f64::min);
         let max = input.iter().copied().fold(f64::NEG_INFINITY, f64::max);
         let range = max - min;
-        if range < 1e-15 {
+        if range < crate::utils::NUMERIC_EPSILON {
             return vec![0.0; input.len()];
         }
         input.iter().map(|x| (x - min) / range).collect()

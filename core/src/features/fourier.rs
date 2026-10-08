@@ -69,7 +69,7 @@ pub fn fft_features(data: &[f64], num_bands: usize) -> Result<FftFeatures> {
     let total_energy: f64 = power[1..].iter().sum();
 
     // Spectral centroid
-    let spectral_centroid = if total_energy > 1e-15 {
+    let spectral_centroid = if total_energy > crate::utils::NUMERIC_EPSILON {
         power[1..]
             .iter()
             .enumerate()
@@ -92,7 +92,7 @@ pub fn fft_features(data: &[f64], num_bands: usize) -> Result<FftFeatures> {
             1 + (b + 1) * band_size
         };
         let band_energy: f64 = power[start..end].iter().sum();
-        let ratio = if total_energy > 1e-15 {
+        let ratio = if total_energy > crate::utils::NUMERIC_EPSILON {
             band_energy / total_energy
         } else {
             0.0

@@ -812,7 +812,7 @@ fn dispatch_elementwise_call(
             for index in 0..length {
                 let divisor = buffers[rhs][index];
                 let value = buffers[lhs][index];
-                buffers[out][index] = if divisor.abs() > 1e-15 {
+                buffers[out][index] = if divisor.abs() > crate::utils::NUMERIC_EPSILON {
                     value % divisor
                 } else {
                     f64::NAN
@@ -3631,7 +3631,7 @@ fn dispatch_modern_call(
             for index in 0..len {
                 price_volume = price[index] * volume[index] + price_volume;
                 total_volume += volume[index];
-                output[index] = if total_volume.abs() > 1e-15 {
+                output[index] = if total_volume.abs() > crate::utils::NUMERIC_EPSILON {
                     price_volume / total_volume
                 } else {
                     f64::NAN
@@ -3943,7 +3943,7 @@ fn apply_binary(op: BinaryKernel, lhs: f64, rhs: f64) -> f64 {
         BinaryKernel::Sub => lhs - rhs,
         BinaryKernel::Mul => lhs * rhs,
         BinaryKernel::Div => {
-            if rhs.abs() < 1e-15 {
+            if rhs.abs() < crate::utils::NUMERIC_EPSILON {
                 f64::NAN
             } else {
                 lhs / rhs

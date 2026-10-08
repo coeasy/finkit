@@ -88,7 +88,7 @@ pub fn adr(
                     output[i] = adr_abs;
                 }
                 AdrMode::Percent => {
-                    if !close[i].is_nan() && close[i].abs() > 1e-15 {
+                    if !close[i].is_nan() && !crate::utils::is_zero(close[i]) {
                         output[i] = adr_abs / close[i] * 100.0;
                     }
                 }
@@ -240,7 +240,7 @@ pub fn historical_volatility(
     // j = 1..=period (matching the original semantics).
     for j in 1..=period {
         let slot = j - 1;
-        let lr = if close[j - 1].abs() > 1e-15 && close[j] > 0.0 {
+        let lr = if !crate::utils::is_zero(close[j - 1]) && close[j] > 0.0 {
             Some((close[j] / close[j - 1]).ln())
         } else {
             None
@@ -255,7 +255,7 @@ pub fn historical_volatility(
 
     for i in period..len {
         // Newest log return: ln(close[i] / close[i-1])
-        let new_lr = if close[i - 1].abs() > 1e-15 && close[i] > 0.0 {
+        let new_lr = if !crate::utils::is_zero(close[i - 1]) && close[i] > 0.0 {
             Some((close[i] / close[i - 1]).ln())
         } else {
             None
@@ -506,7 +506,7 @@ pub fn choppiness_index(
         let min_l = low_min.current().unwrap_or(f64::INFINITY);
         let range = max_h - min_l;
 
-        if atr_sum > 0.0 && range > 0.0 && range.is_finite() && log_period.abs() > 1e-15 {
+        if atr_sum > 0.0 && range > 0.0 && range.is_finite() && !crate::utils::is_zero(log_period) {
             output[i] = 100.0 * (atr_sum / range).log10() / log_period;
         }
     }
@@ -584,7 +584,7 @@ pub fn mass_index(
             ema2_prev
         };
 
-        let ratio = if ema2.abs() > 1e-15 {
+        let ratio = if !crate::utils::is_zero(ema2) {
             ema1[i] / ema2
         } else {
             f64::NAN
@@ -696,7 +696,7 @@ pub fn chaikin_volatility(
             // After the increment above, `ring_idx` points to the oldest
             // slot, which corresponds to `ema_spread[i - roc_period]`.
             let prev = ema_ring[ring_idx];
-            if !curr.is_nan() && !prev.is_nan() && prev.abs() > 1e-15 {
+            if !curr.is_nan() && !prev.is_nan() && !crate::utils::is_zero(prev) {
                 output[i] = (curr - prev) / prev * 100.0;
             }
         }
@@ -1318,7 +1318,11 @@ pub fn sortino_ratio(close: &[f64], period: usize, risk_free_rate: f64) -> Resul
         } else {
             0.0
         };
-        output[i] = if ddev > 1e-15 { mean / ddev } else { 0.0 };
+        output[i] = if ddev > crate::utils::TA_IS_ZERO_BANDWIDTH {
+            mean / ddev
+        } else {
+            0.0
+        };
     }
     Ok(output)
 }
@@ -1349,7 +1353,11 @@ pub fn calmar_ratio(equity: &[f64], period: usize) -> Result<Array1<f64>> {
         } else {
             0.0
         };
-        output[i] = if mdd > 1e-15 { cagr / mdd } else { 0.0 };
+        output[i] = if mdd > crate::utils::TA_IS_ZERO_BANDWIDTH {
+            cagr / mdd
+        } else {
+            0.0
+        };
     }
     Ok(output)
 }
@@ -1384,7 +1392,11 @@ pub fn information_ratio(asset: &[f64], benchmark: &[f64], period: usize) -> Res
         let mean = sum_diff / period as f64;
         let var = (sum_sq / period as f64) - mean * mean;
         let te = var.max(0.0).sqrt();
-        output[i] = if te > 1e-15 { mean / te } else { 0.0 };
+        output[i] = if te > crate::utils::TA_IS_ZERO_BANDWIDTH {
+            mean / te
+        } else {
+            0.0
+        };
     }
     Ok(output)
 }

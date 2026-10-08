@@ -8,6 +8,11 @@ use crate::streaming::traits::{IndicatorMeta, StreamingIndicator};
 /// where AD_diff = advances - declines
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct StreamingMcClellanOscillator {
+    // Persisted for `Serialize`/`Deserialize`: the checkpoint layout is a
+    // tested contract (`core/tests/serde_roundtrip_tests.rs`), but no logic
+    // path reads this value. The derive is feature-gated, so a build without
+    // `serde` sees a write-only field and `dead_code` reports it.
+    #[cfg_attr(not(feature = "serde"), allow(dead_code))]
     short_period: usize,
     long_period: usize,
     short_ema: StreamingEma,

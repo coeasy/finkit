@@ -127,7 +127,7 @@ impl StreamingIndicator<f64> for StreamingVolumeRoc {
         let prev = self.buffer[old_idx];
         self.ring_idx = (self.ring_idx + 1) % (self.period + 1);
 
-        let val = if prev.abs() > 1e-15 {
+        let val = if !crate::utils::is_zero(prev) {
             (volume - prev) / prev * 100.0
         } else {
             0.0

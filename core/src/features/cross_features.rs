@@ -188,7 +188,7 @@ impl FeatureEngine for DeviationFeature {
             .unwrap_or_else(|_| Array1::from_elem(close.len(), f64::NAN));
 
         let norm_dev = Array1::from_iter(dev.iter().zip(atr_vals.iter()).map(|(&d, &a)| {
-            if a.abs() > 1e-15 {
+            if a.abs() > crate::utils::NUMERIC_EPSILON {
                 d / a
             } else {
                 f64::NAN
@@ -250,7 +250,7 @@ impl TimeDecayFeature {
                 weighted_sum += w * val;
                 weight_sum += w;
             }
-            out[t] = if weight_sum > 1e-15 {
+            out[t] = if weight_sum > crate::utils::NUMERIC_EPSILON {
                 weighted_sum / weight_sum
             } else {
                 f64::NAN
@@ -612,7 +612,7 @@ fn pearson_corr(x: &[f64], y: &[f64]) -> f64 {
     }
 
     let denom = (var_x * var_y).sqrt();
-    if denom < 1e-15 {
+    if denom < crate::utils::NUMERIC_EPSILON {
         return 0.0;
     }
     cov / denom

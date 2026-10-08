@@ -25,6 +25,7 @@ use crate::streaming::StreamingIndicator;
 use ndarray::Array1;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::sync::Arc;
 
 /// Identity of a compiled formula plan.
@@ -81,6 +82,61 @@ fn parameter_fingerprint(params: &ParamValues) -> String {
         .join(",")
 }
 
+/// Per-engine capacity for every compile-artifact cache (semantic plans, hot
+/// plans, bytecode). All three are pure accelerators — a miss only means
+/// recompiling — so the bound is a memory guarantee, not a semantic one.
+/// Real workloads reuse a handful of distinct formulas (a screening pass
+/// re-evaluates *one* formula across thousands of symbols), so 1024 sits far
+/// above any reuse window while capping a long-lived multi-tenant engine's
+/// growth. V5 R2-2 previously flagged the unbounded caches as a memory risk.
+const ENGINE_CACHE_CAPACITY: usize = 1024;
+
+/// A string-keyed `HashMap` that evicts in insertion order at a fixed
+/// capacity.
+///
+/// The engine's source-keyed caches (`semantic_plan_cache`,
+/// `bytecode_cache`) used to be plain `HashMap`s — unbounded growth for a
+/// long-lived engine fed many distinct formulas. FIFO (not LRU) keeps the
+/// structure trivial and the eviction deterministic; the caches are pure
+/// accelerators, so evicting a still-hot entry only costs a recompile.
+struct BoundedFifoMap<V> {
+    map: HashMap<String, V>,
+    order: VecDeque<String>,
+    capacity: usize,
+}
+
+impl<V> BoundedFifoMap<V> {
+    fn new(capacity: usize) -> Self {
+        debug_assert!(capacity > 0, "a zero-capacity cache can never hold");
+        Self {
+            map: HashMap::new(),
+            order: VecDeque::new(),
+            capacity: capacity.max(1),
+        }
+    }
+
+    fn get(&self, key: &str) -> Option<&V> {
+        self.map.get(key)
+    }
+
+    fn insert(&mut self, key: String, value: V) {
+        if !self.map.contains_key(&key) {
+            while self.order.len() >= self.capacity {
+                if let Some(oldest) = self.order.pop_front() {
+                    self.map.remove(&oldest);
+                }
+            }
+            self.order.push_back(key.clone());
+        }
+        self.map.insert(key, value);
+    }
+
+    fn clear(&mut self) {
+        self.map.clear();
+        self.order.clear();
+    }
+}
+
 /// Statistics for the compiled-plan cache.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct FormulaPlanCacheStats {
@@ -92,11 +148,17 @@ pub struct FormulaPlanCacheStats {
 
 /// Compiled-plan cache.
 ///
-/// Unbounded, matching the engine's other caches (`semantic_plan_cache`,
-/// `bytecode_cache`): a process evaluates a handful of distinct formulas, and a
-/// bound here would evict plans that are about to be reused.
-/// [`FormulaEngine::clear_plan_cache`] drops everything if that ever stops
-/// being true.
+/// Bounded with FIFO eviction at [`ENGINE_CACHE_CAPACITY`] distinct plans —
+/// matching the engine's other accelerators (`semantic_plan_cache`,
+/// `bytecode_cache`, all sharing the same capacity and policy). The capacity
+/// sits orders of magnitude above the handful of distinct formulas any real
+/// workload (including a screening pass over thousands of symbols) reuses, so
+/// a bound never evicts a plan that is about to be reused, while a
+/// long-lived multi-tenant engine can no longer grow without limit — the
+/// previous unbounded design was a documented memory risk (V5 R2-2). Eviction
+/// is always safe: every cache here is a pure accelerator, a miss only means
+/// recompiling. [`FormulaEngine::clear_plan_cache`] drops everything if a
+/// caller wants that explicitly.
 ///
 /// Both counters live here, next to the lookup that decides them, so a call site
 /// cannot bump the wrong one.
@@ -108,14 +170,27 @@ pub struct FormulaPlanCacheStats {
 /// whose only job is to *find* an already-compiled plan. Measured on a 250-bar
 /// series (the screening window) that clone plus the key construction was
 /// 33-46% of a complete `eval_plan` call; at 10k bars it was 3-6%.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct FormulaPlanCache {
     entries: HashMap<FormulaPlanKey, Arc<FormulaHotPlan>>,
+    /// Insertion order for FIFO eviction, mirroring `entries`' live keys.
+    order: VecDeque<FormulaPlanKey>,
+    capacity: usize,
     hits: u64,
     misses: u64,
 }
 
 impl FormulaPlanCache {
+    fn new() -> Self {
+        Self {
+            entries: HashMap::new(),
+            order: VecDeque::new(),
+            capacity: ENGINE_CACHE_CAPACITY,
+            hits: 0,
+            misses: 0,
+        }
+    }
+
     fn get(&mut self, key: &FormulaPlanKey) -> Option<Arc<FormulaHotPlan>> {
         if let Some(plan) = self.entries.get(key) {
             self.hits = self.hits.saturating_add(1);
@@ -127,6 +202,14 @@ impl FormulaPlanCache {
     }
 
     fn insert(&mut self, key: FormulaPlanKey, plan: Arc<FormulaHotPlan>) {
+        if !self.entries.contains_key(&key) {
+            if self.order.len() >= self.capacity {
+                if let Some(oldest) = self.order.pop_front() {
+                    self.entries.remove(&oldest);
+                }
+            }
+            self.order.push_back(key.clone());
+        }
         self.entries.insert(key, plan);
     }
 
@@ -152,11 +235,13 @@ impl FormulaPlanCache {
     /// engine's behaviour, so they stay.
     fn invalidate(&mut self) {
         self.entries.clear();
+        self.order.clear();
     }
 
     /// Drop every plan and reset the counters.
     fn clear(&mut self) {
         self.entries.clear();
+        self.order.clear();
         self.hits = 0;
         self.misses = 0;
     }
@@ -402,7 +487,7 @@ pub struct FormulaEngine {
     executor: FormulaExecutor,
     cache: FormulaCache,
     /// Semantic Compute IR plans keyed by the exact formula source.
-    semantic_plan_cache: RefCell<HashMap<String, FormulaComputePlan>>,
+    semantic_plan_cache: RefCell<BoundedFifoMap<FormulaComputePlan>>,
     /// Compiled hot plans keyed by source + dialect + parameter fingerprint.
     ///
     /// Distinct from `semantic_plan_cache`, which is keyed by source alone and
@@ -412,7 +497,7 @@ pub struct FormulaEngine {
     templates: FormulaTemplates,
     jit_compiler: RefCell<JitCompiler>,
     /// Persistent bytecode cache and VM scratch buffers.
-    bytecode_cache: RefCell<HashMap<String, Bytecode>>,
+    bytecode_cache: RefCell<BoundedFifoMap<Bytecode>>,
     bytecode_vm: RefCell<BytecodeVM>,
     /// Stateful fast paths for append/eval_last.  A failed continuity check
     /// simply falls back to the exact range evaluator.
@@ -479,11 +564,11 @@ impl FormulaEngine {
             execution_mode: FormulaExecutionMode::default(),
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(100),
-            semantic_plan_cache: RefCell::new(HashMap::new()),
-            plan_cache: RefCell::new(FormulaPlanCache::default()),
+            semantic_plan_cache: RefCell::new(BoundedFifoMap::new(ENGINE_CACHE_CAPACITY)),
+            plan_cache: RefCell::new(FormulaPlanCache::new()),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
-            bytecode_cache: RefCell::new(HashMap::new()),
+            bytecode_cache: RefCell::new(BoundedFifoMap::new(ENGINE_CACHE_CAPACITY)),
             bytecode_vm: RefCell::new(BytecodeVM::new()),
             streaming_ema: RefCell::new(HashMap::new()),
             streaming_common: RefCell::new(HashMap::new()),
@@ -535,11 +620,11 @@ impl FormulaEngine {
             execution_mode: FormulaExecutionMode::default(),
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(cache_size),
-            semantic_plan_cache: RefCell::new(HashMap::new()),
-            plan_cache: RefCell::new(FormulaPlanCache::default()),
+            semantic_plan_cache: RefCell::new(BoundedFifoMap::new(ENGINE_CACHE_CAPACITY)),
+            plan_cache: RefCell::new(FormulaPlanCache::new()),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
-            bytecode_cache: RefCell::new(HashMap::new()),
+            bytecode_cache: RefCell::new(BoundedFifoMap::new(ENGINE_CACHE_CAPACITY)),
             bytecode_vm: RefCell::new(BytecodeVM::new()),
             streaming_ema: RefCell::new(HashMap::new()),
             streaming_common: RefCell::new(HashMap::new()),
@@ -2361,16 +2446,16 @@ impl FormulaEngine {
 
     /// Drop every compiled formula and every streaming scratch series.
     ///
-    /// Clears the AST cache *and* the plan cache regardless of the active mode.
-    /// Clearing only one would let the next evaluation skip recompilation right
-    /// after the caller asked for a clean slate — which is the whole point of
-    /// calling this after registering a custom component or otherwise changing
-    /// what a source resolves to.
+    /// Clears the AST, plan, and JIT hot-plan caches regardless of the active
+    /// mode. Clearing only some would let the next evaluation skip
+    /// recompilation right after the caller asked for a clean slate — the whole
+    /// point of calling this after registering a custom component.
     pub fn clear_cache(&mut self) {
         self.cache.clear();
         self.streaming_ema.borrow_mut().clear();
         self.streaming_common.borrow_mut().clear();
         self.clear_plan_cache();
+        self.jit_compiler.borrow_mut().reset_hot_counts();
     }
 
     pub fn compile_bytecode(&mut self, source: &str) -> Result<Bytecode, FormulaError> {
@@ -3670,6 +3755,105 @@ mod plan_cache_tests {
             engine.plan_cache_stats(),
             FormulaPlanCacheStats { hits: 0, misses: 0 }
         );
+    }
+
+    /// V5 Batch 3 gate: the compile-artifact caches are bounded. A long-lived
+    /// engine fed more distinct formulas than `ENGINE_CACHE_CAPACITY` must
+    /// evict (FIFO) instead of growing without limit — the previous unbounded
+    /// design was a documented memory risk (R2-2). Every cache here is a pure
+    /// accelerator, so eviction costs a recompile, never a wrong number.
+    #[test]
+    fn hot_plan_cache_stays_bounded_and_still_recompiles_evicted_entries() {
+        let mut engine = FormulaEngine::new();
+        let total = ENGINE_CACHE_CAPACITY + 16;
+        for i in 0..total {
+            let source = format!("MA(CLOSE,2) + {}", i);
+            engine
+                .compile_plan_default(&source)
+                .unwrap_or_else(|error| panic!("plan `{source}` failed to compile: {error}"));
+        }
+        let cache = engine.plan_cache.borrow();
+        assert!(
+            cache.len() <= ENGINE_CACHE_CAPACITY,
+            "hot-plan cache grew to {} entries, bound is {ENGINE_CACHE_CAPACITY}",
+            cache.len()
+        );
+        assert_eq!(
+            cache.stats().misses as usize,
+            total,
+            "every distinct source had to compile at least once"
+        );
+        // The oldest entries were evicted, the newest are still resident.
+        let newest = format!("MA(CLOSE,2) + {}", total - 1);
+        assert!(
+            cache.contains_key(&FormulaPlanKey::new(
+                &newest,
+                FormulaDialect::default(),
+                &ParamValues::new()
+            )),
+            "most recently inserted plan must still be cached"
+        );
+        drop(cache);
+
+        // Re-evaluating an evicted entry is a pure accelerator miss: the plan
+        // recompiles and the result is still correct.
+        let evicted_source = "MA(CLOSE,2) + 0";
+        let ctx_len = 32;
+        let open = Array1::from_vec(vec![1.0; ctx_len]);
+        let high = Array1::from_vec(vec![2.0; ctx_len]);
+        let low = Array1::from_vec(vec![0.5; ctx_len]);
+        let close = Array1::from_vec(vec![1.5; ctx_len]);
+        let volume = Array1::from_vec(vec![10.0; ctx_len]);
+        let mut ctx = FormulaContext::new(open, high, low, close, volume, None);
+        let result = engine.eval(evicted_source, &mut ctx).expect("recompiles");
+        assert_eq!(result.len(), ctx_len);
+    }
+
+    #[test]
+    fn semantic_and_bytecode_caches_stay_bounded() {
+        let mut engine = FormulaEngine::new();
+        let total = ENGINE_CACHE_CAPACITY + 16;
+        for i in 0..total {
+            let source = format!("EMA(CLOSE,2) * {}", i);
+            engine
+                .compile(&source)
+                .unwrap_or_else(|error| panic!("compile `{source}` failed: {error}"));
+        }
+        assert!(
+            engine.semantic_plan_cache.borrow().map.len() <= ENGINE_CACHE_CAPACITY,
+            "semantic plan cache exceeded its bound"
+        );
+        // Bytecode is only produced by `compile_bytecode`, on demand.
+        for i in 0..total {
+            let source = format!("EMA(CLOSE,2) * {}", i);
+            engine
+                .compile_bytecode(&source)
+                .unwrap_or_else(|error| panic!("bytecode `{source}` failed: {error}"));
+        }
+        assert!(
+            engine.bytecode_cache.borrow().map.len() <= ENGINE_CACHE_CAPACITY,
+            "bytecode cache exceeded its bound"
+        );
+    }
+
+    #[test]
+    fn bounded_fifo_map_evicts_in_insertion_order() {
+        // Strict FIFO: re-inserting an existing key updates its value but does
+        // not refresh its eviction position (documented policy — the capacity
+        // sits far above any reuse window, so refresh behaviour is moot).
+        let mut map = BoundedFifoMap::new(2);
+        map.insert("a".to_string(), 1);
+        map.insert("b".to_string(), 2);
+        map.insert("a".to_string(), 10);
+        assert_eq!(map.get("a"), Some(&10));
+        map.insert("c".to_string(), 3);
+        // `a` (oldest insert) was evicted; `b` survived, `c` entered.
+        assert_eq!(map.get("a"), None);
+        assert_eq!(map.get("b"), Some(&2));
+        assert_eq!(map.get("c"), Some(&3));
+        map.clear();
+        assert_eq!(map.get("b"), None);
+        assert_eq!(map.get("c"), None);
     }
 }
 

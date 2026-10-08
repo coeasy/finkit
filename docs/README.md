@@ -203,7 +203,7 @@ Everything else below is either a constraint source or an audit trail — not a 
 | [FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) | **唯一执行基线** —— 分层架构地图、开发细节、V4 遗留项基线核验、Batch 0–4 重构路线 |
 | [FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) | **历史证据来源（非执行基线）** —— 27 轮全链路审计原始记录与方法学 |
 | [refactor-plan-2026-09-21.md](refactor-plan-2026-09-21.md) | **约束来源（非执行基线）** —— 用户已确认的产品边界与定调（不做回测/选股、JIT/`eval_simd` 冻结）与方法论记录 |
-| [runtime-carrier-adoption-plan-2026-09-20.md](runtime-carrier-adoption-plan-2026-09-20.md) | R2/R3/R4 声明式载体落地规格（进行中） |
+| [runtime-carrier-adoption-plan-2026-09-20.md](runtime-carrier-adoption-plan-2026-09-20.md) | R2/R3/R4 声明式载体落地规格（**已完成**：R1–R4 收敛，平行轨道 5 crate 已删除，见该文档 §6） |
 
 Superseded **architecture/refactor** plans were archived until 2026-10-05 and
 are now **deleted from the working tree**; git history keeps every one of them
@@ -264,4 +264,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last product/documentation review: 2026-10-04. Workspace target: v0.2.0. Published distribution baseline: v0.1.15._
+_Last product/documentation review: 2026-10-08. Workspace target: v0.2.0. Published distribution baseline: v0.1.15._

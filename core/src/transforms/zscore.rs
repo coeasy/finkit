@@ -15,7 +15,7 @@ impl Transform for ZScore {
         let mean = input.iter().sum::<f64>() / n;
         let variance = input.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
         let std = variance.sqrt();
-        if std < 1e-15 {
+        if std < crate::utils::NUMERIC_EPSILON {
             return vec![0.0; input.len()];
         }
         input.iter().map(|x| (x - mean) / std).collect()

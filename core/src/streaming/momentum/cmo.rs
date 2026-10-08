@@ -67,7 +67,7 @@ impl StreamingIndicator for StreamingCmo {
         }
 
         let denom = self.sum_up + self.sum_down;
-        let result = if denom.abs() > 1e-15 {
+        let result = if !crate::utils::is_zero(denom) {
             (self.sum_up - self.sum_down) / denom * 100.0
         } else {
             0.0

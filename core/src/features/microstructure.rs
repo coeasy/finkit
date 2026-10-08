@@ -54,7 +54,7 @@ pub fn volume_imbalance(close: &[f64], volume: &[f64], window: usize) -> Array1<
             signed_sum += signed_vol[j];
             total_vol += volume[j].abs();
         }
-        out[i] = if total_vol > 1e-15 {
+        out[i] = if total_vol > crate::utils::NUMERIC_EPSILON {
             signed_sum / total_vol
         } else {
             0.0
@@ -97,7 +97,7 @@ pub fn kyle_lambda(close: &[f64], volume: &[f64], window: usize) -> Array1<f64> 
             numerator += sv * price_change[j];
             denominator += sv * sv;
         }
-        out[i] = if denominator.abs() > 1e-15 {
+        out[i] = if denominator.abs() > crate::utils::NUMERIC_EPSILON {
             numerator / denominator
         } else {
             0.0
@@ -226,7 +226,7 @@ pub fn vpin(close: &[f64], volume: &[f64], bucket_size: f64, n_buckets: usize) -
 
             if bucket_vol >= bucket_size - 1e-10 {
                 let total = bucket_buy + bucket_sell;
-                let imb = if total > 1e-15 {
+                let imb = if total > crate::utils::NUMERIC_EPSILON {
                     (bucket_buy - bucket_sell).abs() / total
                 } else {
                     0.0
@@ -286,7 +286,7 @@ pub fn lob_imbalance(levels: &[LobLevel], decay: f64) -> f64 {
         weight *= decay;
     }
 
-    if weighted_sum.abs() < 1e-15 {
+    if weighted_sum.abs() < crate::utils::NUMERIC_EPSILON {
         0.0
     } else {
         weighted_diff / weighted_sum

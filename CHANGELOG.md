@@ -8,6 +8,140 @@ a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
 
+### Changed - 2026-10-08 (twenty-ninth pass — the declare-vs-compile gap in every crate, and one cache that outlived the "clean slate")
+
+A release-readiness audit run under one rule: **each hypothesis is verified before
+it is believed, and one class of failure is fixed completely before the next is
+opened.** Two of the three findings below were invisible to a green
+`cargo test --workspace`, which is the point.
+
+#### 1. `factor-analysis` declared a feature set its own sources cannot compile against
+
+`cargo check -p finkit-factor-analysis` failed with **39 errors, all inside `finkit`
+itself** — `E0432 unresolved import crate::factor_graph` / `crate::formula`, and
+`E0433 cannot find momentum / overlap / cycle / math_operators in indicators`.
+
+The manifest declared `features = ["std"]` on its `finkit` dependency, but the
+sources reach `finkit::features` (gated on `indicators-all` **and** `formula`) and
+round-trip `finkit::unified_runtime::DirtyRange`, whose `Serialize`/`Deserialize`
+derives need `serde`.
+
+**Why a green workspace hid it.** Cargo feature unification: a workspace-wide build
+also compiles `visualization` / `ffi-common`, which already enable `formula` and
+`indicators-all`, so the union made the crate compile. `cargo test
+-p finkit-factor-analysis --locked` builds it *alone* — and that is a real CI step
+(the `research-test` job). The declaration is now
+`["std", "serde", "formula", "indicators-all"]`, with the reasoning in the manifest.
+
+The same question was then asked of every other member. All **14 workspace crates**
+now pass `cargo check -p <crate>` in isolation with zero errors, so "compiles
+because an unrelated crate unifies the right features in" is no longer load-bearing
+anywhere in the tree.
+
+#### 2. `FormulaEngine::clear_cache()` had never cleared the JIT cache
+
+The method's own doc comment says it exists so a caller gets "a clean slate … after
+registering a custom component". It cleared `cache`, `streaming_ema`,
+`streaming_common` and `plan_cache` — but not `jit_compiler`, whose
+`optimized_cache` / `hot_count` are keyed by formula source. A source that had been
+JIT-optimized before a custom component was registered therefore kept its **stale
+optimized plan**, which is exactly the failure the doc says the method prevents.
+`clear_cache()` now also calls `reset_hot_counts()`.
+
+#### 3. The `-D warnings` job that really was red, and the `-D warnings` run that was not
+
+`visualization` depends on core with `["std", "formula", "indicators-all"]` — **no
+`serde`** — so the checkpoint fields carrying `#[cfg_attr(feature = "serde",
+derive(…))]` become write-only, and the `runtime-integration-tests` job's
+`RUSTFLAGS: "-D warnings"` promotes `field is never read` to an error. Eleven were
+reported:
+
+* nine are **a tested contract** — `core/tests/serde_roundtrip_tests.rs` asserts the
+  `save_state()` / `restore_state()` round trip, so the fields stay and gain
+  `#[cfg_attr(not(feature = "serde"), allow(dead_code))]` plus the reason;
+* `StreamingMacdExt::fast_kind` / `slow_kind` and `FormulaState::Rsi::started` are
+  genuinely never read by any path and were deleted.
+
+Separately, `cargo clippy -p finkit` under an ad-hoc `-D warnings` reported a dozen
+pedantic lints. That was a **tool misuse, not a defect**: the CI clippy job denies
+only `unfulfilled_lint_expectations` and pins channel 1.98. Re-run with the CI's
+exact flags and toolchain, both clippy steps exit 0. Recorded here because the
+wrong repro is itself the kind of thing that gets believed.
+
+#### 4. Orphan logic, probed instead of guessed
+
+`#[allow(dead_code)]` switches off the only compiler check that can see an
+unwired item, so the suppressions were temporarily stripped across `core` and the
+crate compiled to let the compiler name the real orphans. Fifteen symbols had **no
+caller at all**; seven were production code that nothing reached — `simd_ops`
+scalar fallbacks (`prefix_sum`, `log_return`, `cumsum`, `obv_core`, `ad_line`),
+`ad_line_avx2` (the scalar path is kept because only it has a bit-level parity
+proof), and `compute_stoch_fast_k` — and were deleted rather than kept behind
+`#[allow]`. `fib_ratio_match` had exactly one caller, its own test, and moved into
+`#[cfg(test)]`; `sma_nan_as_zero_into` and `MacdExt`'s two MA kinds are covered
+above. The five suppressions that remain are all genuine `#[cfg]` platform or
+feature branches, not forgotten code.
+
+#### 5. The generated catalogues had been reading the wrong files
+
+`python scripts/gen_ssot_docs.py --check` — a `docs-check.yml` gate — was red, and
+the reason it gave ("regenerate") would have **destroyed accurate documentation**:
+running `--generate` rewrote `formula-functions.md` from 452 functions to **48** and
+`indicators.md` from 389 to **326**. Two independent causes, both silent:
+
+1. **The scanner did not understand split modules.** `pub mod foo;` resolves to
+   `foo.rs` *or* `foo/mod.rs` + submodules, and the two largest modules had been
+   split into directories for reviewability. `scan_module_functions` and
+   `scan_streaming_structs` only ever looked for `<name>.rs` and `return []` when
+   it was missing — so `indicators/momentum/` and all eleven streaming module
+   directories scanned as **empty**, with no warning. Every module lookup now goes
+   through one `module_files()` resolver that accepts either shape.
+2. **The router stopped registering with `map.insert`.** `functions.rs` no longer
+   writes `map.insert("NAME", fn)`; it returns a `Vec<(&str, FormulaFn)>` from
+   `canonical_overrides()` that `get_builtin_functions` folds in after the legacy
+   table. The extractor only read `map.insert` sites, so all thirty overrides went
+   missing — and, through the registry-alias step that follows, their aliases too.
+
+**The verification is the interesting part**: with both fixes in, `formula-functions.md`
+(452) and `indicators.md` (389 indicator functions) regenerate **byte-identical to
+the committed files**. That is what proves the resolver reproduces the pre-split
+behaviour rather than approximating it — a check that only passes because the
+numbers are exact.
+
+One document genuinely was stale and is now 256 lines longer:
+`docs/generated/streaming-indicators.md`, which listed 5 modules and 24 structs
+against the real 17 and 219. `streaming/{breadth,momentum,overlap,…}` have been
+directories since before `HEAD`, so that catalogue had **always** omitted the twelve
+directory modules — the same blind spot, unnoticed for as long as it existed.
+
+#### 6. Documentation
+
+* The `doc` job's rustdoc gate was red, and the cause was this cycle's own module
+  split: three module-header links pointed at **private** items — `[`prelude`]` in
+  `indicators/momentum/mod.rs` and `math/simd_ops/mod.rs`, and `[`ultosc_body`]` in
+  `momentum/ultosc_impl.rs`. `RUSTDOCFLAGS="-D warnings"` promotes
+  `rustdoc::private_intra_doc_links` to an error, so `cargo doc -p finkit --no-deps`
+  failed with "public documentation for `momentum` links to private item". They are
+  plain code spans now. A fourth one in the private `functions_legacy` module was
+  fixed with them so it cannot surface if that module is ever made public.
+* `docs/api-reference.md` / `-zh.md` now state plainly that **two different HTML
+  outputs exist**: the Lightweight Charts payload from `renderer::ChartRenderer`,
+  and the `KlineChart` pipeline document (`to_html_string()` / `save_as_html()`,
+  what `finkit-cli chart --chart-format html` calls) built from `DrawList` +
+  `ChartScene`. A reader previously had no way to tell which one a "full HTML
+  document" meant. `docs/usage.md` §Chart output carries the same pointer.
+* `docs/README.md` and `docs/refactor-plan-2026-09-21.md` claimed the
+  `runtime-carrier` track was still in progress; that document's own header has
+  said "R1–R4 全部完成" since the parallel track was deleted. Both corrected. The
+  document itself is kept: `core/src/factor_graph.rs` and `factor_provider.rs`
+  point at it by name as the spec for their deliberate departures.
+* A completed planning file (`.lingxi/plans/`) that had been staged but is
+  referenced by nothing and superseded by `FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md`
+  — its own task list ends with "撰写并落盘 docs/FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md",
+  marked done — was dropped from the index and removed, matching the rule the
+  documentation index already states for completed plans.
+
+
 ### Changed - 2026-10-06 (eighteenth pass — the question is "which recurrence shape", and it is measurable)
 
 The seventeenth pass left one open sentence: the twelve kernels sitting in a 0.82–0.98 band  
