@@ -111,11 +111,14 @@ def tracked_files() -> list[str]:
     """Every tracked path that still exists in the working tree.
 
     `-z` is load-bearing, not cosmetic: without it git octal-escapes any path
-    containing a non-ASCII byte, so `docs/competitive-analysis/finkit-<cjk>.md`
-    arrives as `"docs/...finkit-\\350\\220\\275..."` and `Path.is_file()` then
-    fails. Nine tracked files were invisible to this check that way, and every
-    one of them was a document that mentions `scripts/` paths -- so the check
-    could neither see a reference they made nor find them as consumers.
+    containing a non-ASCII byte, so a CJK-named document arrives as
+    `"docs/...\\350\\220\\275..."` and `Path.is_file()` then fails. Nine
+    tracked files were invisible to this check that way (a since-deleted set of
+    dated competitive-analysis plans), and every one of them was a document
+    that mentions `scripts/` paths -- so the check could neither see a
+    reference they made nor find them as consumers. The tree currently has no
+    non-ASCII path, but the flag stays: re-adding one would silently re-open
+    the hole.
 
     A path whose working-tree file has been deleted but whose removal is not
     staged is also still listed; it is gone as far as this check is concerned,

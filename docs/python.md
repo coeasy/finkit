@@ -299,7 +299,9 @@ JSON 导出现在包含与当前图元一致的 `data`、`revision`、`source_of
 The overlay is disabled by default. The initial implementation uses strict
 three-bar fractals and a conservative three-stroke segment definition; the
 rules and next-stage extension points are recorded in
-`docs/chan-visualization-roadmap-zh.md`.
+[架构文档索引](README.md) 所列的图表相关文档。（原 `docs/chan-visualization-roadmap-zh.md`
+路线图已于 2026-10-10 从工作树删除，可用
+`git log --diff-filter=D -- docs/chan-visualization-roadmap-zh.md` 恢复。）
 
 ## Handling warm-up values
 

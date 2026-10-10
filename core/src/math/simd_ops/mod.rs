@@ -89,10 +89,22 @@ fn f64_ln(x: f64) -> f64 {
     x.ln()
 }
 
+// Every item inside the avx2 modules is itself
+// `#[cfg(all(feature = "std", target_arch = "x86_64"))]`. Declaring the modules
+// unconditionally made them compile to *nothing* on every other target -- wasm32
+// included -- which turned the `use super::prelude::*` inside them and the glob
+// re-exports below into dead imports and produced seven warnings on a target
+// that cannot use AVX2 at all. Gating the declaration keeps the module's own
+// cfg in one place instead of in two that can disagree.
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 mod avx2_core;
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 mod avx2_diff;
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 mod avx2_hilbert;
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 mod avx2_mom;
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 mod avx2_stats;
 mod capability;
 mod dispatch;
@@ -106,10 +118,15 @@ mod tests;
 // Crate-internal facade: every moved item is at least `pub(crate)`,
 // so a glob re-export keeps sibling buckets resolving exactly as they
 // did when they shared one file.
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 pub(crate) use avx2_core::*;
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 pub(crate) use avx2_diff::*;
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 pub(crate) use avx2_hilbert::*;
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 pub(crate) use avx2_mom::*;
+#[cfg(all(feature = "std", target_arch = "x86_64"))]
 pub(crate) use avx2_stats::*;
 pub(crate) use scalar_core::*;
 pub(crate) use scalar_mom::*;

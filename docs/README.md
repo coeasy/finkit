@@ -25,7 +25,7 @@ Choose the path that matches your goal:
 | Understand research architecture | [Factor research architecture](factor-research-architecture.md) |
 | Diagnose failures | [Troubleshooting](troubleshooting.md) |
 | 查看当前架构与重构总纲 | [架构、开发细节与分层重构总纲 V5](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) |
-| 查看历史审计记录（证据来源） | [架构、全链路审计与优化改进方案 V4](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) |
+| 查看当前实现状态（可信矩阵） | [架构现状矩阵](architecture/status-matrix.md) |
 
 ## Product model
 
@@ -146,7 +146,10 @@ For exact supported functions and Pine mappings, prefer generated catalogs over 
 | [function-schema.md](function-schema.md) | Versioned machine-readable function schema |
 | [architecture/overview.md](architecture/overview.md) | Crate/binding architecture |
 | [architecture/dataflow.md](architecture/dataflow.md) | Batch, streaming, formula and binding data flow |
-| [architecture/formula-engine.md](architecture/formula-engine.md) | Formula parser/compiler/runtime internals |
+| [architecture/formula-engine.md](architecture/formula-engine.md) | Formula parser/compiler/runtime internals; default backend and entry-point matrix |
+| [architecture/numerical-semantics.md](architecture/numerical-semantics.md) | Per-domain NaN/Infinity policy, the two zero bands, input bounds and warm-up contracts |
+| [architecture/runtime-and-cache-contract.md](architecture/runtime-and-cache-contract.md) | Cache capacity/key/eviction/clear/threading contract and the DirtyRange safety rule |
+| [architecture/status-matrix.md](architecture/status-matrix.md) | Trusted implementation-status matrix (compiles / tested / parity / CI / release) |
 | [factor-research-architecture.md](factor-research-architecture.md) | Reuse-first Factor Research / Alphalens-style / multi-factor / portfolio architecture |
 | [ffi/memory-contract.md](ffi/memory-contract.md) | C ABI ownership/lifetime contract |
 | [ffi/error-codes.md](ffi/error-codes.md) | Cross-language/native error codes |
@@ -159,7 +162,6 @@ For exact supported functions and Pine mappings, prefer generated catalogs over 
 | [benchmark-results.md](benchmark-results.md) | Current benchmark/evidence summary |
 | [BENCHMARK_VS_TALIB.md](BENCHMARK_VS_TALIB.md) | TA-Lib comparison and reproducibility contract |
 | [talib-efficiency-deep-dive-zh.md](talib-efficiency-deep-dive-zh.md) | 效率深度对比：测量方法学、非 ✅ 行分类、负结果目录、仍未解决项 |
-| [talib-0.8.0-coverage-audit-2026-09-19.md](talib-0.8.0-coverage-audit-2026-09-19.md) | TA-Lib Python 0.8.0 public-surface gap audit |
 | [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) | Checked-in historical benchmark snapshot |
 | [finkit-outperform-talib-architecture-v3.md](finkit-outperform-talib-architecture-v3.md) | **Live spec** — the speedup semantics `scripts/benchmark_talib_arch_v3_gate.py` encodes |
 | [finkit-vs-talib-performance-optimization-plan.md](finkit-vs-talib-performance-optimization-plan.md) | **Live spec** — backs `scripts/apply_talib_performance_plan.py` |
@@ -168,42 +170,50 @@ For exact supported functions and Pine mappings, prefer generated catalogs over 
 
 Benchmark values are measured snapshots, not universal latency/throughput guarantees. Re-run the benchmark harness on the target CPU/compiler/runtime before making production commitments. The scheduled `competitive-benchmark.yml` workflow produces commit-bound TA-Lib evidence; it complements, rather than replaces, correctness and regression gates in normal PR CI.
 
-## Dated analyses and roadmaps — records, not guidance
-
-These are dated snapshots: competitive analyses, roadmap proposals and progress
-matrices. They are kept for the record and are **not** descriptions of current
-behaviour; where one conflicts with the code, the code wins. They are listed
-here because a document nothing links to is unreachable, and an unreachable
-document is indistinguishable from one that was deleted.
-
-| Document | Date | What it records |
-| --- | --- | --- |
-| [competitive-analysis/竞品综合对比总览-2026-09-23.md](competitive-analysis/竞品综合对比总览-2026-09-23.md) | 2026-09-23 | Cross-competitor summary |
-| [competitive-analysis/竞品全景图-finkit-2026-09-23.md](competitive-analysis/竞品全景图-finkit-2026-09-23.md) | 2026-09-23 | Competitor landscape map |
-| [competitive-analysis/计算库竞品深入分析-finkit-2026-09-23.md](competitive-analysis/计算库竞品深入分析-finkit-2026-09-23.md) | 2026-09-23 | Deep dive: numeric libraries |
-| [competitive-analysis/公式系统竞品深入分析-finkit-2026-09-23.md](competitive-analysis/公式系统竞品深入分析-finkit-2026-09-23.md) | 2026-09-23 | Deep dive: formula systems |
-| [competitive-analysis/因子研究竞品深入分析-finkit-2026-09-23.md](competitive-analysis/因子研究竞品深入分析-finkit-2026-09-23.md) | 2026-09-23 | Deep dive: factor research |
-| [competitive-analysis/finkit-竞争战略与优先级排序-2026-09-23.md](competitive-analysis/finkit-竞争战略与优先级排序-2026-09-23.md) | 2026-09-23 | Strategy and prioritisation |
-| [competitive-analysis/finkit-差距分析与战略补足建议书-2026-09-23.md](competitive-analysis/finkit-差距分析与战略补足建议书-2026-09-23.md) | 2026-09-23 | Gap analysis and remediation proposal |
-| [competitive-analysis/finkit-全量覆盖与工业级收敛方案-2026-09-23.md](competitive-analysis/finkit-全量覆盖与工业级收敛方案-2026-09-23.md) | 2026-09-23 | Full-coverage convergence proposal |
-| [competitive-analysis/finkit-落地开发计划-2026-09-23.md](competitive-analysis/finkit-落地开发计划-2026-09-23.md) | 2026-09-23 | Implementation plan |
-| [chan-visualization-roadmap-zh.md](chan-visualization-roadmap-zh.md) | — | 缠论可视化路线图 |
-| [chart-improvement-plan-zh.md](chart-improvement-plan-zh.md) | — | 图表能力改进计划 |
-| [gpu-rendering-architecture-zh.md](gpu-rendering-architecture-zh.md) | — | GPU 渲染架构设想 |
-| [market-calendar-adapters-zh.md](market-calendar-adapters-zh.md) | — | 交易日历适配器方案 |
-
 ## Current refactor baseline
 
 **There is exactly one execution baseline:
 [`FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md`](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md).**
-Everything else below is either a constraint source or an audit trail — not a competing plan.
+Everything that used to sit beside it as a competing or dated plan has been
+moved out of the working tree (see below); nothing here is a second baseline.
 
 | Document | Purpose |
 | --- | --- |
 | [FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) | **唯一执行基线** —— 分层架构地图、开发细节、V4 遗留项基线核验、Batch 0–4 重构路线 |
-| [FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) | **历史证据来源（非执行基线）** —— 27 轮全链路审计原始记录与方法学 |
-| [refactor-plan-2026-09-21.md](refactor-plan-2026-09-21.md) | **约束来源（非执行基线）** —— 用户已确认的产品边界与定调（不做回测/选股、JIT/`eval_simd` 冻结）与方法论记录 |
-| [runtime-carrier-adoption-plan-2026-09-20.md](runtime-carrier-adoption-plan-2026-09-20.md) | R2/R3/R4 声明式载体落地规格（**已完成**：R1–R4 收敛，平行轨道 5 crate 已删除，见该文档 §6） |
+| [ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-10.md](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-10.md) | **审查与落地记录** —— 以 `496763b7` 为基线的现状审查、阶段 0–5 重构方案；已全部落地，产物为下列三份合同与 [architecture/status-matrix.md](architecture/status-matrix.md) |
+
+## Deleted from the working tree — recoverable from git history
+
+Dated audits, completed plans and roadmap proposals are **not** kept in the
+working tree. A dated snapshot is not a description of current behaviour, and a
+completed plan left in place reads as an open work item. Every one of them is
+permanent in git history and recoverable by name:
+
+```bash
+git log --diff-filter=D --name-only -- <path>   # find the deleting commit
+git show <commit>^:<path>                       # read the file
+```
+
+| Deleted | Date deleted | What it recorded |
+| --- | --- | --- |
+| `docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md` | 2026-10-10 | 27 轮全链路审计原始记录与方法学（历史证据来源，非执行基线） |
+| `docs/refactor-plan-2026-09-21.md` | 2026-10-10 | 用户已确认的产品边界与定调（不做回测/选股、JIT/`eval_simd` 冻结）与方法论记录 |
+| `docs/runtime-carrier-adoption-plan-2026-09-20.md` | 2026-10-10 | R2/R3/R4 声明式载体落地规格（**已完成**：R1–R4 收敛，平行轨道 5 crate 已删除） |
+| `docs/talib-0.8.0-coverage-audit-2026-09-19.md` | 2026-10-10 | TA-Lib Python 0.8.0 public-surface gap audit |
+| `docs/competitive-analysis/`（9 篇，2026-09-23） | 2026-10-10 | 竞品综合对比、全景图、计算库/公式系统/因子研究深挖、战略排序、差距分析、全量收敛方案、落地计划 |
+| `docs/chan-visualization-roadmap-zh.md` | 2026-10-10 | 缠论可视化路线图 |
+| `docs/chart-improvement-plan-zh.md` | 2026-10-10 | 图表能力改进计划 |
+| `docs/gpu-rendering-architecture-zh.md` | 2026-10-10 | GPU 渲染架构设想 |
+| `docs/market-calendar-adapters-zh.md` | 2026-10-10 | 交易日历适配器方案 |
+
+The 2026-10-10 architecture review produced **three contracts that stay in the
+tree**, because they describe current behaviour rather than a past plan:
+
+| Contract | Purpose |
+| --- | --- |
+| [architecture/status-matrix.md](architecture/status-matrix.md) | 可信实现状态矩阵：可编译 / 专项测试 / parity / CI target / 发行，五态分列，不塌缩成完成度百分比 |
+| [architecture/numerical-semantics.md](architecture/numerical-semantics.md) | 分域 NaN/Infinity 策略、两个零判定带宽、输入边界与 warm-up 合同 |
+| [architecture/runtime-and-cache-contract.md](architecture/runtime-and-cache-contract.md) | 缓存容量/key/淘汰/清理/线程合同与 DirtyRange 安全规则 |
 
 Superseded **architecture/refactor** plans were archived until 2026-10-05 and
 are now **deleted from the working tree**; git history keeps every one of them
@@ -264,4 +274,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last product/documentation review: 2026-10-08. Workspace target: v0.2.0. Published distribution baseline: v0.1.15._
+_Last product/documentation review: 2026-10-10. Workspace target: v0.2.0. Published distribution baseline: v0.1.15._

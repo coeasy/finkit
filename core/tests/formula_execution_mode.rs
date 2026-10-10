@@ -46,6 +46,42 @@ const FORMULAS: &[&str] = &[
     "HHV(HIGH, 10)",
 ];
 
+/// The source the backend-contract tests below evaluate.
+const TREE_ONLY_SOURCE: &str = "MA(CLOSE, 5)";
+
+/// Assert that a source-level entry point refuses to run on the `Plan` backend
+/// with `BackendUnsupported` naming itself, and stays reachable on the tree
+/// backend.
+///
+/// `$call` is invoked twice — once on a Plan engine, once on a Tree engine — and
+/// its result is normalised to `Result<(), FormulaError>` so entries with
+/// different return types share one assertion. The tree half only asserts that
+/// the guard did *not* fire: whether the formula itself is valid is the business
+/// of the entry point's own tests.
+macro_rules! assert_tree_only {
+    ($entry:literal, $call:expr) => {{
+        let mut plan_engine = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
+        let mut plan_ctx = context(32);
+        match $call(&mut plan_engine, &mut plan_ctx) {
+            Err(FormulaError::BackendUnsupported { backend, entry }) => {
+                assert_eq!(backend, "plan", "{}: wrong backend named", $entry);
+                assert_eq!(entry, $entry, "{}: wrong entry named", $entry);
+            }
+            other => panic!(
+                "{}: plan mode must report BackendUnsupported, got {other:?}",
+                $entry
+            ),
+        }
+
+        let mut tree_engine = FormulaEngine::new();
+        let mut tree_ctx = context(32);
+        if let Err(FormulaError::BackendUnsupported { .. }) = $call(&mut tree_engine, &mut tree_ctx)
+        {
+            panic!("{}: the tree backend must serve this entry", $entry);
+        }
+    }};
+}
+
 #[test]
 fn tree_is_the_default() {
     assert_eq!(
@@ -276,39 +312,7 @@ fn clear_cache_drops_the_plan_cache_from_tree_mode_too() {
 /// and must stay reachable on the tree backend.
 #[test]
 fn tree_only_entries_refuse_to_run_under_plan() {
-    const SOURCE: &str = "MA(CLOSE, 5)";
-    let ast = finkit::formula::parse_formula(SOURCE).expect("parse MA(CLOSE, 5)");
-
-    // `$call` is invoked twice — once on a Plan engine, once on a Tree engine —
-    // and its result is normalised to `Result<(), FormulaError>` so entries
-    // with different return types share one assertion. The tree half only
-    // asserts that the guard did *not* fire: whether the formula itself is
-    // valid is the business of the entry point's own tests.
-    macro_rules! assert_tree_only {
-        ($entry:literal, $call:expr) => {{
-            let mut plan_engine =
-                FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
-            let mut plan_ctx = context(32);
-            match $call(&mut plan_engine, &mut plan_ctx) {
-                Err(FormulaError::BackendUnsupported { backend, entry }) => {
-                    assert_eq!(backend, "plan", "{}: wrong backend named", $entry);
-                    assert_eq!(entry, $entry, "{}: wrong entry named", $entry);
-                }
-                other => panic!(
-                    "{}: plan mode must report BackendUnsupported, got {other:?}",
-                    $entry
-                ),
-            }
-
-            let mut tree_engine = FormulaEngine::new();
-            let mut tree_ctx = context(32);
-            if let Err(FormulaError::BackendUnsupported { .. }) =
-                $call(&mut tree_engine, &mut tree_ctx)
-            {
-                panic!("{}: the tree backend must serve this entry", $entry);
-            }
-        }};
-    }
+    let ast = finkit::formula::parse_formula(TREE_ONLY_SOURCE).expect("parse TREE_ONLY_SOURCE");
 
     assert_tree_only!(
         "eval_ast",
@@ -319,25 +323,25 @@ fn tree_only_entries_refuse_to_run_under_plan() {
     assert_tree_only!(
         "eval_lazy",
         |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
-            .eval_lazy(SOURCE, ctx)
+            .eval_lazy(TREE_ONLY_SOURCE, ctx)
             .map(|_| ())
     );
     assert_tree_only!(
         "eval_parallel",
         |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
-            .eval_parallel(SOURCE, ctx)
+            .eval_parallel(TREE_ONLY_SOURCE, ctx)
             .map(|_| ())
     );
     assert_tree_only!(
         "eval_optimized",
         |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
-            .eval_optimized(SOURCE, ctx)
+            .eval_optimized(TREE_ONLY_SOURCE, ctx)
             .map(|_| ())
     );
     assert_tree_only!(
         "eval_with_debug",
         |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
-            .eval_with_debug(SOURCE, ctx)
+            .eval_with_debug(TREE_ONLY_SOURCE, ctx)
             .map(|_| ())
     );
     assert_tree_only!(
@@ -349,33 +353,70 @@ fn tree_only_entries_refuse_to_run_under_plan() {
     assert_tree_only!(
         "eval_with_validation",
         |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
-            .eval_with_validation(SOURCE, ctx, &finkit::formula::ParamValues::new())
+            .eval_with_validation(TREE_ONLY_SOURCE, ctx, &finkit::formula::ParamValues::new())
             .map(|_| ())
     );
     assert_tree_only!(
         "eval_with_defaults",
         |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
-            .eval_with_defaults(SOURCE, ctx)
+            .eval_with_defaults(TREE_ONLY_SOURCE, ctx)
             .map(|_| ())
     );
     assert_tree_only!(
         "eval_zero_copy",
         |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
-            .eval_zero_copy(SOURCE, ctx)
+            .eval_zero_copy(TREE_ONLY_SOURCE, ctx)
             .map(|_| ())
     );
+}
+
+/// The tail of the same roster: `eval_zero_copy_cached`, `eval_zero_alloc` and
+/// the two Pine entries. `eval_multi_with_dialect` is plan-capable for every
+/// dialect *except* Pine; `eval_multi_with_pine_security` is tree-only outright.
+/// Split out only so each test stays inside the lint's size budget — this is one
+/// roster, not two categories.
+#[test]
+fn remaining_tree_only_entries_refuse_to_run_under_plan() {
     assert_tree_only!(
         "eval_zero_copy_cached",
         |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
-            .eval_zero_copy_cached(SOURCE, ctx)
+            .eval_zero_copy_cached(TREE_ONLY_SOURCE, ctx)
             .map(|_| ())
     );
     assert_tree_only!(
         "eval_zero_alloc",
         |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
-            .eval_zero_alloc(SOURCE, ctx)
+            .eval_zero_alloc(TREE_ONLY_SOURCE, ctx)
             .map(|_| ())
     );
+    assert_tree_only!(
+        "eval_multi_with_dialect(Pine)",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_multi_with_dialect(TREE_ONLY_SOURCE, FormulaDialect::Pine, ctx)
+            .map(|_| ())
+    );
+    assert_tree_only!(
+        "eval_multi_with_pine_security",
+        |engine: &mut FormulaEngine, ctx: &mut FormulaContext| engine
+            .eval_multi_with_pine_security(TREE_ONLY_SOURCE, ctx, &RejectingSecurityResolver)
+            .map(|_| ())
+    );
+}
+
+/// A resolver that never supplies host data. These contract tests exercise the
+/// backend guard, which fires before any `request.security` lookup, so the
+/// resolver only needs to be a valid value of the right type.
+struct RejectingSecurityResolver;
+
+impl finkit::formula::PineSecurityResolver for RejectingSecurityResolver {
+    fn resolve_security(
+        &self,
+        _args: &[(Option<String>, finkit::formula::PineAstNode)],
+    ) -> Result<finkit::formula::AstNode, finkit::formula::PineMapperError> {
+        Err(finkit::formula::PineMapperError {
+            message: "no host security data in the backend-contract test".to_string(),
+        })
+    }
 }
 
 /// The plan-capable source-level entries stay governed: they must not report

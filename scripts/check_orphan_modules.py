@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Fail when a public module in the core crate has no callers.
 
-Motivation (see docs/refactor-plan-2026-09-21.md §3-B): the core crate had
+Motivation (recorded in git history: `git log --diff-filter=D --
+docs/refactor-plan-2026-09-21.md`, §3-B): the core crate had
 accumulated roughly 3300 lines of public modules that were declared in
 ``core/src/lib.rs`` but referenced by nothing -- not even by tests:
 

@@ -65,7 +65,9 @@
 //!
 //! Ported from the `crates/finkit-runtime` migration track, whose `FactorGraph`
 //! and `Scheduler` formed a parallel execution engine — see
-//! `docs/runtime-carrier-adoption-plan-2026-09-20.md`. Two deliberate departures:
+//! the runtime-carrier adoption plan (completed; archived in git history via
+//! `git log --diff-filter=D -- docs/runtime-carrier-adoption-plan-2026-09-20.md`).
+//! Two deliberate departures:
 //!
 //! * The track's `Scheduler` is **not** ported. Cycle reporting is already owned
 //!   by [`crate::compute::ComputePlanError::DependencyCycle`], and this module

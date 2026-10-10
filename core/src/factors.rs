@@ -887,7 +887,7 @@ pub fn neutralize(values: &[f64], exposure: &[f64]) -> FactorResult<Vec<f64>> {
 /// | [`crate::factors::builtin::worldquant101`] — the computable alphas | 17 |
 /// | **total** | **184** |
 ///
-/// The competitive-analysis plan set this criterion at "9 -> >= 240", from the
+/// The competitive analysis set this criterion at "9 -> >= 240", from the
 /// arithmetic `158 + ~85 + 9`. Both of its middle terms are larger than the
 /// sources support: `WorldQuant`'s paper numbers 101 alphas but defines only 71
 /// (30 numbers are reserved), and 54 of those 71 are blocked on a

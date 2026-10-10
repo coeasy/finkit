@@ -112,6 +112,30 @@ macd, signal, hist = ta.macd(close, 12, 26, 9)
 print(sma20[-1], rsi14[-1], macd[-1])
 ```
 
+## Quick start: CLI
+
+Build the CLI from source, then run an indicator over a CSV. Close-only
+commands (`sma`, `ema`, `wma`, `rsi`, `macd`) read one number per line; every
+other command reads an OHLCV CSV with a `close` column.
+
+```bash
+cargo build -p finkit-cli --release --locked
+
+# close-only input: one number per line
+./target/release/finkit-cli sma  --input close.txt  --period 20
+./target/release/finkit-cli rsi  --input close.txt  --period 14 --format json
+
+# OHLCV input: open,high,low,close,volume
+./target/release/finkit-cli atr      --input ohlcv.csv --period 14
+./target/release/finkit-cli formula "MA(CLOSE, 5)" --input ohlcv.csv
+./target/release/finkit-cli streaming sma --input ohlcv.csv --period 20
+./target/release/finkit-cli sweep atr --input ohlcv.csv --period-min 5 --period-max 30 --period-step 5
+```
+
+Formulas accept five dialects (`--dialect alpha_ta|通达信|同花顺|东方财富|pine`).
+A file of the wrong shape is reported as an error with a hint and exits `1`.
+Full command reference: [docs/cli.md](docs/cli.md).
+
 ## Quick start: Rust
 
 ```toml

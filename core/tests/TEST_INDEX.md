@@ -179,7 +179,7 @@ cargo test -p finkit --test ths_compat_tests
 
 # 量「另一条执行路径还差多远」时必须 --no-fail-fast
 # （cargo test 默认在第一个失败 target 上就停，会把单个 target 的红数
-#   误当成全量缺口；见 docs/refactor-plan-2026-09-21.md §3.3）
+#   误当成全量缺口）
 cargo test -p finkit --no-fail-fast
 ```
 

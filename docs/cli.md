@@ -76,6 +76,15 @@ Streaming commands process bars chronologically and reuse indicator state:
 ./target/release/finkit-cli streaming macd --input ohlcv.csv --fast-period 12 --slow-period 26 --signal-period 9
 ```
 
+Streaming subcommands always read an **OHLCV CSV**, including `sma`/`ema`, whose
+non-streaming counterparts read a close-only file.
+
+The implemented set is exactly: `sma`, `ema`, `rsi`, `atr`, `adx`, `stoch`,
+`macd`, `boll`, `vwap`, `obv`, `supertrend`. Anything else exits with the list
+of valid names. `--period` applies to all of them; `--fast-period`,
+`--slow-period` and `--signal-period` are used by `macd`; `--nb-dev` is used by
+`boll` and `supertrend`.
+
 Do not reorder bars or combine multiple instruments in one stateful stream unless the command/API explicitly supports it.
 
 ## Transforms
@@ -86,13 +95,51 @@ Do not reorder bars or combine multiple instruments in one stateful stream unles
 ./target/release/finkit-cli transform zscore --input close.txt --period 20
 ```
 
-## Feature packs and parameter sweep
+## Feature packs
 
 ```bash
 ./target/release/finkit-cli features alpha_pack --input ohlcv.csv --period 14 --format csv
 ```
 
+## Parameter sweep
+
+`sweep` runs one indicator across a range of periods and reduces each run to a
+single number, which is the quickest way to see how sensitive an indicator is to
+its period on a given series.
+
+```bash
+./target/release/finkit-cli sweep sma  --input close.txt   --period-min 5 --period-max 50 --period-step 5
+./target/release/finkit-cli sweep atr  --input ohlcv.csv   --period-min 5 --period-max 30 --period-step 5 --metric last
+./target/release/finkit-cli sweep rsi  --input close.txt   --period-min 7 --period-max 21 --format json
+```
+
+| Flag | Meaning |
+| --- | --- |
+| `<INDICATOR>` | one of `sma`, `ema`, `rsi`, `atr`, `wma` |
+| `--period-min` / `--period-max` / `--period-step` | inclusive period range; `--period-step` must be `> 0` and `min <= max` |
+| `--metric` | reduction per period: `mean` (default), `std`, `min`, `max`, `last`, `slope` |
+| `--format` | `csv` (default), `plain`, `json` |
+
+Input shape follows the indicator, not the command: `atr` reads the **OHLCV
+CSV**, the other four read the **close-only** file. Both come from `--input`;
+neither reads stdin unless `--input` is omitted.
+
 Use `./target/release/finkit-cli --help` and subcommand `--help` as the executable source of truth for optional flags because command details may evolve faster than prose documentation.
+
+### Input errors
+
+A file that is not the shape the command expects is reported as an error with a
+hint, and the process exits `1`:
+
+```console
+$ ./target/release/finkit-cli sma --input ohlcv.csv --period 5
+error: could not read close input: invalid float literal
+hint: close-only commands read one number per line; OHLCV commands read a CSV with a `close` column
+```
+
+Close-only commands (`sma`, `ema`, `wma`, `rsi`, `macd`) read one number per
+line; OHLCV commands read a CSV with a `close` column. Passing an OHLCV CSV to
+a close-only command is the usual cause.
 
 ## Schema inspection
 

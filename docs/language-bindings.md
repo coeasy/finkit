@@ -96,6 +96,29 @@ iOS and Android remain at 15/78 on purpose — they are mobile shims over a
 deliberately small ABI subset, and closing them is a separate roadmap item, not a
 missing wrapper.
 
+### Per-binding claim matrix
+
+"78/78" is one claim, not the whole story. Each binding is described by
+**five independent columns**; do not read a full indicator column as full API
+parity, and do not read a missing parity gate as "unsupported".
+
+| Binding | Indicator surface (gated) | Formula surface | Research surface | Platform validation | Release state |
+| --- | --- | --- | --- | --- | --- |
+| Rust `core` | is the runtime | full | full | `cargo test -p finkit` | v0.1.15 `.crate` |
+| Python | 78 / 78 | exported (see [python.md](python.md)) | exported | CI `python-wheels` | v0.1.15 ABI3 wheels |
+| Node | 78 / 78 | exported | exported | CI native smoke (`linux-x64`, `win32-x64-msvc`, `darwin-arm64`) | CI `.tgz` candidate (not on npm) |
+| C | 78 / 78 (extractor self-check anchor) | exported (`*_json`) | exported | CI CMake build/test/install | CI SDK candidate |
+| Go | 78 / 78 | exported | exported | CI `go test` + external-module consumer | source + CI candidate |
+| Java | 78 / 78 | exported | exported | CI JNI build + JVM smoke | CI JAR candidate |
+| .NET | 78 / 78 | exported | exported | CI 3 RIDs (`linux-x64`, `win-x64`, `osx-arm64`) | CI NuGet candidate |
+| iOS | 15 / 78 | not exported | exported | CI XCFramework build | CI candidate (not SPM/CocoaPods) |
+| Android | 15 / 78 | not exported | exported | CI 4-ABI AAR assembly | CI AAR candidate |
+
+The **Formula / Research** columns are deliberately *not* back-filled by the
+78-indicator parity gate (`audit_binding_parity.py` only scrapes the indicator
+surface). Treat "exported" as "bound here, described in the binding's own
+README" — not as a verified cross-language parity claim.
+
 Name matching is deliberately tolerant of *spelling* but not of *collisions*:
 `ta_adosc` == `AdOsc` == `adosc`, `ta_stddev` == `StdDev` == `std_dev`,
 `ta_cdl_three_white_soldiers` == `cdlThreeWhiteSoldiers` ==

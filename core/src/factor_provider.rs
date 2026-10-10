@@ -22,7 +22,8 @@
 //! Ported from the `crates/finkit-runtime` migration track, whose `Executor`,
 //! `Scheduler`, `FactorRegistry` and `FactorCache` are superseded by this crate's
 //! `unified_executor`, `compute`, `factors` and `operation` modules — see
-//! `docs/runtime-carrier-adoption-plan-2026-09-20.md`.
+//! the runtime-carrier adoption plan (completed; archived in git history via
+//! `git log --diff-filter=D -- docs/runtime-carrier-adoption-plan-2026-09-20.md`).
 //!
 //! Two deliberate omissions from that track:
 //!

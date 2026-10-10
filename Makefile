@@ -55,6 +55,7 @@ LANGS := $(filter-out packages,$(LANGS))
 .PHONY: installer installer-all check-installer
 .PHONY: $(INSTALLER_TARGETS:%=installer-%)
 .PHONY: check-rustdoc check-orphans check-script-refs check-dead-code check-nan-safety check-ios-header check-source-reachability check-no-build-artifacts check-loop-termination verify-python-bindings
+.PHONY: check-dependency-direction check-formula-contract
 .PHONY: check-ios-header check-talib-ffi refresh-release-manifests check-release-manifests
 
 # ---- default ----------------------------------------------------------------
@@ -233,6 +234,25 @@ check-loop-termination:
 verify-python-bindings:
 	python3 $(ROOT)/scripts/verify_python_bindings.py
 
+# ---- repository hygiene: workspace layering (V5 plan section 4) -------------
+# `core` carries the numeric kernel, formula language and runtime; every other
+# crate either uses it, wraps its C ABI, or adapts it to a language/CLI. A
+# reverse edge (a kernel depending on CLI/FFI/rendering) compiles fine and would
+# silently invert the build graph, so this gate asserts every intra-workspace
+# dependency points strictly downward, and reports dev-only edges separately.
+check-dependency-direction:
+	python3 $(ROOT)/scripts/check_dependency_direction.py
+
+# ---- documentation gate: the formula engine's contract matches its docs -----
+# `docs/architecture/formula-engine.md` once described a different engine from
+# the tree (wrong default backend, wrong cache shape), and the entry-point
+# matrix drifted between the enum doc, the runtime contract and the test that is
+# meant to check it. This gate reads `require_tree_backend("..")` call sites as
+# the source of truth and asserts the doc table, the test roster and the enum
+# default all agree.
+check-formula-contract:
+	python3 $(ROOT)/scripts/check_formula_engine_contract.py
+
 # ---- repository hygiene: the TA-Lib transcription matches TA-Lib ------------
 # `core/src/talib_ffi.rs` is a hand-written transcription of TA-Lib's
 # `ta_func.h`, compiled only under `talib-c` and used by the head-to-head
@@ -350,6 +370,8 @@ help:
 	@echo "  make check-source-reachability  Fail on a tracked .rs file outside the module graph"
 	@echo "  make check-no-build-artifacts   Fail on tracked target/dist/bin or binary artifacts"
 	@echo "  make check-loop-termination  Fail on `loop{}` without a termination argument"
+	@echo "  make check-dependency-direction  Fail on an upward intra-workspace dependency edge"
+	@echo "  make check-formula-contract  Fail if the formula-engine docs drift from the code"
 	@echo "  make verify-python-bindings  Fail when the Python binding source drifts from binding_spec.py"
 	@echo "  make check-ios-header   Fail if ffi/ios-binding/include/finkit.h drifts from the iOS exports"
 	@echo "  make refresh-release-manifests  Recompute dist/**/manifest.json digests"

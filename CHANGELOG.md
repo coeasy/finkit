@@ -8,6 +8,180 @@ a machine-checkable contract, and the factor libraries are defined once and
 reused.
 
 
+### Changed - 2026-10-10 (thirtieth pass — the architecture review plan, landed as contracts, docs and gates)
+
+The `docs/ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-10.md` review was
+executed in full. Its thesis is that the right move is **semantic unification,
+execution-path convergence, product-boundary documentation and delivery closure**
+— not a rewrite — and every phase produced an artifact a gate now holds.
+
+#### 1. The formula engine's documentation described a different engine (P0)
+
+`docs/architecture/formula-engine.md` said *"Production execution goes through
+the compiled-plan path"* while `FormulaExecutionMode::default()` is, and has
+always been, `Tree`; it called the cache "an LRU" while the engine actually holds
+one LRU AST cache plus several bounded **FIFO** plan/semantic/bytecode caches;
+and it attributed LRU eviction to a memory pool that is bounded by a fixed
+per-size count and never evicts. The tree-only entry-point matrix also disagreed
+with the code: the enum doc listed 12 entries, the runtime contract listed 13,
+and the test that is supposed to check the split covered 11. Three documents, one
+engine, three answers.
+
+Fixed at the source rather than the prose: the enum table now names
+`eval_multi_with_dialect(Pine)` (the 13th tree-only entry),
+`core/tests/formula_execution_mode.rs` asserts all 13, and
+`docs/architecture/formula-engine.md` was rewritten to describe the real default
+backend, the real cache set and the real memory-pool bound. `dataflow.md`'s
+formula diagram no longer implies the bytecode VM is on the default path.
+
+`scripts/check_formula_engine_contract.py` (CI `docs-check`, `make
+check-formula-contract`) now reads `require_tree_backend("..")` call sites as the
+single source of truth and fails if the doc table, the test roster or the enum
+default drifts again — prose has no compiler, so this gives it one.
+
+#### 2. A status matrix that refuses to collapse four states into one number
+
+`docs/architecture/status-matrix.md` records, per surface, the four independent
+states the review insisted on keeping apart: **compiles / has a dedicated test /
+has a parity or agreement gate / is a real CI target / is published**. It also
+marks the old audit claims that this pass did not reproduce as *pending
+verification* instead of treating them as current defects.
+
+#### 3. Numerical semantics and cache policy got one written contract each
+
+`docs/architecture/numerical-semantics.md` divides NaN/Infinity handling **by
+domain** — entry-level rejection vs kernel-level propagation vs the runtime's
+`NanPolicy` — and pins the two deliberately different zero bands (`TA_IS_ZERO_
+BANDWIDTH` = 1e-8 for TA-Lib-aligned kernels, `NUMERIC_EPSILON` = 1e-15 for the
+formula/feature/risk surfaces), each with its gate. Unifying them would be a
+behaviour change, not a cleanup.
+
+`docs/architecture/runtime-and-cache-contract.md` writes down the cache set the
+engine and runtime actually hold: name, owner, key, eviction, capacity, stats and
+clear semantics — and states explicitly that the layers stay separate until
+profiling justifies merging them, rather than merging for a nominal SSOT.
+
+#### 4. The workspace layering is now a gate
+
+`scripts/check_dependency_direction.py` (`make check-dependency-direction`, CI
+`version-consistency`) reads every member manifest and asserts each
+intra-workspace dependency edge points strictly downward
+(`L0 finkit → L1 factor-analysis/visualization → L2 ffi-common → L3
+adapters`). Cargo accepts a reverse edge silently; this makes "a kernel may never
+depend on CLI/FFI/rendering" a checked invariant. Test-only edges (one exists:
+`core`'s dev-dependency on `finkit-ffi-common` for shared golden vectors) are
+reported but not fatal, because they never reach a consumer. A workspace member
+with no assigned layer fails the gate instead of passing unexamined.
+
+#### 5. Binding claims are split into five columns
+
+`docs/language-bindings.md` gained a per-binding matrix that separates the
+gated indicator surface (78/78) from the formula surface, the research surface,
+the platform validation and the release state — so "78/78" can no longer be read
+as full API parity.
+
+#### Verification
+
+`formula_execution_mode` 13/13, `factor-analysis` 47/47 + 3 research
+invariants, the new `check_dependency_direction` (30 shipped edges) and
+`check_formula_engine_contract` (13 entries, default `Tree`) all pass; the
+existing doc/hygiene gates (`check_docs_links`, `check_orphan_docs`,
+`gen_ssot_docs --check`, `check_file_size_budget`, `check_zero_guard_policy`,
+`check_nan_unsafe_ordering`, `check_forming_bar_discipline`, …) stay green, as
+does the full `cargo test --workspace --locked` sweep (47 targets, 0 failures)
+including the `cli` `schema_cli` integration tests.
+
+
+### Changed - 2026-10-10 (thirty-first pass — end-to-end chain audit: three broken links, one panic path, and the dated-document cleanup)
+
+The thirtieth pass produced contracts. This pass went looking for places where
+the code, the CLI and the docs disagree about what is actually connected — and
+found three real broken links, all of them invisible to the existing gates
+because every gate checks a declaration rather than a behaviour.
+
+#### 1. `sweep atr --input ohlcv.csv` ignored `--input` and blocked on stdin
+
+`run_sweep` read `--input` into `data` for `sma`/`ema`/`wma`/`rsi`, but the
+`"atr"` branch called `read_ohlcv_input(None::<&str>)` — i.e. **stdin** — inside
+the per-period loop's match. So `sweep atr --input ohlcv.csv` discarded the
+file the user named and blocked on a terminal that was never going to send
+anything; when stdin happened to be empty it produced `None` and silently
+emitted no rows at all.
+
+Both reads now come from the same `--input`. The branch reads OHLCV and the
+others read close-only, but neither hard-codes a source, which is what made the
+two paths able to disagree in the first place.
+
+#### 2. Thirty-two CLI input reads panicked instead of reporting an error
+
+Every command did `read_*_input(..).expect("Failed to read input")`. Pointing
+the CLI at a file of the wrong shape — an OHLCV CSV at a close-only command,
+the common case — printed `thread 'main' panicked at cli/src/main.rs:478:` plus
+a `Debug` dump of an `io::Error`. That names a line of our source rather than
+what the user did wrong, and it exits by panic rather than with a status a shell
+script can branch on.
+
+`csv_io` now owns `abort()`, `close_series()` and `ohlcv_series()`: a clean
+`error: …` line, a hint naming the two input shapes, and `exit(1)`. The helpers
+take `Option<P>` so the stdin case stays in the signature instead of being
+re-decided at each call site.
+
+#### 3. Two `--help` texts advertised capabilities that do not exist
+
+`streaming --help` listed indicators ending in `…`, promising more than the
+eleven that are implemented; and it claimed `--fast-period`/`--slow-period`
+apply to `macd/ppo/apo`, but `run_streaming` has no `ppo` or `apo` arm at all —
+only `macd` reads those flags (`--nb-dev` is read by `boll` and `supertrend`).
+Both now name the complete, real set. `docs/cli.md` documents the `sweep`
+command for the first time, records the implemented streaming set, and
+documents the error/hint behaviour.
+
+#### 4. A release gate that only worked for one way of invoking Python
+
+`scripts/sync_bindings.py` imported a sibling module by relying on CPython
+putting the script's own directory on `sys.path`. Under `safe_path`/isolated
+mode that does not happen, and the gate dies with `ModuleNotFoundError` instead
+of checking anything. A gate whose result depends on how it was launched will
+be skipped by whoever launches it differently, so `scripts/` is now added to
+`sys.path` explicitly.
+
+#### 5. Dated documents deleted from the working tree, kept in git history
+
+A dated audit or a completed plan left in the tree reads as an open work item.
+Deleted: `docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md` (231 KB, 27
+rounds of audit log), `docs/refactor-plan-2026-09-21.md`,
+`docs/runtime-carrier-adoption-plan-2026-09-20.md` (completed),
+`docs/talib-0.8.0-coverage-audit-2026-09-19.md`, the nine
+`docs/competitive-analysis/*.md` snapshots, and four undated roadmaps
+(`chan-visualization`, `chart-improvement`, `gpu-rendering`,
+`market-calendar-adapters`). Two genuinely orphaned trees went with them:
+`performance-benchmark/` (a 33 KB HTML page plus a bundled echarts and fonts
+that nothing referenced) and `schemas/prd.schema.json`. Tracked documents drop
+from 78 to 61.
+
+Every deletion was followed through its references in 22 files — `docs/README.md`
+gains a *deleted, recoverable from git* table with the `git log --diff-filter=D`
+recipe, and code comments that cited a deleted plan now cite git history or the
+surviving contract. `scripts/audit_talib_surface.py` lost its only referrer when
+the dated audit went; it is a real tool (it exits 2 without an installed TA-Lib
+wrapper, so it cannot be a CI job), so it is now recorded in `MANUAL_TOOLS`
+with that reason rather than deleted for the want of a referrer.
+
+#### Verification
+
+Full `cargo test --workspace --locked --no-fail-fast`: 47 targets, 0 failures.
+All 30 `check_*` gates pass, including `check_file_size_budget` — the new
+helpers went into `csv_io.rs` rather than `main.rs` specifically so the CLI's
+line budget did not have to be raised. Behaviour was confirmed by running the
+binary, not by reading it: all five formula dialects, all eleven streaming
+indicators, all 452 catalogued formula functions called through the CLI (0
+unknown — the 186 arity errors are the probe's 2-argument shape, not missing
+functions), and `sweep atr`/`sweep sma` end to end. The
+`visualization/frontend` adapter test passes (3/3). The `wasm32-unknown-unknown`
+build is not re-verified here — the target is not installed on this host — and
+remains a CI job.
+
+
 ### Changed - 2026-10-08 (twenty-ninth pass — the declare-vs-compile gap in every crate, and one cache that outlived the "clean slate")
 
 A release-readiness audit run under one rule: **each hypothesis is verified before

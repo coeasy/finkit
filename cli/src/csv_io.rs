@@ -126,6 +126,50 @@ pub fn read_close_input<P: AsRef<Path>>(path: Option<P>) -> io::Result<Vec<f64>>
     }
 }
 
+/// Report a user-facing failure and exit non-zero instead of panicking.
+///
+/// Every CLI command reads a file the *user* named. `Result::expect` on that
+/// path prints `thread 'main' panicked at cli/src/main.rs:478:` followed by a
+/// `Debug` dump of an `io::Error` — it names a line of our source, not the
+/// thing the user got wrong, and it exits with a panic rather than a status a
+/// shell script can branch on. Pointing the CLI at a file that is not the shape
+/// the command expects is a normal outcome, so it gets a normal error message
+/// and a normal exit code.
+pub fn abort(what: &str, err: &io::Error) -> ! {
+    eprintln!("error: {what}: {err}");
+    if err.kind() == io::ErrorKind::InvalidData {
+        eprintln!(
+            "hint: close-only commands read one number per line; \
+             OHLCV commands read a CSV with a `close` column"
+        );
+    }
+    std::process::exit(1);
+}
+
+/// Read a close-only series (one number per line), or exit with a diagnostic.
+///
+/// `path` is `None` for stdin. Generic over the path type because the
+/// subcommands hold it as `Option<String>` and the shared runners as
+/// `Option<&str>`; both are `AsRef<Path>`, so one wrapper serves both.
+pub fn close_series<P: AsRef<Path>>(path: Option<P>) -> Vec<f64> {
+    match read_close_input(path) {
+        Ok(v) => v,
+        Err(e) => abort("could not read close input", &e),
+    }
+}
+
+/// Read an OHLCV CSV, or exit with a diagnostic.
+///
+/// Takes `Option` for the same reason [`close_series`] does: `None` means
+/// stdin, and keeping that in the wrapper's signature is what stops a caller
+/// from hard-coding one source and silently ignoring the other.
+pub fn ohlcv_series<P: AsRef<Path>>(path: Option<P>) -> OhlcvData {
+    match read_ohlcv_input(path) {
+        Ok(v) => v,
+        Err(e) => abort("could not read OHLCV input", &e),
+    }
+}
+
 fn parse_close_lines(content: &str) -> io::Result<Vec<f64>> {
     let values: Result<Vec<f64>, _> = content
         .lines()

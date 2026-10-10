@@ -30,7 +30,7 @@ asserted:
 
 So the deliverable is what the criterion's second half asks for — every alpha is
 either computed or annotated with the reason it is not — and the count falls out
-of the classification instead of being forced. See `docs/competitive-analysis/`
+of the classification instead of being forced. See `the competitive-analysis plan (archived in git history)/`
 for the plan and the report that supersedes the 80 target.
 
 # The classification

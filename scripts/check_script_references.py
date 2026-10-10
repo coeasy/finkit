@@ -17,10 +17,13 @@ Two real cases motivated this check:
   rejected outright: a runtime-generated helper has to be recorded in
   `RECORDED_MISSING` with a reason, so the exception is a deliberate,
   reviewable edit rather than an invisible one.
-* `docs/competitive-analysis/...-2026-09-23.md` lists
-  `scripts/emit_speedup_matrix.py` as an item to add. It has not been written
-  yet, which is legitimate for a plan, but the reference must be *recorded* so
-  the gap is visible rather than indistinguishable from a typo.
+* A dated competitive-analysis plan (deleted from the tree 2026-10-10, still in
+  git history) listed `scripts/emit_speedup_matrix.py` as an item to add. It
+  has not been written yet, which was legitimate for a plan, but the reference
+  had to be *recorded* so the gap stayed visible rather than
+  indistinguishable from a typo. Deleting the plan removed the only reference,
+  which retired the recorded entry -- the list is checked in both directions
+  precisely so that retirement cannot happen silently.
 
 How a reference is found
 ------------------------
@@ -91,13 +94,10 @@ SKIP_NAMES = {"package-lock.json", "Cargo.lock"}
 # (a run-time helper), or a plan document lists it as work still to do. The
 # reason is required so the exception stays reviewable. Checked in both
 # directions, like `MANUAL_TOOLS` in `check_orphan_scripts.py`.
-RECORDED_MISSING: dict[str, str] = {
-    "scripts/emit_speedup_matrix.py": (
-        "planned, not yet written: docs/competitive-analysis/"
-        "finkit-落地开发计划-2026-09-23.md M1-2 lists it as a new file to add "
-        "for the 201-function speed-up matrix"
-    ),
-}
+# Empty by design: every literal `scripts/` reference currently resolves. The
+# list is checked in both directions, so adding an entry here is a reviewable
+# decision and an entry that stops being needed fails the gate.
+RECORDED_MISSING: dict[str, str] = {}
 
 SELF_DESCRIBING = {"scripts/check_script_references.py"}
 
@@ -110,11 +110,13 @@ def tracked_files() -> list[str]:
     """Every tracked path that still exists in the working tree.
 
     `-z` is load-bearing, not cosmetic: without it git octal-escapes any path
-    containing a non-ASCII byte, so `docs/competitive-analysis/finkit-<cjk>.md`
-    arrives as `"docs/...finkit-\\350\\220\\275..."` and `Path.is_file()` then
-    fails. Nine tracked files were invisible that way, including the plan
-    document whose `scripts/emit_speedup_matrix.py` reference this check exists
-    to report.
+    containing a non-ASCII byte, so a CJK-named document arrives as
+    `"docs/...finkit-\\350\\220\\275..."` and `Path.is_file()` then fails. Nine
+    tracked files were invisible that way, including the dated plan document
+    whose `scripts/emit_speedup_matrix.py` reference this check exists to
+    report. That plan has since been deleted, so the tree has no non-ASCII path
+    left -- but re-adding one would silently re-open the hole, so the flag
+    stays.
 
     A path whose working-tree file was deleted but whose removal is not staged
     is also still listed; it is gone as far as this check is concerned.

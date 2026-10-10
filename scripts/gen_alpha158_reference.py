@@ -3,7 +3,7 @@
 
 # Why this file exists
 
-`docs/competitive-analysis/finkit-全量覆盖与工业级收敛方案-2026-09-23.md` (M0-3) requires
+`the competitive-analysis plan (archived in git history)/finkit-全量覆盖与工业级收敛方案-2026-09-23.md` (M0-3) requires
 "Alpha158：158 因子全部可构建，与 Qlib 参考输出数值对照（容差 1e-8）全绿".  A parity
 claim is only worth what its reference is worth, so the reference is not written
 from memory and not re-derived from a description of Qlib.  It is a *transcription*

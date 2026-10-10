@@ -22,7 +22,7 @@ This guide describes the development and validation workflow for the Finkit Rust
 | `scripts/` | version, SSOT generation, benchmark, release/helper scripts |
 | `.github/workflows/` | core CI, docs, wheels, multi-language packaging validation |
 
-`docs/README.md` is the canonical documentation index. The single current execution baseline is [`FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md`](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md); the 2026-09-26 optimization plan and its companion audit were archived on 2026-10-04. Completed plans and temporary implementation snapshots should remain in Git history instead of returning as current user documentation.
+`docs/README.md` is the canonical documentation index. The single current execution baseline is [`FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md`](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md). Completed plans, dated audits and temporary implementation snapshots stay in Git history instead of returning as current user documentation: `docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md`, `docs/refactor-plan-2026-09-21.md`, `docs/runtime-carrier-adoption-plan-2026-09-20.md`, the `docs/competitive-analysis/` set and several dated roadmaps were deleted from the working tree on 2026-10-10 and are recoverable with `git log --diff-filter=D -- <path>`.
 
 ## 2. Toolchains
 
@@ -156,8 +156,9 @@ The last eight are the repository-hygiene gates, also available as
 
 Every hygiene check that enumerates tracked files uses `git ls-files -z`. The
 `-z` is required: without it git octal-escapes paths containing non-ASCII
-bytes, so `docs/competitive-analysis/finkit-<cjk>.md` silently drops out of the
-scan — nine tracked files were invisible that way.
+bytes, so a CJK-named document silently drops out of the scan — nine tracked
+files were invisible that way. The tree currently has no non-ASCII path, but
+re-adding one would re-open the hole, so the flag stays.
 
 ## 4. Version contract
 

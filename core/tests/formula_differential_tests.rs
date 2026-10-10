@@ -416,7 +416,7 @@ fn formula_differential_isna_kernel() {
     // Entirely NaN. `SQRT` of a negative is NaN on every path, which reaches
     // the all-gap regime without asking for a period longer than the series —
     // that combination is a *separate*, pre-existing divergence recorded in
-    // `docs/refactor-plan-2026-09-21.md` (tree path returns NaN, plan path
+    // `docs/formula-runtime-contract.md` (tree path returns NaN, plan path
     // fails the kernel with `ERR_PARAMETER`), and mixing it in here would make
     // an ISNA failure indistinguishable from that one.
     check_all_paths("ISNA_ALL_NAN", "ISNA(SQRT(0 - CLOSE))", 80);

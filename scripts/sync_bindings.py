@@ -69,7 +69,17 @@ import re
 import sys
 from pathlib import Path
 
-from optimize_python_bindings import optimize_source as optimize_python_source
+# `scripts/` is this script's own directory, and a release gate must not depend
+# on how it was launched. `python scripts/sync_bindings.py` normally puts it on
+# `sys.path` implicitly -- but that is a CPython detail, not a guarantee: under
+# `safe_path`/isolated mode (a hardening flag, or a launcher that sets it)
+# `sys.path[0]` is not the script directory and the import below fails with
+# ModuleNotFoundError. A gate that only works for one way of invoking Python is
+# a gate that will be skipped by whoever invokes it differently, so the
+# dependency is made explicit here.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from optimize_python_bindings import optimize_source as optimize_python_source  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 REG = ROOT / "docs" / "indicator_registry.json"

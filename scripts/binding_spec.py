@@ -18,7 +18,8 @@ consequences followed, both observed in CI:
    nobody could review "what the binding is supposed to look like" without
    replaying a mutation.
 
-V4 plan Batch 2 (``docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md`` §24)
+V4 plan Batch 2 (archived; ``git log --diff-filter=D --
+``docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md``, §24)
 asks for the opposite arrangement: one declarative spec, a single generator,
 and a build that no longer edits tracked source. That is what this module is:
 

@@ -8,8 +8,8 @@ name: Publish
 # registry path before it has actually been published to *and* a clean consumer
 # install has passed. Pre-claiming `pip install finkit` here would make that
 # document untrue, so the `pypi` job below stays commented out until the
-# distribution name is decided (see
-# docs/competitive-analysis/finkit-落地开发计划-2026-09-23.md, decision 1).
+# distribution name is decided (see docs/release-checklist.md, "PyPI:
+# deliberately deferred").
 #
 # The Python wheels for a release are produced by `python-wheels.yml`, which
 # also triggers on `v*` tags and attaches the wheels to the GitHub Release.

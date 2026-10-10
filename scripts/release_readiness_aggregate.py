@@ -29,7 +29,8 @@ import urllib.request
 from pathlib import Path
 
 # (workflow_file, human name). Keep in sync with §22 of
-# docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md.
+# the V4 plan (archived in git history: `git log --diff-filter=D --
+# docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md`).
 REQUIRED_WORKFLOWS = [
     ("ci.yml", "CI"),
     ("docs-check.yml", "Docs Check"),

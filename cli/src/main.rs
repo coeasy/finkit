@@ -3,12 +3,12 @@
 mod csv_io;
 
 use clap::{Parser, Subcommand, ValueEnum};
-use csv_io::{read_close_input, read_ohlcv_input};
+use csv_io::{close_series, ohlcv_series};
 use finkit::indicators;
 use finkit::math::moving_avg;
 use finkit::patterns::{candlestick, chart};
 use std::fs;
-use std::io;
+
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
@@ -213,16 +213,16 @@ enum Commands {
     ///
     /// Usage: finkit-cli streaming sma --input data.csv --period 14
     Streaming {
-        /// Streaming indicator name: sma, ema, rsi, atr, macd, boll, vwap, obv, adx, stoch, supertrend, ...
+        /// Streaming indicator name; the complete implemented set is: sma, ema, rsi, atr, adx, stoch, macd, boll, vwap, obv, supertrend
         indicator: String,
         #[arg(short, long)]
         input: PathBuf,
         #[arg(short, long, default_value_t = 14)]
         period: usize,
-        /// Optional fast period (macd/ppo/apo)
+        /// Optional fast period; used by macd
         #[arg(long, default_value_t = 12)]
         fast_period: usize,
-        /// Optional slow period (macd/ppo/apo)
+        /// Optional slow period; used by macd
         #[arg(long, default_value_t = 26)]
         slow_period: usize,
         /// Optional signal period (macd)
@@ -351,12 +351,6 @@ enum PatternKind {
     Chart,
 }
 
-/// Backward-compatible close-input reader.
-/// Supports both a file path and stdin (when `path` is `None`).
-fn read_close_input_legacy(path: &Option<String>) -> io::Result<Vec<f64>> {
-    read_close_input(path.as_deref())
-}
-
 fn output_single(name: &str, data: &[f64], format: &OutputFormat, output: &Option<String>) {
     let text = match format {
         OutputFormat::Plain => data
@@ -475,7 +469,7 @@ fn main() {
             output,
             format,
         } => {
-            let data = read_close_input_legacy(&input).expect("Failed to read input");
+            let data = close_series(input.as_deref());
             let result = moving_avg::sma(&data, period).expect("SMA calculation failed");
             output_single(
                 "sma",
@@ -492,7 +486,7 @@ fn main() {
             output,
             format,
         } => {
-            let data = read_close_input_legacy(&input).expect("Failed to read input");
+            let data = close_series(input.as_deref());
             let result = moving_avg::ema(&data, period).expect("EMA calculation failed");
             output_single(
                 "ema",
@@ -509,7 +503,7 @@ fn main() {
             output,
             format,
         } => {
-            let data = read_close_input_legacy(&input).expect("Failed to read input");
+            let data = close_series(input.as_deref());
             let result = moving_avg::wma(&data, period).expect("WMA calculation failed");
             output_single(
                 "wma",
@@ -526,7 +520,7 @@ fn main() {
             output,
             format,
         } => {
-            let data = read_close_input_legacy(&input).expect("Failed to read input");
+            let data = close_series(input.as_deref());
             let result = indicators::rsi(&data, period).expect("RSI calculation failed");
             output_single(
                 "rsi",
@@ -545,7 +539,7 @@ fn main() {
             output,
             format,
         } => {
-            let data = read_close_input_legacy(&input).expect("Failed to read input");
+            let data = close_series(input.as_deref());
             let result =
                 indicators::macd(&data, fast, slow, signal).expect("MACD calculation failed");
             let macd_s = result
@@ -576,7 +570,7 @@ fn main() {
             output,
             format,
         } => {
-            let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
+            let ohlcv = ohlcv_series(Some(&input));
             let (dev_up, dev_dn) = resolve_bbands_stddev(stddev, nbdevup, nbdevdn);
             let result = indicators::bbands(&ohlcv.close, period, dev_up, dev_dn)
                 .expect("BBANDS calculation failed");
@@ -605,7 +599,7 @@ fn main() {
             output,
             format,
         } => {
-            let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
+            let ohlcv = ohlcv_series(Some(&input));
             let result = indicators::atr(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("ATR calculation failed");
             output_single(
@@ -625,7 +619,7 @@ fn main() {
             output,
             format,
         } => {
-            let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
+            let ohlcv = ohlcv_series(Some(&input));
             let result = indicators::stoch(
                 &ohlcv.high,
                 &ohlcv.low,
@@ -651,7 +645,7 @@ fn main() {
             output,
             format,
         } => {
-            let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
+            let ohlcv = ohlcv_series(Some(&input));
             let result = indicators::adx(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("ADX calculation failed");
             output_single(
@@ -669,7 +663,7 @@ fn main() {
             output,
             format,
         } => {
-            let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
+            let ohlcv = ohlcv_series(Some(&input));
             let result = indicators::cci(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("CCI calculation failed");
             output_single(
@@ -686,7 +680,7 @@ fn main() {
             output,
             format,
         } => {
-            let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
+            let ohlcv = ohlcv_series(Some(&input));
             let result =
                 indicators::obv(&ohlcv.close, &ohlcv.volume).expect("OBV calculation failed");
             output_single(
@@ -704,7 +698,7 @@ fn main() {
             output,
             format,
         } => {
-            let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
+            let ohlcv = ohlcv_series(Some(&input));
             let result = indicators::willr(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("WILLR calculation failed");
             output_single(
@@ -722,7 +716,7 @@ fn main() {
             name,
             format,
         } => {
-            let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
+            let ohlcv = ohlcv_series(Some(&input));
             match kind {
                 PatternKind::Candlestick => {
                     let pattern_name = name.as_deref().unwrap_or("doji");
@@ -877,7 +871,7 @@ fn main() {
                     std::process::exit(1);
                 }
             };
-            let ohlcv = read_ohlcv_input(Some(&input)).expect("Failed to read OHLCV input");
+            let ohlcv = ohlcv_series(Some(&input));
             let open_arr = ndarray::Array1::from_vec(ohlcv.open);
             let high_arr = ndarray::Array1::from_vec(ohlcv.high);
             let low_arr = ndarray::Array1::from_vec(ohlcv.low);
@@ -1026,7 +1020,7 @@ fn run_streaming(
     format: OutputFormat,
 ) {
     use finkit::streaming::indicators::*;
-    let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read OHLCV input");
+    let ohlcv = ohlcv_series(Some(input));
     let close = ohlcv.close.clone();
     let high = ohlcv.high.clone();
     let low = ohlcv.low.clone();
@@ -1177,7 +1171,7 @@ fn run_transform(
     output: Option<String>,
     format: OutputFormat,
 ) {
-    let data = read_close_input(input).expect("Failed to read input");
+    let data = close_series(input);
     let result: Vec<f64> = match transform {
         "log_return" => LogReturn.transform(&data),
         "pct_change" => PctChange.transform(&data),
@@ -1207,7 +1201,7 @@ fn run_features(
     format: OutputFormat,
 ) {
     use finkit::math::moving_avg;
-    let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read OHLCV input");
+    let ohlcv = ohlcv_series(Some(input));
     let close = &ohlcv.close;
     let high = &ohlcv.high;
     let low = &ohlcv.low;
@@ -1324,7 +1318,16 @@ fn run_sweep(
     format: OutputFormat,
 ) {
     use finkit::math::moving_avg;
-    let data = read_close_input(input).expect("Failed to read input");
+    // `atr` needs OHLCV, the rest one close column, so exactly one is read —
+    // both from the same `--input`. The atr branch used to read stdin, so
+    // `sweep atr --input ohlcv.csv` ignored `--input` and blocked forever.
+    let is_atr = indicator == "atr";
+    let ohlcv = is_atr.then(|| ohlcv_series(input));
+    let data = if is_atr {
+        Vec::new()
+    } else {
+        close_series(input)
+    };
     if period_step == 0 {
         eprintln!("--period-step must be > 0");
         std::process::exit(1);
@@ -1392,14 +1395,11 @@ fn run_sweep(
                     "rsi" => indicators::rsi(&data, p)
                         .ok()
                         .map(|a| a.into_raw_vec_and_offset().0),
-                    "atr" => {
-                        let ohlcv = read_ohlcv_input(None::<&str>).ok();
-                        ohlcv.and_then(|d| {
-                            indicators::atr(&d.high, &d.low, &d.close, p)
-                                .ok()
-                                .map(|a| a.into_raw_vec_and_offset().0)
-                        })
-                    }
+                    "atr" => ohlcv.as_ref().and_then(|d| {
+                        indicators::atr(&d.high, &d.low, &d.close, p)
+                            .ok()
+                            .map(|a| a.into_raw_vec_and_offset().0)
+                    }),
                     other => {
                         eprintln!(
                             "Unknown sweep indicator: {other}. Available: sma, ema, wma, rsi, atr"
@@ -1457,7 +1457,7 @@ fn run_chart(input: &PathBuf, chart_format: &str, title: Option<&str>, output: O
     use finkit_visualization::config::ChartConfig;
     use finkit_visualization::data::KlineData;
 
-    let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read OHLCV input");
+    let ohlcv = ohlcv_series(Some(input));
     let mut cfg = ChartConfig::default();
     if let Some(t) = title {
         cfg.title = t.to_string();
@@ -1510,7 +1510,7 @@ fn run_calc(
     let indicator_upper = indicator.to_uppercase();
     match indicator_upper.as_str() {
         "SMA" => {
-            let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
+            let ohlcv = ohlcv_series(Some(input));
             let result = moving_avg::sma(&ohlcv.close, period).expect("SMA calculation failed");
             output_single(
                 "sma",
@@ -1522,7 +1522,7 @@ fn run_calc(
             );
         }
         "EMA" => {
-            let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
+            let ohlcv = ohlcv_series(Some(input));
             let result = moving_avg::ema(&ohlcv.close, period).expect("EMA calculation failed");
             output_single(
                 "ema",
@@ -1534,7 +1534,7 @@ fn run_calc(
             );
         }
         "WMA" => {
-            let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
+            let ohlcv = ohlcv_series(Some(input));
             let result = moving_avg::wma(&ohlcv.close, period).expect("WMA calculation failed");
             output_single(
                 "wma",
@@ -1546,7 +1546,7 @@ fn run_calc(
             );
         }
         "RSI" => {
-            let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
+            let ohlcv = ohlcv_series(Some(input));
             let result = indicators::rsi(&ohlcv.close, period).expect("RSI calculation failed");
             output_single(
                 "rsi",
@@ -1558,7 +1558,7 @@ fn run_calc(
             );
         }
         "MACD" => {
-            let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
+            let ohlcv = ohlcv_series(Some(input));
             let result = indicators::macd(&ohlcv.close, fast, slow, signal)
                 .expect("MACD calculation failed");
             let macd_s = result
@@ -1581,7 +1581,7 @@ fn run_calc(
             );
         }
         "ATR" => {
-            let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
+            let ohlcv = ohlcv_series(Some(input));
             let result = indicators::atr(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("ATR calculation failed");
             output_single(
@@ -1594,7 +1594,7 @@ fn run_calc(
             );
         }
         "BBANDS" | "BOLL" => {
-            let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
+            let ohlcv = ohlcv_series(Some(input));
             let result = indicators::bbands(&ohlcv.close, period, stddev, stddev)
                 .expect("BBANDS calculation failed");
             let upper = result
@@ -1617,7 +1617,7 @@ fn run_calc(
             );
         }
         "ADX" => {
-            let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
+            let ohlcv = ohlcv_series(Some(input));
             let result = indicators::adx(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("ADX calculation failed");
             output_single(
@@ -1630,7 +1630,7 @@ fn run_calc(
             );
         }
         "CCI" => {
-            let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
+            let ohlcv = ohlcv_series(Some(input));
             let result = indicators::cci(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("CCI calculation failed");
             output_single(
@@ -1643,7 +1643,7 @@ fn run_calc(
             );
         }
         "OBV" => {
-            let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
+            let ohlcv = ohlcv_series(Some(input));
             let result =
                 indicators::obv(&ohlcv.close, &ohlcv.volume).expect("OBV calculation failed");
             output_single(
@@ -1656,7 +1656,7 @@ fn run_calc(
             );
         }
         "WILLR" => {
-            let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
+            let ohlcv = ohlcv_series(Some(input));
             let result = indicators::willr(&ohlcv.high, &ohlcv.low, &ohlcv.close, period)
                 .expect("WILLR calculation failed");
             output_single(
@@ -1669,7 +1669,7 @@ fn run_calc(
             );
         }
         "STOCH" => {
-            let ohlcv = read_ohlcv_input(Some(input)).expect("Failed to read input");
+            let ohlcv = ohlcv_series(Some(input));
             let result = indicators::stoch(&ohlcv.high, &ohlcv.low, &ohlcv.close, period, 3, 3)
                 .expect("STOCH calculation failed");
             let k = result
@@ -1812,7 +1812,7 @@ fn run_template(
                 });
                 (tmpl.source.clone(), tmpl.name.clone())
             };
-            let ohlcv = read_ohlcv_input(Some(inp)).expect("Failed to read OHLCV input");
+            let ohlcv = ohlcv_series(Some(inp));
             let open_arr = ndarray::Array1::from_vec(ohlcv.open);
             let high_arr = ndarray::Array1::from_vec(ohlcv.high);
             let low_arr = ndarray::Array1::from_vec(ohlcv.low);

@@ -3,7 +3,9 @@
 > 本文是**效率**专题的深度对比，面向"已经相信我们与 TA-Lib 数值等价、现在想知道差在哪"的读者。
 > 数值契约另见 [BENCHMARK_VS_TALIB.md](BENCHMARK_VS_TALIB.md)，
 > 逐指标自动生成的配对表见 [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md)，
-> 多轮改造的完整决策记录见 [FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md](FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md) §43。
+> 多轮改造的完整决策记录见分层重构总纲 [V5](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md)
+> （原 V4 审计记录已于 2026-10-10 从工作树删除，可用
+> `git log --diff-filter=D -- docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md` 恢复，§43）。
 >
 > 对比对象：**TA-Lib C 0.8.1**（版本从 `tests/contracts/talib_coverage_matrix_v1.json`
 > 的 `talib_core_version` 运行时读取，不一致即失败而不是照常出报告）。

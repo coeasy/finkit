@@ -3,10 +3,12 @@
 > **基线**：本机当前 `HEAD`，workspace 版本 `0.2.0`，核验日期 2026-10-07。
 > **证据分级**：本文每条结论按来源标注——
 > - `[实测]` 本次在 HEAD 上由只读命令/脚本直接得到；
-> - `[V4]` 引自 `docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md`，本次未在 HEAD 上完整复现；
+> - `[V4]` 引自 V4 滚动审计日志（4737 行、追加到第 27 轮；该文件已于 2026-10-10
+>   从工作树删除，可用 `git log --diff-filter=D --
+>   docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md` 恢复），本次未在 HEAD 上完整复现；
 > - `[待核验]` 需要专门方法学或跨平台环境才能确认，本文不作确定性结论。
 >
-> **与历史方案的关系**：V4 是滚动式审计日志（4737 行、追加到第 27 轮），保留为**历史证据来源**，不删除。
+> **与历史方案的关系**：V4 是滚动式审计日志，作为**历史证据来源**保留在 Git 历史中。
 > 本文是**稳定的当前基线总纲**；V4 中尚未结清的条目在 [第三部分](#第三部分-基线核验v4-遗留项在-head-的状态) 逐项核验。
 
 ---
@@ -613,8 +615,8 @@ Batch 0（只读基线）
 | 文档 | 角色 |
 | --- | --- |
 | 本文（V5） | **当前唯一执行基线**：稳定的架构地图 + 现状基线 + 诊断 + 分批路线 |
-| `FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md` | **历史证据来源**：27 轮审计的原始记录与方法学。仍开条目已在上文逐项核验，不再单独作为待办清单 |
-| `refactor-plan-2026-09-21.md` | **产品边界与定调的来源**：不做回测/选股、JIT/`eval_simd` 冻结、公式只留 tree+plan。其 Phase 状态已过期 |
+| `FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md` | **历史证据来源**：27 轮审计的原始记录与方法学。仍开条目已在上文逐项核验，不再单独作为待办清单。已于 2026-10-10 从工作树删除，保留在 Git 历史 |
+| `refactor-plan-2026-09-21.md` | **产品边界与定调的来源**：不做回测/选股、JIT/`eval_simd` 冻结、公式只留 tree+plan。其 Phase 状态已过期。已于 2026-10-10 从工作树删除，保留在 Git 历史 |
 | `docs/architecture/*.md` | 架构细节参考；`formula-engine.md` 存在漂移，待 Batch 4 修正 |
 | `docs/BENCHMARK_REPORT.md` | 性能基线（自动生成），只对记录 commit/CPU/工具链有效 |
 

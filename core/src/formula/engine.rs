@@ -421,8 +421,8 @@ pub enum FormulaExecutionMode {
     /// (`18 → 12 → 8 → 7 → 6 → 3 → 1`) came from runs **without
     /// `--no-fail-fast`**, so it recorded the failure count of the *first red
     /// target* instead of the full gap. Re-measured 2026-09-23 that way the gap
-    /// was **12 red targets / 143 failing tests / 76 missing kernels** (see
-    /// `docs/refactor-plan-2026-09-21.md` §3.2 for the methodology note).
+    /// was **12 red targets / 143 failing tests / 76 missing kernels** (§3.2 of
+    /// the 2026-09-21 plan, now only in git history: `git log --diff-filter=D`).
     ///
     /// That gap was **closed on 2026-09-24**: `unified_dispatch.rs` now routes
     /// every TA-Lib 0.7/0.8 `CALL:<NAME>` kernel through `dispatch_modern_call`,
@@ -461,8 +461,8 @@ pub enum FormulaExecutionMode {
 ///
 /// | Family | Entries | Under [`FormulaExecutionMode::Plan`] |
 /// |---|---|---|
-/// | Governed, plan-capable | `eval`, `eval_with_dialect`, `eval_with_params`, `eval_multi`, `eval_multi_with_dialect`, `eval_incremental`, `eval_simd`, `eval_batch`, `eval_batch_shared` | run on the plan backend |
-/// | Governed, tree-only | `eval_ast`, `eval_lazy`, `eval_parallel`, `eval_optimized`, `eval_with_debug`, `eval_template`, `eval_with_validation`, `eval_with_defaults`, `eval_zero_copy`, `eval_zero_copy_cached`, `eval_zero_alloc`, `eval_multi_with_pine_security` | [`FormulaError::BackendUnsupported`] |
+/// | Governed, plan-capable | `eval`, `eval_with_dialect`, `eval_with_params`, `eval_multi`, `eval_multi_with_dialect` (non-Pine), `eval_incremental`, `eval_simd`, `eval_batch`, `eval_batch_shared` | run on the plan backend |
+/// | Governed, tree-only | `eval_ast`, `eval_lazy`, `eval_parallel`, `eval_optimized`, `eval_with_debug`, `eval_template`, `eval_with_validation`, `eval_with_defaults`, `eval_zero_copy`, `eval_zero_copy_cached`, `eval_zero_alloc`, `eval_multi_with_dialect(Pine)`, `eval_multi_with_pine_security` | [`FormulaError::BackendUnsupported`] |
 /// | Backend-explicit (never governed) | `eval_plan*`, `compile_plan*`, `eval_jit`, `compile_jit`, `execute_jit`, `compile_bytecode`, `execute_bytecode`, and every entry taking a `&CompiledFormula` (`execute`, `eval_into`, `eval_range`, `eval_range_zero_copy_inputs`, `eval_last`, `eval_zero_copy_inputs`, `execute_zero_copy_cached`) | runs the backend its argument type declares |
 ///
 /// Two rules follow from that table:

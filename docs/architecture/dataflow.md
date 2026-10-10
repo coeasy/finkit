@@ -44,18 +44,32 @@ sequenceDiagram
 
 ## Formula engine
 
+The same AST feeds two peer backends. The **tree interpreter is the default**
+and the reference every differential gate compares against; the **compiled plan
+is opt-in** (`FormulaExecutionMode::Plan`) and is reached through
+`compile_plan` / `eval_plan` or by selecting the plan backend. Bytecode and
+`eval_jit` are frozen legacy modes, not part of the default pipeline.
+
 ```mermaid
 flowchart LR
   src[Formula source] --> p[pest parser]
   p --> ast[AST]
   ast --> opt[Optimizer]
-  opt --> bc[Bytecode]
-  ast -.-> jit[JIT]
-  bc --> vm[VM]
-  jit --> vm
-  vm -.-> simd[SIMD paths]
-  vm --> out[Array1<f64>]
+  opt -->|default| tree[Tree interpreter]
+  opt -->|lower| graph[SemanticGraph] --> plan[ComputePlan]
+  plan --> exec[UnifiedExecutor]
+  tree --> out[Array1 f64]
+  exec --> out
+  opt -.->|frozen| bc[Bytecode VM]
+  opt -.->|frozen| jit[eval_jit]
 ```
+
+When selected and the formula can be lowered, the two live backends must return
+the same numbers; a formula the plan cannot lower fails with
+`FormulaError::BackendUnsupported` instead of silently using the tree. See
+[Formula engine](formula-engine.md) for the entry-point matrix and
+[runtime-and-cache-contract.md](runtime-and-cache-contract.md) for the caches
+each backend reads.
 
 ## Error propagation
 
