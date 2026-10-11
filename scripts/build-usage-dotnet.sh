@@ -53,6 +53,14 @@ OUT_DIR="${ROOT}/dist/dotnet/${PLATFORM}"
 RUNTIMES_DIR="${OUT_DIR}/runtimes/${RID}/native"
 mkdir -p "${RUNTIMES_DIR}"
 
+# Same derivation the other builders use. `dotnet pack` referenced `${VERSION}`
+# without this script ever defining it, and `set -u` turned that into
+#   line 89: VERSION: unbound variable
+# The .nupkg was never produced, and the failure arrived only after the
+# three-minute native cdylib build had already succeeded -- so the run looked
+# like a packaging success with a missing artifact.
+VERSION="$( grep -E '^version' "${ROOT}/Cargo.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/' )"
+
 # 1. Build the native cdylib ---------------------------------------------
 echo "[build-usage-dotnet] cargo build --release -p finkit-dotnet"
 ( cd "${ROOT}" && cargo build --release -p finkit-dotnet )

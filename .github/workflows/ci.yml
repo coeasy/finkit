@@ -169,6 +169,16 @@ jobs:
       # `make check-script-refs`.
       - name: Check every `scripts/` reference resolves
         run: python scripts/check_script_references.py
+      # An unquoted heredoc lets the shell rewrite the program's body, so a
+      # POSIX path arrives as text. On Windows `/p/repo/dist` becomes
+      # `\p\repo\dist` -- a path from no drive -- and the step dies with
+      # FileNotFoundError at the end of a long build, which reads as a missing
+      # dependency rather than a quoting mistake. That is how the release
+      # manifest became unregenerable: the C and Go packages were built, then
+      # the manifest writer crashed, and a month-old record was reported as
+      # thirty missing artifacts. `make check-shell-interp`.
+      - name: Check no unquoted interpreter heredoc interpolates a shell path
+        run: python scripts/check_shell_interpolation.py
       # The Windows MSI and the portable native archive describe one payload
       # from two files. They are checked together here rather than at release
       # time: discovering during a tag build that the Windows installer would

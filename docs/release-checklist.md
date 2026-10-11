@@ -89,17 +89,34 @@ claim registry installation commands before a clean consumer test exists.
       `python scripts/check_python_stub.py --require-extension --expect-prefix <venv>`
       and the binding test suite from outside the source tree. `--expect-prefix`
       is required: without it the check can silently validate a stale install.
+- [ ] Build the per-language usage packages: `bash scripts/build-usage-packages.sh`
+      (add `--no-bundle` to skip the zip, drop `--no-verify` to install and run
+      each artifact rather than only producing it). Toolchain prerequisites, one
+      per language: `maturin` on `PATH` for Python, Node plus a package manager,
+      Maven and a JDK for Java, Go, CMake and a C compiler, the .NET SDK, and
+      `wasm-pack` for WASM. Each language's `dist/<lang>/<platform>` tree is
+      **cleared before its build**, so the run's output is the only thing the
+      manifest can see; a failing language leaves its tree empty and is reported
+      as uncovered instead of silently contributing last month's files.
 - [ ] Repack the native C/C++ archive from the freshly built
       `finkit_ffi.dll`/`.lib` plus `ffi/c-binding/include/*` and `LICENSE`:
       `cargo build -p finkit-ffi --release --locked` then
       `python scripts/build_native_archive.py`. Refresh the
-      `size_bytes`/`sha256` records in `dist/manifest.json` and
-      `dist/python/windows-x64/manifest.json` with
+      `size_bytes`/`sha256` records in `dist/manifest.json` with
       `python scripts/refresh_release_manifests.py` (`make
       refresh-release-manifests`) — the linker output is not reproducible, so
       the digest changes on every rebuild and a stale record is
       indistinguishable from a fresh one by inspection. `--check` (or `make
       check-release-manifests`) is the verify-only form.
+      `dist/manifest.json` has three writers — `scripts/build-usage-packages.sh`
+      plus `build-quick.sh` and `build-quick.ps1` at the repository root — and
+      all three must agree on the schema; the `name`/`version` fields are
+      checked against `core/Cargo.toml` partly so they cannot drift apart again.
+      It records the `languages` the run covered, so a subset build is visibly a
+      subset. `dist/` is gitignored: `--check` reports an absent manifest as
+      skipped rather than failed, and reports a manifest whose name/version
+      disagree with `Cargo.toml` as a stale product identity rather than as one
+      "artifact missing" line per entry.
 - [ ] Verify the tag will be exactly `v0.2.0`; `publish.yml` rejects a mismatch.
 - [ ] Confirm the GitHub Actions secret `CARGO_REGISTRY_TOKEN` is available to
       the repository and has permission to publish `finkit`.

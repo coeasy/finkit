@@ -169,7 +169,9 @@ for lang in langs:
             "size_bytes": f.stat().st_size,
             "sha256": hashlib.sha256(f.read_bytes()).hexdigest(),
         })
-manifest = {"name": "finkit", "version": "$ver", "platform": "$platform", "quick_build": True, "components": components}
+manifest = {"name": "finkit", "version": "$ver", "platform": "$platform", "quick_build": True,
+            "languages": sorted({component["language"] for component in components}),
+            "components": components}
 out = root / "manifest.json"
 out.write_text(json.dumps(manifest, indent=2))
 print(f"wrote {out} ({len(components)} components)")

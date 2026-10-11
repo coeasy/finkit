@@ -19,6 +19,7 @@
 #   ./scripts/build-usage-packages.sh --verify               # only verify
 #   ./scripts/build-usage-packages.sh --no-bundle            # skip zip
 #   ./scripts/build-usage-packages.sh --no-verify            # build only
+#   ./scripts/build-usage-packages.sh node --no-clean        # keep existing trees
 # ----------------------------------------------------------------------------
 
 set -euo pipefail
@@ -54,6 +55,7 @@ LANGS=( "python" "node" "java" "go" "c" "dotnet" "wasm" )
 WANT=()
 DO_VERIFY=1
 DO_BUNDLE=1
+DO_CLEAN=1
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -61,6 +63,7 @@ while [[ $# -gt 0 ]]; do
     --verify) DO_BUNDLE=0; shift ;;
     --no-bundle) DO_BUNDLE=0; shift ;;
     --no-verify) DO_VERIFY=0; shift ;;
+    --no-clean) DO_CLEAN=0; shift ;;
     -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "unknown arg: $1" >&2; exit 1 ;;
   esac
@@ -72,6 +75,27 @@ ok()    { echo -e "  \033[32m[OK]\033[0m   $*"; }
 err()   { echo -e "  \033[31m[FAIL]\033[0m $*" >&2; }
 info()  { echo -e "  \033[36m[INFO]\033[0m $*"; }
 hdr()   { echo -e "\n\033[1;36m=== $* ===\033[0m"; }
+
+# Convert an MSYS/POSIX path into the form the native toolchain can open.
+#
+# This is not cosmetic. Under Git Bash on Windows `$ROOT` is `/p/repo` — no
+# drive letter. Handed to Windows Python as `pathlib.Path("/p/repo/dist")` it
+# becomes `\p\repo\dist`, rooted at the current drive and nonexistent, so the
+# manifest step died with
+#   FileNotFoundError: [Errno 2] No such file or directory: '\p\...\dist\manifest.json'
+# *after* the C and Go builds had already succeeded — the artifacts existed and
+# simply were not recorded, which is why `refresh_release_manifests.py --check`
+# reported them missing and why the checked-in record could not be regenerated.
+# Go's `replace` directive has the same requirement. `cygpath` ships with
+# MSYS/Git Bash; on Linux and macOS the path is already native, so the branch is
+# skipped and the helper is a no-op.
+native_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
 
 # Each language: (build_fn, verify_fn, output_glob)
 declare -A BUILDERS
@@ -176,13 +200,24 @@ verify_go() {
     err "no go module to verify"
     return 1
   fi
-  # Replace the entire replace directive
-  python3 - <<PY
-import re, pathlib
-p = pathlib.Path("${mod}")
-text = p.read_text()
-text = re.sub(r"replace github.com/coeasy/finkit => .*", "replace github.com/coeasy/finkit => ${go_dist}", text)
-p.write_text(text)
+  # Replace the entire replace directive. Both paths cross a tool boundary --
+  # one into Python, one into `go.mod` -- so both are passed as environment
+  # variables (see `native_path`): an MSYS `/p/...` path is neither openable by
+  # Windows Python nor acceptable to Windows Go. Forward slashes are written
+  # into `go.mod` because Go accepts them on every platform, which avoids
+  # backslash escaping inside the module file.
+  MOD_NATIVE="$(native_path "${mod}")" \
+  GO_DIST_NATIVE="$(native_path "${go_dist}")" \
+  python3 - <<'PY'
+import os, pathlib, re
+
+p = pathlib.Path(os.environ["MOD_NATIVE"])
+text = p.read_text(encoding="utf-8")
+replacement = ("replace github.com/coeasy/finkit => "
+               + os.environ["GO_DIST_NATIVE"].replace("\\", "/"))
+text = re.sub(r"replace github\.com/coeasy/finkit => .*", replacement, text)
+p.write_text(text, encoding="utf-8")
+print(f"[go] replace -> {replacement.split('=> ')[1]}")
 PY
   ( cd "${ROOT}/packaging/usage/go/tests" && go run ../verify_install.go )
 }
@@ -220,6 +255,7 @@ info "platform: ${PLATFORM}"
 info "langs   : ${WANT[*]}"
 info "verify  : ${DO_VERIFY}"
 info "bundle  : ${DO_BUNDLE}"
+info "clean   : ${DO_CLEAN}"
 
 mkdir -p "${DIST}"
 
@@ -235,6 +271,31 @@ for lang in "${WANT[@]}"; do
   fi
 
   hdr "[${lang}] build"
+
+  # Clean this language's output tree before building it.
+  #
+  # `dist/` is gitignored and accumulates across runs, and the manifest step
+  # below walks it with `rglob`, so anything an older build left behind is
+  # recorded as *this* run's output. That is not hypothetical: the tree on this
+  # host still held `dist/go/windows-x64/AlphaTA/`, `lib/alpha_ta_go.dll` and
+  # `alpha_ta.h` from the product's previous name, and the first successful
+  # manifest write duly recorded all nine of them as finkit 0.2.0 components.
+  # A record that describes two product generations at once is the same defect
+  # as the stale top-level manifest -- quieter, because each digest is correct.
+  #
+  # `${VAR:?}` rather than `${VAR}`: this is the only `rm -rf` in the script
+  # whose argument is assembled from three variables, and an unset `PLATFORM`
+  # would silently turn it into `rm -rf /dist/<lang>/`, or worse.
+  #
+  # `--no-clean` keeps whatever is already there, which is what you want while
+  # iterating on one language. It also means the manifest then describes the
+  # whole tree rather than this run's output, so it is not a release setting.
+  if [[ "${DO_CLEAN}" -eq 1 ]]; then
+    rm -rf "${DIST:?}/${lang:?}/${PLATFORM:?}"
+  else
+    info "keeping the existing ${lang} tree (--no-clean)"
+  fi
+
   if "${BUILDERS[$lang]}"; then
     ok "${lang} build"
   else
@@ -259,35 +320,77 @@ done
 
 hdr "manifest"
 LANGS_CSV="$( IFS=,; echo "${WANT[*]}" )"
-python3 - <<PY
-import hashlib, json, os, pathlib, sys
-root = pathlib.Path("${DIST}")
-langs = "${LANGS_CSV}".split(",")
+# Quoted heredoc + environment variables, deliberately: the previous version
+# interpolated `${DIST}` straight into the Python source, which is what turned
+# the Windows path into `\p\...` and killed the step. Nothing here should have
+# to reason about shell escaping or drive letters.
+DIST_NATIVE="$(native_path "${DIST}")" \
+PLATFORM="${PLATFORM}" \
+LANGS_CSV="${LANGS_CSV}" \
+VERSION="${VERSION}" \
+python3 - <<'PY'
+import hashlib, json, os, pathlib
+
+root = pathlib.Path(os.environ["DIST_NATIVE"])
+langs = os.environ["LANGS_CSV"].split(",")
+platform = os.environ["PLATFORM"]
+root.mkdir(parents=True, exist_ok=True)
+
 components = []
 for lang in langs:
-    base = root / lang / "${PLATFORM}"
-    if not base.exists(): continue
-    for f in base.rglob("*"):
-        if not f.is_file(): continue
-        if any(part.startswith('.') for part in f.parts): continue
-        if f.suffix in {".pyc"}: continue
+    base = root / lang / platform
+    if not base.exists():
+        continue
+    for f in sorted(base.rglob("*")):
+        if not f.is_file():
+            continue
+        if any(part.startswith('.') for part in f.parts):
+            continue
+        if f.suffix in {".pyc"}:
+            continue
         components.append({
             "language": lang,
-            "platform": "${PLATFORM}",
+            "platform": platform,
             "path": str(f.relative_to(root)).replace(os.sep, "/"),
             "size_bytes": f.stat().st_size,
             "sha256": hashlib.sha256(f.read_bytes()).hexdigest(),
         })
 
+# Coverage is what the run actually produced, not what it was asked for and not
+# which directories happen to exist. Deriving it from directories was wrong in a
+# way worth recording: a language whose build failed leaves an *empty*
+# directory behind, `base.exists()` is then True, and the manifest claimed
+# coverage for a language that contributed zero components -- python and c, on
+# the run that found this. An over-claiming coverage field is worse than none,
+# because it is the field a reader trusts to know what is in the file.
+covered = sorted({component["language"] for component in components})
+uncovered = [lang for lang in langs if lang not in covered]
+
+# `languages` records what this run actually covered. Without it a subset build
+# rewrote the manifest into a record that *looks* authoritative while holding
+# only the two languages it was asked for and silently dropping every other
+# one -- which is how the file came to describe a product that no longer exists
+# without anything saying so.
 manifest = {
-    "name": "Finkit",
-    "version": "${VERSION}",
-    "platform": "${PLATFORM}",
+    # Lowercase, matching the Cargo package name in `core/Cargo.toml` and the
+    # other two writers (`build-quick.sh`, `build-quick.ps1`). This script used
+    # to write "Finkit" while those wrote "finkit", so the same file had two
+    # spellings of the same field depending on which script produced it -- and
+    # nothing could check the field against the repository, because there was no
+    # single expected value to check it against.
+    "name": "finkit",
+    "version": os.environ["VERSION"],
+    "platform": platform,
+    "languages": covered,
     "components": components,
 }
 out = root / "manifest.json"
-out.write_text(json.dumps(manifest, indent=2))
-print(f"wrote {out} ({len(components)} components)")
+out.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+print(f"wrote {out} ({len(components)} components, "
+      f"languages: {', '.join(covered) or '(none)'})")
+if uncovered:
+    print(f"note: no components for: {', '.join(uncovered)} "
+          f"(build failed, or produced nothing this run)")
 PY
 
 # --- bundle ------------------------------------------------------------------

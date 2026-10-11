@@ -92,6 +92,145 @@ does the full `cargo test --workspace --locked` sweep (47 targets, 0 failures)
 including the `cli` `schema_cli` integration tests.
 
 
+### Changed - 2026-10-11 (thirty-third pass — the release manifest could not be regenerated on Windows, and the check had been reporting the symptom as a missing toolchain)
+
+The previous pass closed with a note: `refresh_release_manifests.py --check`
+reports node/dotnet/C artifacts missing, "the toolchains are not installed here,
+the baseline is like this". The observation was right and the explanation was
+wrong. `node`, `go`, `dotnet`, `java`, `javac`, `mvn`, `cmake` and `gcc` were all
+on the machine. The manifest writer was broken, and had been for long enough
+that its stale output read as a missing dependency.
+
+#### 1. The manifest step never ran on Windows (root cause)
+
+`scripts/build-usage-packages.sh` wrote `dist/manifest.json` from an inline
+Python program whose source interpolated `${DIST}`. Under Git Bash `$ROOT` is
+`/p/repo` — no drive letter — so Windows Python resolved
+`pathlib.Path("/p/repo/dist")` to `\p\repo\dist` and `write_text()` raised:
+
+    FileNotFoundError: [Errno 2] No such file or directory: '\\p\\...\\dist\\manifest.json'
+
+Every per-language build preceding it had succeeded. The artifacts existed and
+were never recorded, so `--check` reported them missing and the record on disk
+stayed at `AlphaTA 1.0.0`, a product identity two renames old. Fixed by moving
+both inline programs onto quoted heredocs with the values passed as environment
+variables (`native_path()` converts where a native path is genuinely needed, as
+in Go's `replace` directive). A shell that cannot rewrite the body cannot
+mangle a path inside it.
+
+#### 2. Three writers, two spellings of the same field
+
+`dist/manifest.json` has three writers: `scripts/build-usage-packages.sh`,
+`build-quick.sh` and `build-quick.ps1` at the repository root. The first wrote
+`"name": "Finkit"` and the other two wrote `"name": "finkit"`, so the same field
+had two values depending on which script produced the file — and nothing could
+check it, because there was no expected value to check it against. All three now
+write the Cargo package name, and `refresh_release_manifests.py` reads that name
+from `core/Cargo.toml` rather than hardcoding it.
+
+The two quick-build writers also gained the `languages` field, derived from the
+components they actually recorded.
+
+#### 3. The manifest mixed two product generations
+
+`dist/` is gitignored and accumulates across runs, and the generator walked it
+with `rglob`, so anything an older build left behind was recorded as this run's
+output. The first successful write after the fix recorded nine pre-rename files
+— `dist/go/windows-x64/AlphaTA/`, `lib/alpha_ta_go.dll`,
+`alpha_ta.win32-x64-msvc.node` — as finkit 0.2.0 components. Each digest was
+correct; the record was still wrong, in the same way the stale top-level
+manifest was.
+
+Each language's `dist/<lang>/<platform>` tree is now cleared before its build, so
+the run's output is the only thing the manifest can see. `--no-clean` keeps the
+existing tree for iterating on one language, and is explicitly not a release
+setting. The pre-rename residue itself was removed from this working tree.
+
+#### 4. `languages` over-claimed coverage the moment it was added
+
+The first version of that field was derived from "does `dist/<lang>/<platform>`
+exist". A language whose build fails leaves an *empty* directory, so the field
+claimed `python` and `c` while those languages contributed zero components — and
+it was the field a reader would trust to know what was in the file. It is now
+derived from the components actually recorded, and languages with no components
+are named in a note instead.
+
+#### 5. `dotnet` could not produce a package, and said so only after three minutes
+
+`build-usage-dotnet.sh` referenced `${VERSION}` in its `dotnet pack` line without
+ever defining it; `set -u` turned that into `line 89: VERSION: unbound variable`.
+The native cdylib had already been built, so the run had the shape of a success
+with a missing artifact. Defined alongside `OUT_DIR`.
+
+#### 6. `scripts/bench-vs-talib.sh` step 5 died the same way on Windows
+
+Its summary-rendering heredoc interpolated `${JSON_OUT}` into
+`pathlib.Path(...)` — the same defect as §1, in a different script, found by
+looking for the pattern rather than for the file. Step 2 of the same script
+already did it correctly (quoted heredoc, paths as `argv`), so the two halves of
+one script disagreed about how to cross the boundary.
+
+#### 7. `wasm-pack` cannot drive the pinned toolchain, and CI never uses it
+
+`scripts/build-usage-wasm.sh` requires `wasm-pack`; `wasm-pack 0.15.0` forwards
+`--out-dir` to `cargo build`, and the pinned cargo rejects it. The shipped error
+is `error: unexpected argument '--out-dir' found`, which reads as a broken
+`Cargo.toml`. The script now prints the version pair up front and attaches the
+diagnosis to the failure. Worth recording alongside it: CI does **not** use
+`wasm-pack` for releases — `multilang-release.yml` builds with
+`cargo build --target wasm32-unknown-unknown --release` and copies the `.wasm` —
+so the script's three JS-glue bundles have no CI counterpart.
+
+#### 8. A gate for the class, and the stale documentation the hunt turned up
+
+`scripts/check_shell_interpolation.py` (CI, `make check-shell-interp`) rejects an
+interpreter heredoc that is unquoted *and* interpolates a path-shaped variable.
+It is deliberately narrow: it looks at values reaching `pathlib.Path`/`open`/
+`read_text`, or variables named like paths, because flagging `VERSION` would
+make the gate noisy enough to switch off. `build-quick.sh` interpolates
+`DIST_WIN` through an unquoted heredoc and is correct — the value already came
+from `cygpath -w` — so the gate accepts a `# shell-interp-ok: VAR -- reason`
+declaration, requires the reason, and fails when a declaration goes stale.
+
+Three documents described things that are not there: the release checklist
+pointed at `dist/python/windows-x64/manifest.json` (nothing produces it), the
+Makefile said `dist/**/manifest.json` (singular in practice), and this pass's own
+first draft asserted that `build-quick.sh` did not exist — it does, at the
+repository root, which is why the check had been looking in `scripts/`. That
+correction is in the file too.
+
+#### 9. The Node package staged a dead native module from the previous name
+
+`build-usage-node.sh` stages the package with `cp -r "${BINDING_DIR}/." "${OUT_DIR}/"`,
+which takes the *whole* binding directory — and a working directory accumulates
+gitignored build output. This one still held `alpha_ta.win32-x64-msvc.node`, a
+binary from before the rename that no `index.js` resolves. It reached the loose
+`dist/node/<platform>/` tree that the manifest records and that the usage bundle
+is zipped from; the npm tarball itself is JS-only by `package.json`'s `files`
+field, so a consumer downloading from npm was never affected.
+
+The staging step now keeps exactly `<package-name>.*.node` and reports what it
+drops. The rule is deliberately *not* "whatever the preceding
+`target/release/finkit.*.node` loop staged": that glob matches nothing on this
+tree — cargo emits `finkit_node.dll` and the `.node` is produced by the binding's
+own napi step — so a prune built on it deleted the real binary alongside the
+stale one on the first attempt, which is how the distinction was found.
+
+#### Verification
+
+The manifest regenerates and `refresh_release_manifests.py --check` returns 0
+against the artifacts on disk — the state this pass existed to reach. `java`,
+`go`, `dotnet` and `python` builds pass end to end. `node` and `c` do not fail
+here for any reason in this repository: this session's sandbox rejects bulk
+deletes over 50 items, and both scripts clear their own staging directories
+(146 and 172 entries) as normal build hygiene — the same guardrail, in the same
+two languages, that `c` reported before any of this pass's changes. `wasm` is
+blocked by the `wasm-pack`/cargo mismatch in §7, which CI does not exercise.
+
+All 32 `check_*` gates pass (30 from the previous two passes, plus
+`check_feature_matrix.py` and `check_shell_interpolation.py`).
+
+
 ### Changed - 2026-10-11 (thirty-second pass — the feature matrix was never executed, and two documents described a code that is not there)
 
 The previous pass fixed broken *behaviour*. This pass went after claims that no
@@ -189,7 +328,7 @@ the `streaming/repaint.rs` / unused-macro item, which is resolved
 #### Verification
 
 Full `cargo test --workspace --locked --no-fail-fast`: 47 targets, 0 failures.
-The feature matrix passes (4 supported / 6 recorded-broken). All 38 `check_*`
+The feature matrix passes (4 supported / 6 recorded-broken). All 31 `check_*`
 gates pass, `cargo fmt --all -- --check` is clean, and `cargo clippy
 --workspace --all-targets` under the CI configuration exits 0.
 

@@ -54,7 +54,7 @@ LANGS := $(filter-out packages,$(LANGS))
 .PHONY: build-native-archive verify-native-archive
 .PHONY: installer installer-all check-installer
 .PHONY: $(INSTALLER_TARGETS:%=installer-%)
-.PHONY: check-rustdoc check-orphans check-script-refs check-dead-code check-nan-safety check-ios-header check-source-reachability check-no-build-artifacts check-loop-termination verify-python-bindings
+.PHONY: check-rustdoc check-orphans check-script-refs check-dead-code check-nan-safety check-ios-header check-source-reachability check-no-build-artifacts check-loop-termination verify-python-bindings check-shell-interp
 .PHONY: check-dependency-direction check-formula-contract check-feature-matrix
 .PHONY: check-ios-header check-talib-ffi refresh-release-manifests check-release-manifests
 
@@ -185,6 +185,17 @@ check-orphans:
 # to nothing, and no compiler or test ever visits it.
 check-script-refs:
 	python3 $(ROOT)/scripts/check_script_references.py
+
+# ---- repository hygiene: shell must not rewrite a program's body ------------
+# An unquoted heredoc lets the shell interpolate its body, so a POSIX path
+# reaches the interpreter as text. On Windows `/p/repo/dist` becomes
+# `\p\repo\dist` -- a path from no drive -- and the step dies with
+# FileNotFoundError at the end of a long build, which reads as a missing
+# dependency rather than a quoting mistake. That is how the release manifest
+# stopped being regenerable: the C and Go packages were built, then the manifest
+# writer crashed, and the stale record was reported as thirty missing artifacts.
+check-shell-interp:
+	python3 $(ROOT)/scripts/check_shell_interpolation.py
 
 # ---- repository hygiene: no unexplained dead_code suppressions -------------
 # `#[allow(dead_code)]` turns off the only compiler check that can see orphan
@@ -319,10 +330,12 @@ check-installer:
 .PHONY: check-installer
 
 # ---- release records: keep the shipped digests in step with the artefacts ---
-# `dist/**/manifest.json` records a `size_bytes`/`sha256` pair per shipped
-# artefact. The linker output is not reproducible, so every rebuild changes
-# those numbers and a stale record is indistinguishable from a fresh one by
-# inspection. Refresh after any rebuild; `--check` is the verify-only form.
+# `dist/manifest.json` records a `size_bytes`/`sha256` pair per shipped
+# artefact, and is written by `scripts/build-usage-packages.sh`. The linker
+# output is not reproducible, so every rebuild changes those numbers and a stale
+# record is indistinguishable from a fresh one by inspection. Refresh after any
+# rebuild; `--check` is the verify-only form. `dist/` is gitignored, so `--check`
+# skips an absent manifest instead of failing on one that was never built.
 refresh-release-manifests:
 	python3 $(ROOT)/scripts/refresh_release_manifests.py
 
@@ -385,6 +398,7 @@ help:
 	@echo "  make check-rustdoc    Fail if rustdoc emits any diagnostic (ADR 0011)"
 	@echo "  make check-orphans    Fail on orphan scripts, unreachable workflows or unreachable docs"
 	@echo "  make check-script-refs  Fail if a caller references a script that is missing"
+	@echo "  make check-shell-interp  Fail on an unquoted interpreter heredoc that interpolates a shell path"
 	@echo "  make check-dead-code    Fail on an unexplained `#[allow(dead_code)]`"
 	@echo "  make check-nan-safety   Fail on `partial_cmp(..).unwrap()` (panics on NaN)"
 	@echo "  make check-source-reachability  Fail on a tracked .rs file outside the module graph"

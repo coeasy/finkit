@@ -193,6 +193,7 @@ fi
 # ---- manifest (sha256 + size of every produced artifact) -------------------
 info "writing dist/manifest.json"
 LANGS_CSV="$( IFS=,; echo "${WANT[*]}" )"
+# shell-interp-ok: DIST_WIN -- already produced by `cygpath -w` on line 42, so the value is a native Windows path and the unquoted heredoc is safe
 python3 - <<PY
 import hashlib, json, os, pathlib
 root = pathlib.Path(r"${DIST_WIN}")
@@ -221,6 +222,13 @@ manifest = {
     "version": "${VERSION}",
     "platform": "${PLATFORM}",
     "quick_build": True,
+    # Which languages this run actually produced components for, so a partial
+    # build is visibly partial rather than a record that reads as authoritative
+    # while holding two languages' entries. Derived from the components, not
+    # from which directories exist: a failed build leaves an empty directory,
+    # and directory existence would then claim coverage for a language that
+    # contributed nothing. Same field `build-usage-packages.sh` writes.
+    "languages": sorted({component["language"] for component in components}),
     "components": components,
 }
 out = root / "manifest.json"

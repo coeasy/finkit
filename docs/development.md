@@ -96,6 +96,7 @@ python scripts/check_script_references.py
 python scripts/check_dead_code_allows.py
 python scripts/check_ios_header_contract.py
 python scripts/check_talib_ffi_contract.py
+python scripts/check_shell_interpolation.py
 python scripts/check_feature_matrix.py     # slow: one `cargo check` per subset
 ```
 

@@ -156,10 +156,16 @@ python3 "${SCRIPT_DIR}/bench_report.py" \
 
 # ---- 5. compact summary table --------------------------------------------
 hdr "[bench-vs-talib] step 5: render dist/bench/summary.md"
-python3 - <<PY > "${OUT}/summary.md"
-import json, pathlib, datetime
-res_path = pathlib.Path("${JSON_OUT}")
-res = json.loads(res_path.read_text())
+# Quoted heredoc + environment variable, deliberately. `$JSON_OUT` is an MSYS
+# path under Git Bash on Windows (`/p/...`), and Windows Python resolves
+# `pathlib.Path("/p/...")` to `\p\...` relative to the current drive, so this
+# step died with FileNotFoundError on the last leg of the benchmark run. The
+# redirection stays in the shell, which understands MSYS paths.
+JSON_OUT_NATIVE="$( cygpath -w "${JSON_OUT}" 2>/dev/null || echo "${JSON_OUT}" )" \
+python3 - <<'PY' > "${OUT}/summary.md"
+import json, os, pathlib, datetime
+res_path = pathlib.Path(os.environ["JSON_OUT_NATIVE"])
+res = json.loads(res_path.read_text(encoding="utf-8"))
 generated = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 print("# Finkit vs TA-Lib C — Head-to-Head Summary")
