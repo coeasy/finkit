@@ -18,6 +18,29 @@ Defined in `ffi/c-binding/src/lib.rs` as `#[repr(i32)]` for stable ABI:
 
 Retrieve the most recent code on the current thread with `ta_last_error_code()`. Human-readable detail is available from `ta_last_error()` (allocate with `ta_last_error`, release with `finkit_free_string`).
 
+### The legacy return value is **not** an `FfiStatus`
+
+The classic indicator entry points (`ta_sma`, `ta_rsi`, …) return the legacy
+pair `TA_OK (0)` / `TA_ERR_INVALID_INPUT (-1)` / `TA_ERR_CALCULATION (-2)` from
+the *function return value*, and those two negatives numerically collide with
+`FfiStatus`:
+
+| Value | as `FfiStatus` | as the legacy convention |
+| --- | --- | --- |
+| `-1` | `NullPointer` | `TA_ERR_INVALID_INPUT` — *any* rejected argument |
+| `-2` | `InvalidParameter` | `TA_ERR_CALCULATION` |
+
+The collision is not hypothetical and it is the one trap worth stating plainly.
+Measured 2026-10-11 against the release `finkit_ffi.dll`, `ta_sma` returns `-1`
+for a null output pointer, for `len == 0`, and for `period > len` **alike** — so
+a caller that casts the return value to `FfiStatus` reads a short-input error as
+`NullPointer`, and a calculation failure at `-2` reads as `InvalidParameter`.
+
+Use the return value as a coarse "zero or not" test. For a classified error,
+read the JSON operation envelope, which reports the fine-grained tier
+(`1..2` FFI, `10..13` indicator, `50..61` formula) described below; that tier is
+what `ta_last_error_code()` carries on those paths.
+
 The coarse tier and the two ranges a caller must branch on are also stated in
 the shipped header itself (`ffi/c-binding/include/finkit.h`), immediately after
 the `FfiStatus` enum, so a C consumer who never opens this document still sees
@@ -53,9 +76,11 @@ For backward compatibility, many functions still return legacy negative codes di
 | `61` | Formula | **Backend unsupported** — the selected `FormulaExecutionMode` cannot serve the entry point |
 
 The formula tier is `FFI_FORMULA_BASE (50) + formula_error_code(variant)`, and
-`formula_error_code` has **11** arms (offsets `0`–`10`), so the tier runs
+`formula_error_code` has **12** arms (offsets `0`–`11`), so the tier runs
 `50`–`61`. Codes `60` and `61` were previously undocumented, and `55`–`59` were
-collapsed into a single vague row.
+collapsed into a single vague row. (An earlier revision of this paragraph said
+"11 arms (offsets `0`–`10`)" while the table below it already listed `61` — the
+count and the range it implied disagreed, and the table was right.)
 
 `61` is the one to handle explicitly: it means the caller asked for
 `FormulaExecutionMode::Plan` on an entry point that is tree-only (for example

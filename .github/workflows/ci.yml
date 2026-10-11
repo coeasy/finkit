@@ -422,6 +422,15 @@ jobs:
         run: cargo test -p finkit --test performance_regression --release --locked -- --test-threads=1
       - name: Compile benchmark suite with compiler warnings denied
         run: cargo bench -p finkit --no-run --locked
+      # A Cargo feature list claims which subsets compile, and `cargo build` only
+      # ever exercises the default one. `core/Cargo.toml` claimed the tree-shaking
+      # scaffold made a single category buildable and `make lint` ran a `no_std`
+      # clippy pass; neither was in any workflow, so both rotted -- the `no_std`
+      # subset was 49 errors on 2026-10-11. This builds the supported subsets and
+      # asserts the recorded-broken ones still fail, so the list can only shrink
+      # by a deliberate edit. Minutes-long by nature: one `cargo check` per subset.
+      - name: Build the supported feature subsets
+        run: python scripts/check_feature_matrix.py
 
   doc:
     name: Docs

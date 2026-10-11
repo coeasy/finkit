@@ -55,7 +55,7 @@ LANGS := $(filter-out packages,$(LANGS))
 .PHONY: installer installer-all check-installer
 .PHONY: $(INSTALLER_TARGETS:%=installer-%)
 .PHONY: check-rustdoc check-orphans check-script-refs check-dead-code check-nan-safety check-ios-header check-source-reachability check-no-build-artifacts check-loop-termination verify-python-bindings
-.PHONY: check-dependency-direction check-formula-contract
+.PHONY: check-dependency-direction check-formula-contract check-feature-matrix
 .PHONY: check-ios-header check-talib-ffi refresh-release-manifests check-release-manifests
 
 # ---- default ----------------------------------------------------------------
@@ -102,10 +102,18 @@ preflight:
 # ---- lint: convenient local Rust formatting/clippy pre-check --------------
 # First-time setup: `rustup component add clippy`. The permanent CI workflow
 # remains the source of truth for the complete locked/all-feature gate matrix.
+# The two `-D warnings` lines that used to be here never passed and could not
+# have: the tree deliberately carries a *tracked warning budget*
+# (`scripts/check_warning_budget.py`, ~14.6k warnings over 124 lints) rather
+# than a zero-warning policy, and the CI `clippy` job says so explicitly. A
+# documented command that cannot succeed is worse than no command, because the
+# first person who runs it learns to ignore the target. This now mirrors the CI
+# job: plain clippy, plus the one lint that is denied, which is what turns a
+# stale `#[expect(...)]` into a failure.
 lint:
 	cargo fmt --all -- --check
-	cargo clippy --workspace --all-targets -- -D warnings
-	cargo clippy -p finkit --no-default-features --features no_std -- -D warnings
+	RUSTFLAGS="-D unfulfilled_lint_expectations" cargo clippy -p finkit --locked
+	RUSTFLAGS="-D unfulfilled_lint_expectations" cargo clippy --workspace --all-targets --locked
 
 # ---- housekeeping ---------------------------------------------------------
 dist:
@@ -253,6 +261,18 @@ check-dependency-direction:
 check-formula-contract:
 	python3 $(ROOT)/scripts/check_formula_engine_contract.py
 
+# ---- feature matrix: the declared subsets actually compile ------------------
+# A Cargo feature list is a claim about which subsets compile, and `cargo build`
+# only ever exercises the default one. `core/Cargo.toml` claimed the indicator
+# tree-shaking scaffold made a single category buildable and `make lint` ran a
+# `no_std` clippy pass -- neither was wired into CI, so both rotted: the `no_std`
+# build was 49 errors on 2026-10-11. This gate builds the supported subsets and
+# asserts the known-broken ones still fail, so the list can only shrink by a
+# deliberate edit. It is minutes-long by nature (one `cargo check` per subset),
+# so it is a release gate, not a per-commit one.
+check-feature-matrix:
+	python3 $(ROOT)/scripts/check_feature_matrix.py
+
 # ---- repository hygiene: the TA-Lib transcription matches TA-Lib ------------
 # `core/src/talib_ffi.rs` is a hand-written transcription of TA-Lib's
 # `ta_func.h`, compiled only under `talib-c` and used by the head-to-head
@@ -372,6 +392,7 @@ help:
 	@echo "  make check-loop-termination  Fail on `loop{}` without a termination argument"
 	@echo "  make check-dependency-direction  Fail on an upward intra-workspace dependency edge"
 	@echo "  make check-formula-contract  Fail if the formula-engine docs drift from the code"
+	@echo "  make check-feature-matrix  Build the supported Cargo feature subsets; fail if one stops compiling"
 	@echo "  make verify-python-bindings  Fail when the Python binding source drifts from binding_spec.py"
 	@echo "  make check-ios-header   Fail if ffi/ios-binding/include/finkit.h drifts from the iOS exports"
 	@echo "  make refresh-release-manifests  Recompute dist/**/manifest.json digests"

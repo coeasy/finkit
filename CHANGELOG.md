@@ -92,6 +92,117 @@ does the full `cargo test --workspace --locked` sweep (47 targets, 0 failures)
 including the `cli` `schema_cli` integration tests.
 
 
+### Changed - 2026-10-11 (thirty-second pass — the feature matrix was never executed, and two documents described a code that is not there)
+
+The previous pass fixed broken *behaviour*. This pass went after claims that no
+build ever evaluates, and found the largest one first.
+
+#### 1. Every non-default feature combination was broken, and CI never looked
+
+`core/Cargo.toml` asserted that the indicator tree-shaking scaffold made
+"picking a single category still compiles (it transitively enables `std` +
+`ndarray`)", and `Makefile`'s `lint` target ran
+`cargo clippy -p finkit --no-default-features --features no_std -- -D warnings`.
+Neither was in any workflow, so neither had ever run. Measured 2026-10-11:
+
+| Combination | Errors before |
+| --- | --- |
+| `--no-default-features --features no_std` | 49 |
+| `--no-default-features` | 49 |
+| `--no-default-features --features std` | 40 |
+| `--no-default-features --features indicators-overlap` | 24 |
+| `--no-default-features --features formula` | 155 |
+
+The `no_std` half is fixed. `math::kernels`, `math::simd_kernels` and
+`math::simd_ops` were declared unconditionally although every item inside them
+is `std`-gated and they are built on `ndarray`; gating the declarations (and
+`floor_remainder`, whose eleven call sites are all in the `formula` feature)
+makes the documented `no_std` subset build. That is the same class of mismatch
+as the avx2 modules fixed on 2026-10-10, found by the same method: make the
+`cfg` state the real dependency.
+
+The **category** half is not fixed, and the comment now says so instead of
+claiming otherwise. `operation.rs`, `composite.rs` and `factors/builtin.rs` use
+`crate::formula` and `crate::factor_graph` without being gated on `formula`,
+and `indicators/mod.rs`'s `impl_slice_output!` adapters reach
+`indicators::momentum` from the category-neutral part of the file. Twenty-four
+to a hundred and fifty-five errors is a refactor, not a patch; the claim was
+the defect, so the claim is what changed.
+
+`scripts/check_feature_matrix.py` (CI `regression-gates`, `make
+check-feature-matrix`) builds the four supported subsets and asserts the six
+recorded-broken ones **still fail**. A combination that starts compiling is not
+a silent win — it is a stale entry, and the gate fails until the entry is moved
+up deliberately.
+
+#### 2. `make lint` could not succeed, on either line
+
+Both clippy lines used `-D warnings`. The tree deliberately carries a *tracked
+warning budget* (14 637 warnings over 124 lints, `check_warning_budget.py`)
+rather than a zero-warning policy, and CI's `clippy` job says so in a comment.
+A documented command that cannot succeed teaches its first reader to ignore the
+target. `make lint` now mirrors the CI job, including the one lint it denies.
+
+#### 3. `docs/development.md` documented a command that is guaranteed to fail
+
+`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings`
+— wrong twice: `--all-features` enables `std` *and* `no_std` on `finkit`, which
+a `compile_error!` in `core/src/lib.rs` rejects, so it produces 88 errors
+including the one it is meant to produce; and `-D warnings` fails for the reason
+above. Replaced with the CI-equivalent command, and the feature contract is now
+a table in that file rather than folklore.
+
+#### 4. `formula_error_code` had 12 arms, and two documents said 11
+
+`docs/ffi/error-codes.md` and the shipped `finkit.h` both said the formula tier
+"has 11 arms (offsets 0..10), so it ends at 61" — an arithmetic statement that
+contradicts itself, since `0..10` ends at 60. The code has 12 arms (`0..11`),
+because `BackendUnsupported => 11` sits alongside the eleven others. Both copies
+are corrected; the header text lives in `gen_c_header.py`'s template, so the
+regenerated header carries the fix rather than reverting it.
+
+#### 5. The legacy FFI return value collides with `FfiStatus`, and nothing said so
+
+`TA_ERR_INVALID_INPUT = -1` and `TA_ERR_CALCULATION = -2` are numerically equal
+to `FfiStatus::NullPointer` and `FfiStatus::InvalidParameter` while meaning
+something else. Measured against the release `finkit_ffi.dll`: `ta_sma` returns
+`-1` for a null output pointer, for `len == 0`, and for `period > len` alike — so
+a caller who reads the return value as an `FfiStatus` classifies a short input
+as a null pointer. Now stated in both `error-codes.md` and the header: treat the
+return value as a coarse zero/not-zero test, and take the classified tier from
+the envelope or `ta_last_error_code()`.
+
+#### 6. `docs/factor-research-architecture.md` still carried the sections its own note invalidated
+
+The document opened with a warning that ~15 sections referencing
+`core/src/backtest.rs` were invalid ("已失效 … 不得作为实施依据") and that
+"彻底清理这些段落属独立工作项，尚未执行". A section that says "do not act on
+this" is still a section a reader acts on, so the cleanup was executed:
+the backtest rows, bullets, identity, checklist item and phase-list entry are
+removed, and the ⚠️ warning is replaced by a note that the cleanup is done.
+`docs/FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md` gains a dated re-check
+covering the three claims later commits invalidated: the two
+"largest file" paths that are now directories after the 2026-10-08 split, and
+the `streaming/repaint.rs` / unused-macro item, which is resolved
+(`impl_repaint!` and `impl_compute_bar!` have zero hits in the workspace).
+
+#### Verification
+
+Full `cargo test --workspace --locked --no-fail-fast`: 47 targets, 0 failures.
+The feature matrix passes (4 supported / 6 recorded-broken). All 38 `check_*`
+gates pass, `cargo fmt --all -- --check` is clean, and `cargo clippy
+--workspace --all-targets` under the CI configuration exits 0.
+
+Cross-surface agreement was re-measured end to end rather than assumed, on
+120 bars of the same series: CLI vs Python `sma`/`rsi` agree bit-for-bit
+(0 mismatches); batch vs streaming `sma` agree to ~1e-16 relative, inside the
+documented 1e-9 `runtime_convergence` tolerance; and the release
+`finkit_ffi.dll` loaded through `ctypes` returns `ta_sma → 90.5` and
+`ta_rsi → 100.0`, the same numbers, with all three of its error paths returning
+cleanly instead of crashing. All 452 catalogued formula functions were called
+through the CLI with 0 "unknown function" results, and all five dialects parse.
+
+
 ### Changed - 2026-10-10 (thirty-first pass — end-to-end chain audit: three broken links, one panic path, and the dated-document cleanup)
 
 The thirtieth pass produced contracts. This pass went looking for places where

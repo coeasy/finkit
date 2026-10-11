@@ -73,6 +73,16 @@ claim registry installation commands before a clean consumer test exists.
       `python scripts/gen_dialect_coverage.py --check`,
       `python scripts/gen_talib_numeric_contract.py --check`.
 - [ ] Run `cargo fmt --all -- --check` and `cargo check --workspace --locked`.
+- [ ] Run the feature-subset gate (`make check-feature-matrix`):
+      `python scripts/check_feature_matrix.py`.
+      A feature list is a claim about which subsets compile, and `cargo build`
+      only exercises the default one, so the claim has to be executed. It was
+      not: on 2026-10-11 the documented `no_std` subset was 49 errors, and a
+      `core/Cargo.toml` comment asserted a tree-shaking workflow that produced
+      24–155 errors. The gate builds the four supported subsets and asserts the
+      recorded-broken ones still fail, so the list can only shrink by a
+      deliberate edit. Do not add `--all-features` anywhere: `std` and `no_std`
+      are mutually exclusive on purpose.
 - [ ] Run the Rust test and package gates required by CI:
       `cargo test -p finkit --locked` and `cargo package -p finkit --locked`.
 - [ ] Build the Python wheel, install it into a throwaway venv, then run

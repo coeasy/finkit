@@ -83,6 +83,17 @@ typedef enum FfiStatus {
 } FfiStatus;
 
 /*
+ * NOTE: the legacy indicator entry points (ta_sma, ta_rsi, ...) do NOT return
+ * an FfiStatus. Their return value uses the older pair
+ * TA_ERR_INVALID_INPUT (-1) / TA_ERR_CALCULATION (-2), which collides
+ * numerically with FfiStatus_NullPointer (-1) / FfiStatus_InvalidParameter (-2)
+ * while meaning something different -- -1 there covers any rejected argument
+ * (null pointer, len == 0, period > len alike), not only a null pointer. Treat
+ * the return value as a coarse "zero or not" test and read the envelope or
+ * ta_last_error_code() when you need a classification.
+ */
+
+/*
  * Finer-grained tiers reported by ta_last_error_code(), which may carry a
  * positive code while the function return value carries a legacy negative one.
  *
@@ -90,8 +101,8 @@ typedef enum FfiStatus {
  *  10 .. 13   Indicator tier  (FFI_INDICATOR_BASE + offset)
  *  50 .. 61   Formula tier    (FFI_FORMULA_BASE + offset)
  *
- * The formula tier is 50 + formula_error_code(variant), and that mapping has 11
- * arms (offsets 0..10), so it ends at 61. Two entries matter to a C caller:
+ * The formula tier is 50 + formula_error_code(variant), and that mapping has 12
+ * arms (offsets 0..11), so it ends at 61. Two entries matter to a C caller:
  *
  *   60  UnsupportedFunction  the formula names a function this build cannot run
  *   61  BackendUnsupported   the caller selected FormulaExecutionMode::Plan on

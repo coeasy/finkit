@@ -67,7 +67,15 @@ Before opening a PR that changes Rust/core behavior:
 ```bash
 cargo fmt --all -- --check
 cargo check --workspace --locked
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+# NOT `--all-features`: `finkit` declares `std` and `no_std` as mutually
+# exclusive (enforced by a `compile_error!` in `core/src/lib.rs`), so
+# `--all-features` guarantees a failure -- 88 errors, including the one it is
+# supposed to produce. And not `-D warnings`: the tree carries a *tracked
+# warning budget* (`scripts/check_warning_budget.py`) rather than a zero-warning
+# policy. This mirrors the CI `clippy` job, including the one lint it denies.
+RUSTFLAGS="-D unfulfilled_lint_expectations" cargo clippy --workspace --all-targets --locked
+# The supported feature subsets (and the recorded-broken ones) are pinned by
+# `make check-feature-matrix`, which is minutes long; see its own section below.
 cargo test -p finkit --locked
 cargo test --workspace --doc --locked
 # The CI package set, plus the binding crates CI only compiles. `--no-fail-fast`
@@ -88,6 +96,7 @@ python scripts/check_script_references.py
 python scripts/check_dead_code_allows.py
 python scripts/check_ios_header_contract.py
 python scripts/check_talib_ffi_contract.py
+python scripts/check_feature_matrix.py     # slow: one `cargo check` per subset
 ```
 
 Do not remove `--locked` from CI-equivalent commands. `Cargo.lock` is part of the reproducibility contract.
@@ -218,6 +227,36 @@ Formula changes can affect parser, optimizer, bytecode, JIT/SIMD execution, reus
 - optimizer handling of mutable/side-effecting expressions.
 
 Formula debug coverage is binding-specific. The Go binding currently exposes `FormulaEvalDebugJSON`; do not invent the same wrapper name in another language unless it is actually implemented and tested.
+
+### Cargo feature contract
+
+`finkit` publishes a feature list, and a feature list is a claim about which
+subsets compile. Only four subsets are supported and verified:
+
+| Subset | Command |
+| --- | --- |
+| default | `cargo check -p finkit --locked` |
+| bare | `cargo check -p finkit --no-default-features --locked` |
+| `no_std` | `cargo check -p finkit --no-default-features --features no_std --locked` |
+| `tracing` only | `cargo check -p finkit --no-default-features --features tracing --locked` |
+
+`scripts/check_feature_matrix.py` (CI `regression-gates`, `make
+check-feature-matrix`) builds those four and asserts that the recorded-broken
+ones still fail, so both directions are enforced.
+
+Two things are deliberately **not** supported, and stating them here is cheaper
+than rediscovering them:
+
+- **`--all-features` always fails.** `std` and `no_std` are mutually exclusive
+  by construction (`compile_error!` in `core/src/lib.rs`).
+- **The indicator tree-shaking scaffold does not yet yield a build.** Turning
+  off `indicators-all`, or enabling a single category, fails: `operation.rs`,
+  `composite.rs` and `factors/builtin.rs` use `crate::formula` and
+  `crate::factor_graph` without being gated on `formula`, and
+  `indicators/mod.rs`'s `impl_slice_output!` adapters reach into
+  `indicators::momentum` from the category-neutral part of the file. Build with
+  the default set. Making the scaffold real is a separate refactor whose
+  regression surface is every category combination.
 
 ## 7. Factor/runtime development
 

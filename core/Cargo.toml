@@ -161,15 +161,34 @@ rustdoc-args = ["--cfg", "docsrs"]
 [features]
 default = ["std", "formula", "serde", "tracing", "metrics", "formula-jit", "formula-simd", "indicators-all"]
 
-# ── Indicator category feature flags (incremental tree-shaking scaffold) ──
+# ── Indicator category feature flags (tree-shaking scaffold; NOT yet usable) ──
 # Every category is ON by default via `indicators-all`, so the public API is
 # unchanged unless a consumer explicitly turns a category OFF. Modules in
-# `src/indicators/mod.rs` are gated 1:1 with these features. Turn a category
-# off only after verifying its cross-module dependencies.
-# Each category pulls `std` because the indicator implementations depend on
-# `ndarray` (gated behind `std`). This makes the documented "turn off
-# `indicators-all` to shrink the binary" workflow robust: picking a single
-# category still compiles (it transitively enables `std` + `ndarray`).
+# `src/indicators/mod.rs` are gated 1:1 with these features.
+#
+# **Turning a category off does not currently produce a build.** An earlier
+# revision of this comment claimed the opposite -- that "picking a single
+# category still compiles (it transitively enables `std` + `ndarray`)" -- and
+# that claim was never exercised, so it was never true. Measured 2026-10-11:
+#
+#   cargo check -p finkit --no-default-features --features std              40 errors
+#   cargo check -p finkit --no-default-features --features indicators-overlap 24 errors
+#   cargo check -p finkit --no-default-features --features formula          155 errors
+#
+# The cause is that the crate is layered on more than the category graph says:
+#   * `indicators/mod.rs`'s `impl_slice_output!` adapters reach into
+#     `indicators::momentum` from the category-neutral part of the file, so
+#     `indicators-overlap` alone is already missing a dependency;
+#   * `operation.rs`, `composite.rs` and `factors/builtin.rs` use
+#     `crate::formula` and `crate::factor_graph`, which the `formula` feature
+#     gates, but they are not themselves gated on it.
+# Making the scaffold real means declaring those edges (or gating those three
+# modules on `formula`) and then verifying every category combination -- a
+# separate refactor with its own regression surface. Until then, build with the
+# default feature set; `scripts/check_feature_matrix.py` pins the combinations
+# that *are* supported, and it fails rather than warns if one of them stops
+# compiling. Each category pulls `std` because the implementations depend on
+# `ndarray` (gated behind `std`).
 indicators-overlap = ["std"]
 # `momentum` builds on `overlap` (e.g. `bbands`, `MaType`, `ma`) and
 # `volatility` (e.g. `atr`), so enabling it transitively enables those.

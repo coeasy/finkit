@@ -142,6 +142,13 @@ pub(crate) fn three_way_sign(value: f64) -> f64 {
 ///
 /// `MOD(A, B)` the *function* is deliberately the truncating remainder and must
 /// NOT call this; see `unified_dispatch`'s `MOD`-vs-`%` note.
+// `std`-gated, and not for a stylistic reason: the tolerance it compares
+// against is `utils::NUMERIC_EPSILON`, and `utils` is a `std`-only module.
+// Every one of this function's eleven call sites is in `formula/*`, which
+// already requires `std` through the `formula` feature, so gating the
+// definition on the same feature states the real dependency instead of
+// pretending the helper is portable.
+#[cfg(feature = "std")]
 #[inline]
 pub(crate) fn floor_remainder(dividend: f64, divisor: f64) -> f64 {
     if divisor.abs() < crate::utils::NUMERIC_EPSILON {
@@ -266,6 +273,16 @@ pub mod moving_avg {
 // B1: `libm_shim` is the `no_std`-portable home for the float primitives used
 // by the isolated numeric helpers. It is compiled in both `std` and `no_std`
 // builds (its `FloatExt`/`f64_*` helpers route to `core`/`libm` accordingly).
+// `kernels`, `simd_kernels` and `simd_ops` are `std`-only: they are built on
+// `ndarray` (which arrives with `std`) and on `simd_ops::dispatch`, whose items
+// are themselves `#[cfg(feature = "std")]`. They used to be declared
+// unconditionally, which made every non-default feature combination fail to
+// build -- `cargo check -p finkit --no-default-features --features no_std` died
+// with 49 errors against a documented `no_std` contract and a `make lint`
+// target that called it. `libm_shim` stays unconditional: routing the float
+// primitives through `core`/`libm` is exactly what makes it the `no_std` home,
+// and it is the only numeric module the `no_std` subset promises.
+#[cfg(feature = "std")]
 /// Canonical Architecture V4 execution kernels.
 pub mod kernels;
 pub mod libm_shim;
@@ -285,7 +302,9 @@ pub mod rolling_stats;
 pub mod sar;
 #[cfg(feature = "std")]
 pub mod segmented;
+#[cfg(feature = "std")]
 pub mod simd_kernels;
+#[cfg(feature = "std")]
 pub mod simd_ops;
 #[cfg(feature = "std")]
 pub mod simd_ops_avx512;

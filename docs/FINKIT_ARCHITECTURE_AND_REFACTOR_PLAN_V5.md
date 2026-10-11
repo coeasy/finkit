@@ -11,6 +11,19 @@
 > **与历史方案的关系**：V4 是滚动式审计日志，作为**历史证据来源**保留在 Git 历史中。
 > 本文是**稳定的当前基线总纲**；V4 中尚未结清的条目在 [第三部分](#第三部分-基线核验v4-遗留项在-head-的状态) 逐项核验。
 
+> **2026-10-11 复核**：本文字面日期是 2026-10-07，其后有两次提交改动了它描述的对象。
+> 只列出已实测确认的三处，不重写全文：
+> 1. **超大文件已按功能族拆分**（2026-10-08 `496763b`）：§2.1 与 §4.2 表中的
+>    `formula/functions_legacy.rs`（7248 行）与 `math/simd_ops.rs`（5296 行）现在是**目录**
+>    （`formula/functions_legacy/`、`math/simd_ops/`），单文件行数不再是原值。
+> 2. **§4.4 的「未使用流式宏」条目已结清**：`streaming/repaint.rs` 已删除，
+>    `impl_repaint!` / `impl_compute_bar!` 在仓内（含 tests/ffi/wasm）零命中；
+>    回滚纪律现由 `check_forming_bar_discipline` 门禁持有。
+> 3. **`core/src/circuit_breaker.rs`** 在 §3 已标为「已删除」，仍然如此（`check_rust_source_reachability`
+>    当前 545 个 tracked 源文件全部可达）。
+>
+> 阅读 §2.1/§4.2 的**行数与文件路径**时按当前树复核；其余结论（分层、SSOT、复盘）未受影响。
+
 ---
 
 ## 0. 执行摘要

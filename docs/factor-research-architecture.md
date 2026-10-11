@@ -6,17 +6,17 @@
 > 原则：**优先复用、单一事实源、兼容迁移、No-Lookahead、先门禁后扩展**。  
 > 本文取代早期 `factor-research-expansion-plan-v2.md`，后续 Factor Research / Alpha Research 的设计与实施以本文为准。
 
-> ⚠️ **2026-09-21 范围变更**：finkit 明确**不涉及回测、不涉及选股**。本文所有涉及
-> `core/src/backtest.rs` 的段落（约 10 处，含 §「Lightweight backtest」、risk 委托改造、
-> `BacktestConfig` cost model 等）**已失效** —— 该模块已删除。这些段落仅作历史设计意图保留，
-> **不得作为实施依据**。Factor Research 自身的 factor / labels / risk / performance 部分不受影响，仍然有效。
-> 彻底清理这些段落属独立工作项，尚未执行。
+> **2026-09-21 范围变更（2026-10-11 清理完成）**：finkit 明确**不涉及回测、不涉及选股**，
+> `core/src/backtest.rs` 已删除。本文原先有约 15 处引用该模块的段落，于 2026-10-11 一并移除，
+> 而不是继续以「已失效但保留」的形式留在文档里 —— 一段被标注为「不得作为实施依据」的内容，
+> 读者仍会读到并可能照着做。Factor Research 自身的 factor / labels / risk / performance
+> 部分不受影响，仍然有效，本文其余章节不需要打折阅读。
 
 ---
 
 ## 1. 总目标
 
-Finkit 不再只把“因子研究”理解为 Alphalens API 的 Rust 重写，而是把现有指标、Formula、Factor、Feature、Risk、Backtest、Calendar、Visualization、FFI 能力重新组合成一个统一的 **Factor Research Layer**。
+Finkit 不再只把“因子研究”理解为 Alphalens API 的 Rust 重写，而是把现有指标、Formula、Factor、Feature、Risk、Calendar、Visualization、FFI 能力重新组合成一个统一的 **Factor Research Layer**。
 
 目标链路：
 
@@ -75,7 +75,6 @@ Rust / Python / CLI / JSON / HTML / Web / compact FFI
 | Meta Label | `features/meta_labels.rs` | 直接接入事件研究与 ML validation |
 | Parallel | `features/parallel.rs` | 沿用 `rayon` feature；研究层增加 segmented executor 而不是另一套线程池 |
 | Portfolio risk | `core/src/risk.rs` | Sharpe/Sortino/Drawdown/VaR/CVaR 作为 portfolio/report SSOT |
-| Lightweight backtest | `core/src/backtest.rs` | 保留 signal validation；风险统计改委托 `risk.rs`；不替代 factor holding engine |
 | Metrics | `core/src/metrics.rs` | 扩展 research counters/histograms，不创建新的可观测性体系 |
 | Store | `features/store.rs` | 复用 `FeatureStore` 接口；Research Artifact Store 作为 typed adapter |
 | Visualization | `visualization/` | 只消费 report model，不拥有研究算法 |
@@ -134,7 +133,6 @@ math::regression
 - `factors::time_series_return`；
 - `features::labels::forward_return`；
 - `features::labels::forward_return_arithmetic`；
-- `backtest.rs` 内部 bar return；
 - `regime.rs` 内部 log return。
 
 新增 canonical：
@@ -190,13 +188,11 @@ pub enum BinPolicy { EqualWidth, EqualFrequency, ExplicitEdges }
 
 ### 3.6 Risk metric 重复
 
-`backtest.rs` 当前内部再次计算 Sharpe / Sortino / Max Drawdown，而 `risk.rs` 已有同类正式 API。
-
-目标：
+风险指标在仓内曾有第二份实现（`backtest.rs` 内部再次计算 Sharpe / Sortino / Max Drawdown）。
+该模块已随「不做回测」的边界删除，重复来源随之消失，但规则仍然成立：
 
 - `risk.rs` 为唯一实现；
-- backtest 只生成 `strat_returns` / equity / trades；
-- report / factor portfolio / capacity 同样调用 `risk.rs`；
+- report / factor portfolio / capacity 一律调用 `risk.rs`；
 - annualization 不允许散落硬编码。
 
 ### 3.7 Graph / cache 不再扩散
@@ -794,7 +790,7 @@ pub struct LabelInterval {
 
 ## 13. Portfolio Construction
 
-不要把 `backtest.rs` 扩展成庞大的多资产引擎。
+finkit 不含回测引擎，也不把组合研究塞回某个指标模块。
 
 新增独立研究组合模块：
 
@@ -906,7 +902,7 @@ pub trait CostModel {
 - max practical participation；
 - liquidity concentration。
 
-`backtest::BacktestConfig` 的 commission/slippage 可通过 adapter 映射到简单 `CostModel`，避免第三套成本定义。
+组合研究所需的 commission/slippage 通过 adapter 映射到简单 `CostModel`，避免出现第三套成本定义。
 
 ---
 
@@ -1452,7 +1448,6 @@ alphalens-reloaded==0.4.6
 selection MI == importance MI
 factor percentile rank == rank kernel
 feature rolling correlation == rolling kernel
-backtest Sharpe == risk::sharpe_ratio
 labels forward arithmetic == core::returns forward arithmetic
 regime log returns == core::returns log returns
 ```
@@ -1589,7 +1584,7 @@ old facade → canonical kernel
 **PR A1 — Return SSOT**
 
 - 新 `core::returns`；
-- factors/labels/backtest/regime 委托；
+- factors/labels/regime 委托；
 - compatibility tests。
 
 **PR A2 — Rank / Quantile SSOT**
@@ -1613,7 +1608,7 @@ old facade → canonical kernel
 
 **PR A5 — Risk SSOT**
 
-- backtest risk stats 委托 `risk.rs`；
+- 风险指标只在 `risk.rs` 实现；
 - annualization config 统一。
 
 **PR A6 — Segmented Executor + cache primitive**
@@ -1726,7 +1721,6 @@ old facade → canonical kernel
 - [ ] Pearson/Spearman correlation canonical family = 1；
 - [ ] forward/simple/log return canonical family = 1；
 - [ ] regression canonical family = 1；
-- [ ] backtest 不再复制 risk metrics；
 - [ ] `Research SSOT Check` green。
 
 ### Alphalens
@@ -1796,7 +1790,7 @@ old facade → canonical kernel
 2. Rank / Quantile SSOT
 3. MI / Correlation SSOT
 4. Regression SSOT
-5. Backtest → Risk SSOT
+5. Risk SSOT
 6. Segmented Executor
 7. ResearchFrame / PanelIndex
 8. ForwardReturnEngine
