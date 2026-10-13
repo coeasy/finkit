@@ -78,6 +78,12 @@ def main() -> int:
             json.dumps({"default_cap": DEFAULT_CAP, "files": offenders},
                        indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
+            # The repository normalizes to LF (`.gitattributes`), and
+            # `write_text` would otherwise translate `\n` to `\r\n` on Windows --
+            # turning every `--write` into a whole-file line-ending churn that
+            # git then has to normalize back. Same reasoning as
+            # `gen_ssot_docs.py`.
+            newline="\n",
         )
         print(f"[check_file_size_budget] baseline written: "
               f"{len(offenders)} file(s) above {DEFAULT_CAP} lines")

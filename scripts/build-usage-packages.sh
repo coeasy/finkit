@@ -33,20 +33,20 @@ VERSION="$( grep -E '^version' "${ROOT}/Cargo.toml" | head -1 | sed -E 's/.*"([^
 case "$( uname -s )" in
   MINGW*|MSYS*|CYGWIN*)
     PLATFORM="windows-x64"
-    PY_PY="python"
+    PY_PY="${FINKIT_PYTHON:-python}"
     PY_PIP="pip" ;;
   Darwin)
     case "$( uname -m )" in
       arm64)  PLATFORM="macos-arm64" ;;
       x86_64) PLATFORM="macos-x64"   ;;
     esac
-    PY_PY="python3"; PY_PIP="pip3" ;;
+    PY_PY="${FINKIT_PYTHON:-python3}"; PY_PIP="pip3" ;;
   Linux)
     case "$( uname -m )" in
       aarch64) PLATFORM="linux-arm64" ;;
       x86_64)  PLATFORM="linux-x64"   ;;
     esac
-    PY_PY="python3"; PY_PIP="pip3" ;;
+    PY_PY="${FINKIT_PYTHON:-python3}"; PY_PIP="pip3" ;;
   *) echo "unsupported platform: $( uname -s )" >&2; exit 1 ;;
 esac
 
@@ -165,16 +165,17 @@ verify_python() {
 }
 
 verify_node() {
-  local tgz
-  tgz="$( find "${DIST}/node/${PLATFORM}" -name 'finkit-*.tgz' 2>/dev/null | head -1 )"
-  if [[ -z "${tgz}" ]]; then
-    err "no tgz to verify"
+  local root_tgz="${DIST}/node/${PLATFORM}/finkit-${VERSION}.tgz"
+  local platform_tgz
+  platform_tgz="$( find "${DIST}/node/${PLATFORM}" -mindepth 1 -maxdepth 1 -name 'finkit-*-*.tgz' 2>/dev/null | head -1 )"
+  if [[ ! -f "${root_tgz}" || -z "${platform_tgz}" ]]; then
+    err "root or platform npm package missing"
     return 1
   fi
   local scratch="${ROOT}/.test_venv/_usage_node"
   rm -rf "${scratch}"
   mkdir -p "${scratch}"
-  ( cd "${scratch}" && npm init -y >/dev/null && npm install --silent "${tgz}" )
+  ( cd "${scratch}" && npm init -y >/dev/null && npm install --silent --no-save --omit=optional "${platform_tgz}" "${root_tgz}" )
   cp "${ROOT}/packaging/usage/node/verify_install.js" "${scratch}/"
   ( cd "${scratch}" && node verify_install.js )
 }
@@ -193,9 +194,10 @@ verify_java() {
 }
 
 verify_go() {
-  # Rewrite the replace directive in tests/go.mod to point at the built tree.
+  # Work in a throwaway copy: verifiers must never rewrite tracked fixtures.
   local mod="${ROOT}/packaging/usage/go/tests/go.mod"
   local go_dist="${DIST}/go/${PLATFORM}/finkit"
+  local scratch="${ROOT}/.test_venv/_usage_go"
   if [[ ! -d "${go_dist}" ]]; then
     err "no go module to verify"
     return 1
@@ -206,9 +208,13 @@ verify_go() {
   # Windows Python nor acceptable to Windows Go. Forward slashes are written
   # into `go.mod` because Go accepts them on every platform, which avoids
   # backslash escaping inside the module file.
-  MOD_NATIVE="$(native_path "${mod}")" \
+  rm -rf "${scratch}"
+  mkdir -p "${scratch}"
+  cp -R "${ROOT}/packaging/usage/go/tests/." "${scratch}/"
+  cp "${ROOT}/packaging/usage/go/verify_install.go" "${scratch}/"
+  MOD_NATIVE="$(native_path "${scratch}/go.mod")" \
   GO_DIST_NATIVE="$(native_path "${go_dist}")" \
-  python3 - <<'PY'
+  "${PY_PY}" - <<'PY'
 import os, pathlib, re
 
 p = pathlib.Path(os.environ["MOD_NATIVE"])
@@ -219,7 +225,7 @@ text = re.sub(r"replace github\.com/coeasy/finkit => .*", replacement, text)
 p.write_text(text, encoding="utf-8")
 print(f"[go] replace -> {replacement.split('=> ')[1]}")
 PY
-  ( cd "${ROOT}/packaging/usage/go/tests" && go run ../verify_install.go )
+  ( cd "${scratch}" && PATH="${DIST}/go/${PLATFORM}/lib:${PATH}" go run verify_install.go )
 }
 
 verify_c() {
@@ -237,14 +243,23 @@ verify_dotnet() {
   local feed="${ROOT}/.test_venv/_usage_dotnet_feed"
   rm -rf "${feed}"; mkdir -p "${feed}"
   cp "${nupkg}" "${feed}/"
-  ( cd "${ROOT}/packaging/usage/dotnet/tests" && \
-    dotnet restore --source "${feed}" --force 2>&1 | tail -3 && \
+  local scratch="${ROOT}/.test_venv/_usage_dotnet"
+  rm -rf "${scratch}"; mkdir -p "${scratch}"
+  cp -R "${ROOT}/packaging/usage/dotnet/tests/." "${scratch}/"
+  local feed_native
+  feed_native="$(native_path "${feed}")"
+  feed_native="${feed_native//\\//}"
+  cat > "${scratch}/NuGet.Config" <<EOF
+<configuration><packageSources><clear/><add key="candidate" value="${feed_native}"/><add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3"/></packageSources></configuration>
+EOF
+  ( cd "${scratch}" && \
+    dotnet restore --configfile NuGet.Config --force 2>&1 | tail -3 && \
     dotnet run --no-restore 2>&1 | tail -10 )
 }
 
 verify_wasm() {
   # WASM Node.js bundle smoke (web bundle needs a browser; documented).
-  ( cd "${ROOT}/packaging/usage/wasm/tests" && node verify_install.js )
+  ( cd "${ROOT}/packaging/usage/wasm/tests" && node verify_install.js "${DIST}/wasm/nodejs" )
 }
 
 # --- main --------------------------------------------------------------------
@@ -328,7 +343,7 @@ DIST_NATIVE="$(native_path "${DIST}")" \
 PLATFORM="${PLATFORM}" \
 LANGS_CSV="${LANGS_CSV}" \
 VERSION="${VERSION}" \
-python3 - <<'PY'
+  "${PY_PY}" - <<'PY'
 import hashlib, json, os, pathlib
 
 root = pathlib.Path(os.environ["DIST_NATIVE"])
@@ -338,9 +353,12 @@ root.mkdir(parents=True, exist_ok=True)
 
 components = []
 for lang in langs:
-    base = root / lang / platform
+    # WASM distributions are grouped by target environment instead of host
+    # platform, so their three bundles live directly below dist/wasm/.
+    base = root / "wasm" if lang == "wasm" else root / lang / platform
     if not base.exists():
         continue
+    component_platform = "wasm32-unknown-unknown" if lang == "wasm" else platform
     for f in sorted(base.rglob("*")):
         if not f.is_file():
             continue
@@ -350,7 +368,7 @@ for lang in langs:
             continue
         components.append({
             "language": lang,
-            "platform": platform,
+            "platform": component_platform,
             "path": str(f.relative_to(root)).replace(os.sep, "/"),
             "size_bytes": f.stat().st_size,
             "sha256": hashlib.sha256(f.read_bytes()).hexdigest(),
@@ -398,22 +416,32 @@ PY
 if [[ "${DO_BUNDLE}" -eq 1 && "${fail_count}" -eq 0 ]]; then
   hdr "bundle"
   BUNDLE="${DIST}/finkit-${VERSION}-${PLATFORM}-usage-bundle.zip"
-  if command -v zip >/dev/null 2>&1; then
-    ( cd "${DIST}" && zip -qr "${BUNDLE}" \
-        python/${PLATFORM} \
-        node/${PLATFORM}  \
-        java/${PLATFORM}  \
-        go/${PLATFORM}    \
-        c/${PLATFORM}     \
-        dotnet/${PLATFORM}\
-        wasm              \
-        manifest.json )
+  DIST_NATIVE="$(native_path "${DIST}")" \
+  BUNDLE_NATIVE="$(native_path "${BUNDLE}")" \
+  LANGS_CSV="${LANGS_CSV}" PLATFORM="${PLATFORM}" \
+  "${PY_PY}" - <<'PY'
+import os, pathlib, zipfile
+
+root = pathlib.Path(os.environ["DIST_NATIVE"])
+bundle = pathlib.Path(os.environ["BUNDLE_NATIVE"])
+langs = os.environ["LANGS_CSV"].split(",")
+platform = os.environ["PLATFORM"]
+with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    for lang in langs:
+        base = root / "wasm" if lang == "wasm" else root / lang / platform
+        if base.exists():
+            for path in sorted(base.rglob("*")):
+                if path.is_file() and not any(part.startswith(".") for part in path.parts):
+                    archive.write(path, path.relative_to(root).as_posix())
+    manifest = root / "manifest.json"
+    archive.write(manifest, manifest.relative_to(root).as_posix())
+print(f"bundle: {bundle}")
+PY
+  if [[ "$?" -eq 0 && -f "${BUNDLE}" ]]; then
     ok "bundle: ${BUNDLE}"
-  elif command -v powershell >/dev/null 2>&1; then
-    powershell -NoProfile -Command "Compress-Archive -Path '${DIST}\\python\\${PLATFORM}','${DIST}\\node\\${PLATFORM}','${DIST}\\java\\${PLATFORM}','${DIST}\\go\\${PLATFORM}','${DIST}\\c\\${PLATFORM}','${DIST}\\dotnet\\${PLATFORM}','${DIST}\\wasm','${DIST}\\manifest.json' -DestinationPath '${BUNDLE}' -Force"
-    ok "bundle (ps1): ${BUNDLE}"
   else
-    err "no zip or powershell found, skipping bundle"
+    err "bundle creation failed"
+    fail_count=$(( fail_count + 1 ))
   fi
 fi
 

@@ -150,6 +150,37 @@ cargo test -p finkit --locked
 cargo package -p finkit --locked --no-verify
 ```
 
+### Supported Cargo feature combinations
+
+The feature list is a **contract about which subsets build**, not a menu of
+interchangeable knobs. Only the combinations below are supported; every other
+subset is a known gap, not a supported tree-shaking path.
+
+| Combination | Flags | Status |
+| --- | --- | --- |
+| default | *(none)* | supported — the only combination a normal consumer needs |
+| bare | `--no-default-features` | supported |
+| no-std | `--no-default-features --features no_std` | supported |
+| tracing-only | `--no-default-features --features tracing` | supported |
+
+Everything else — `std` alone, a single `indicators-*` category, `formula`
+alone, `serde`/`rayon`/`metrics` alone — does **not** currently compile. The
+indicator category flags are a scaffold: turning a category *off* is not a
+working build, because `indicators/mod.rs`'s `impl_slice_output!` adapters and
+`operation.rs` / `composite.rs` / `factors/builtin.rs` depend on more than the
+category graph declares. Build with the default feature set unless you are
+working on that scaffold directly.
+
+`scripts/check_feature_matrix.py` pins this contract in both directions: a
+supported combination that stops building is a failure, and a known-broken one
+that starts building is a stale entry and also fails (so the list cannot rot).
+Run it before claiming a feature subset works:
+
+```bash
+python scripts/check_feature_matrix.py          # all combinations
+python scripts/check_feature_matrix.py --list   # labels only
+```
+
 ## 5. CLI
 
 Download the v0.1.15 Linux x86_64 binary:

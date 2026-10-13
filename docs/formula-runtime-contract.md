@@ -40,10 +40,17 @@
 `eval_with_debug`、`eval_multi_with_dialect(Pine)`、
 `eval_multi_with_pine_security`。
 
-**Plan-capable 入口**：`eval`、`eval_with_params`（Plan 分支走
-`eval_plan_channels`）、`eval_batch`（全部公式无副作用时走共享编译路径）、以及
-所有显式 `*_contract_json` 契约入口。Plan 模式下 `plan_cache_size()` 会增长，
-可作为「Plan 后端确实被使用」的断言。
+**Plan-capable 入口**：`eval`、`eval_with_dialect`、`eval_with_params`（Plan 分支走
+`eval_plan_channels`）、`eval_multi`、`eval_multi_with_dialect`（Pine 除外，见上）、
+`eval_incremental`、`eval_simd`、`eval_batch`、`eval_batch_shared`（全部公式无副作用时
+走共享编译路径）、`eval_partial`（委托 `eval`），以及所有显式 `*_contract_json`
+契约入口。Plan 模式下 `plan_cache_size()` 会增长，可作为「Plan 后端确实被使用」的断言。
+
+> **range / last / into 不在 Plan 的 source-level 入口内。** `eval_range`、`eval_last`、
+> `eval_into` 等入口都接收 `&CompiledFormula`（tree 产物），因此恒为 tree 后端；
+> Plan 的范围执行只存在于 `FormulaHotPlan` + `unified_formula_executor`，未通过
+> `FormulaEngine` 暴露。逐项归属见
+> [公式入口矩阵](architecture/formula-entry-matrix.md)。
 
 跨语言错误码：C ABI 上 `BackendUnsupported` 映射为
 `FFI_FORMULA_BASE (50) + 11 = 61`；Python 抛 `RuntimeError`；Node 抛
@@ -130,8 +137,8 @@ LINEARREG(MA(CLOSE,5),9)
 
 | 类别 | 入口 | 选择 `Plan` 时的行为 |
 |---|---|---|
-| 受管辖、plan 可用 | `eval`、`eval_with_dialect`、`eval_with_params`、`eval_multi`、`eval_multi_with_dialect`、`eval_incremental`、`eval_simd`、`eval_batch`、`eval_batch_shared` | 在 plan 后端执行 |
-| 受管辖、仅 tree | `eval_ast`、`eval_lazy`、`eval_parallel`、`eval_optimized`、`eval_with_debug`、`eval_template`、`eval_with_validation`、`eval_with_defaults`、`eval_zero_copy`、`eval_zero_copy_cached`、`eval_zero_alloc`、`eval_multi_with_pine_security` | 返回 `FormulaError::BackendUnsupported` |
+| 受管辖、plan 可用 | `eval`、`eval_with_dialect`、`eval_with_params`、`eval_multi`、`eval_multi_with_dialect`、`eval_incremental`、`eval_simd`、`eval_batch`、`eval_batch_shared`、`eval_partial` | 在 plan 后端执行 |
+| 受管辖、仅 tree | `eval_ast`、`eval_lazy`、`eval_parallel`、`eval_optimized`、`eval_with_debug`、`eval_template`、`eval_with_validation`、`eval_with_defaults`、`eval_zero_copy`、`eval_zero_copy_cached`、`eval_zero_alloc`、`eval_multi_with_dialect(Pine)`、`eval_multi_with_pine_security` | 返回 `FormulaError::BackendUnsupported` |
 | 后端显式（不受管辖） | `eval_plan*`、`compile_plan*`、`eval_jit`、`compile_jit`、`execute_jit`、`compile_bytecode`、`execute_bytecode`，以及所有接受 `&CompiledFormula` 的入口 | 运行其参数类型所声明的后端 |
 
 **契约**：第二类入口在选中 `Plan` 时**必须报错，不得静默回退到 tree**。回退会让"我选了 plan 后端"这句话失真，并把缺失的 lowering 藏起来而不是报出来。
@@ -144,6 +151,27 @@ FormulaError::BackendUnsupported { backend: "plan".into(), entry: "eval_parallel
 错误信息中 `entry` 是入口名、`backend` 是调用方选择的后端名，便于调用方在日志里直接定位。各绑定对应该错误已分派：Rust `61`、C `61`、Python/Node 抛带该信息的异常。
 
 第三类入口之所以不受管辖，是因为其参数本身**就是**后端选择：`CompiledFormula` / `AstNode` / `Bytecode` 是 tree 的产物，构造它即等于选了 tree；对应的 plan 入口是 `compile_plan` / `eval_plan`。
+
+### 3.5 字符串字面量在 Plan 路径上的语义
+
+字符串字面量**不是** Plan 的阻塞项。两条路径的合同一致：
+
+- 字面量文本按**同一顺序**写入 `FormulaContext::string_table`，包括调用方已预置表项
+  的情况（下标偏移场景）；
+- 字面量节点发出的值是**绝对表位置**——plan 侧由
+  `unified_dispatch` 的 `string_base` 加上编译期局部下标；
+- 门禁 `core/tests/formula_string_literals.rs` 逐条断言两路径的
+  `string_table` 相同、以及 `string_base ∈ {0, 3}` 时的绝对下标。
+
+**消费该下标的四个调用目标也已补齐 plan kernel**：`EM_REF`、`BLOCKDATA`、
+`BLOCKINDEX`、`BLOCKAVG`。它们通过 dispatcher 的 `string_table` 把下标解析回文本，再读
+`ctx.em_data` / `ctx.block_data`（这两份 host 数据随 `HostContext` 进入 plan 执行器）：
+
+- 无 host 数据时输出全 `NaN`，与 tree 路径一致（**不是**报错，也**不是**静默回退）；
+- 有 host 数据时逐值复现 tree 路径，门禁 `formula_string_literals.rs` 同时断言
+  **有限值个数**与逐值相等——只比"两路径是否相等"会漏掉"两边一起返回全 NaN"。
+
+至此字符串字面量在 Plan 路径上不再有已知缺口。
 
 ## 4. Range、Last 和 Append 的一致性
 

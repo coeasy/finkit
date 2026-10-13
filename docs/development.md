@@ -22,7 +22,7 @@ This guide describes the development and validation workflow for the Finkit Rust
 | `scripts/` | version, SSOT generation, benchmark, release/helper scripts |
 | `.github/workflows/` | core CI, docs, wheels, multi-language packaging validation |
 
-`docs/README.md` is the canonical documentation index. The single current execution baseline is [`FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md`](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md). Completed plans, dated audits and temporary implementation snapshots stay in Git history instead of returning as current user documentation: `docs/FINKIT_ARCHITECTURE_AND_OPTIMIZATION_PLAN_V4.md`, `docs/refactor-plan-2026-09-21.md`, `docs/runtime-carrier-adoption-plan-2026-09-20.md`, the `docs/competitive-analysis/` set and several dated roadmaps were deleted from the working tree on 2026-10-10 and are recoverable with `git log --diff-filter=D -- <path>`.
+`docs/README.md` is the canonical documentation index. [`FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md`](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) is the stable architecture background; the current audit, execution record, and release findings live in [`ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md`](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md). Superseded plans and dated snapshots are removed from the working tree and recoverable from Git history with `git log --diff-filter=D -- <path>`.
 
 ## 2. Toolchains
 

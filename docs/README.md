@@ -25,6 +25,8 @@ Choose the path that matches your goal:
 | Understand research architecture | [Factor research architecture](factor-research-architecture.md) |
 | Diagnose failures | [Troubleshooting](troubleshooting.md) |
 | 查看当前架构与重构总纲 | [架构、开发细节与分层重构总纲 V5](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) |
+| 查看最新全链路审查与执行记录 | [架构审查与发布整改（2026-10-13）](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) |
+| 查看 Tree / Plan 入口边界 | [公式入口矩阵](architecture/formula-entry-matrix.md) |
 | 查看当前实现状态（可信矩阵） | [架构现状矩阵](architecture/status-matrix.md) |
 
 ## Product model
@@ -147,9 +149,11 @@ For exact supported functions and Pine mappings, prefer generated catalogs over 
 | [architecture/overview.md](architecture/overview.md) | Crate/binding architecture |
 | [architecture/dataflow.md](architecture/dataflow.md) | Batch, streaming, formula and binding data flow |
 | [architecture/formula-engine.md](architecture/formula-engine.md) | Formula parser/compiler/runtime internals; default backend and entry-point matrix |
+| [architecture/formula-entry-matrix.md](architecture/formula-entry-matrix.md) | Per-entry Tree/Plan backend governance and range/last/into/string-literal support |
 | [architecture/numerical-semantics.md](architecture/numerical-semantics.md) | Per-domain NaN/Infinity policy, the two zero bands, input bounds and warm-up contracts |
 | [architecture/runtime-and-cache-contract.md](architecture/runtime-and-cache-contract.md) | Cache capacity/key/eviction/clear/threading contract and the DirtyRange safety rule |
 | [architecture/status-matrix.md](architecture/status-matrix.md) | Trusted implementation-status matrix (compiles / tested / parity / CI / release) |
+| [ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) | Current feature/architecture review and staged refactor plan |
 | [factor-research-architecture.md](factor-research-architecture.md) | Reuse-first Factor Research / Alphalens-style / multi-factor / portfolio architecture |
 | [ffi/memory-contract.md](ffi/memory-contract.md) | C ABI ownership/lifetime contract |
 | [ffi/error-codes.md](ffi/error-codes.md) | Cross-language/native error codes |
@@ -179,8 +183,8 @@ moved out of the working tree (see below); nothing here is a second baseline.
 
 | Document | Purpose |
 | --- | --- |
-| [FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) | **唯一执行基线** —— 分层架构地图、开发细节、V4 遗留项基线核验、Batch 0–4 重构路线 |
-| [ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-10.md](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-10.md) | **审查与落地记录** —— 以 `496763b7` 为基线的现状审查、阶段 0–5 重构方案；已全部落地，产物为下列三份合同与 [architecture/status-matrix.md](architecture/status-matrix.md) |
+| [FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) | 架构与实现背景总纲 —— 分层架构地图、开发细节、V4 遗留项基线核验 |
+| [ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) | **当前审查与发布整改记录** —— 三轮逻辑/贯通核查、整改进展、发布验证及剩余限制 |
 
 ## Deleted from the working tree — recoverable from git history
 
@@ -206,8 +210,7 @@ git show <commit>^:<path>                       # read the file
 | `docs/gpu-rendering-architecture-zh.md` | 2026-10-10 | GPU 渲染架构设想 |
 | `docs/market-calendar-adapters-zh.md` | 2026-10-10 | 交易日历适配器方案 |
 
-The 2026-10-10 architecture review produced **three contracts that stay in the
-tree**, because they describe current behaviour rather than a past plan:
+The architecture review maintains **current behavior contracts** in the tree:
 
 | Contract | Purpose |
 | --- | --- |
@@ -274,4 +277,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last product/documentation review: 2026-10-10. Workspace target: v0.2.0. Published distribution baseline: v0.1.15._
+_Last product/documentation review: 2026-10-14. Workspace target: v0.2.0. Published distribution baseline: v0.1.15._

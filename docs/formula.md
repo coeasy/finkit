@@ -178,7 +178,34 @@ Python exposes the same contract through `FormulaRegistry`; call
 
 See [formula-runtime.md](formula-runtime.md) and [formula-runtime-contract.md](formula-runtime-contract.md) for the detailed ownership and reuse contract.
 
-## 8. CLI formula execution
+## 8. Rust Tree and Plan backends
+
+`FormulaEngine` defaults to `FormulaExecutionMode::Tree`. Rust callers can opt in
+to the compiled `Plan` backend explicitly:
+
+```rust
+use finkit::formula::{FormulaEngine, FormulaExecutionMode};
+
+let mut engine = FormulaEngine::new();
+engine.set_execution_mode(FormulaExecutionMode::Plan);
+let result = engine.eval("MA(CLOSE, 20)", &mut context)?;
+```
+
+The two backends agree on the checked-in formula corpus, but their performance
+varies by dialect and workload: Plan is faster for the measured Pine corpus and
+slower for the measured domestic terminal corpus, so Tree remains the default.
+Some explicitly tree-only APIs return `BackendUnsupported` under Plan; see the
+[Tree/Plan entry matrix](architecture/formula-entry-matrix.md) before selecting
+a backend for an API surface.
+
+The Rust `FormulaContext` host-data functions `EM_REF`, `BLOCKDATA`,
+`BLOCKINDEX`, and `BLOCKAVG` can run under either backend when their matching
+`EmData` or `BlockData` is attached to the context. Without host data they yield
+`NaN` series; with host data, unknown keys are errors and mismatched series
+lengths yield `NaN` series. Binding wrappers that do not expose these host data
+inputs do not gain access to those values merely by selecting a backend.
+
+## 9. CLI formula execution
 
 ```bash
 ./target/release/finkit-cli formula "MA(CLOSE, 5)" --input ohlcv.csv
@@ -187,7 +214,7 @@ See [formula-runtime.md](formula-runtime.md) and [formula-runtime-contract.md](f
 
 See [cli.md](cli.md) for input formats and command behavior.
 
-## 9. Dialects and compatibility
+## 10. Dialects and compatibility
 
 Finkit contains compatibility layers for terminal-style formulas and a deliberately limited Pine Script v5 subset.
 
@@ -209,13 +236,13 @@ For Pine:
 
 Do not publish fixed compatibility percentages in prose unless they are generated from an explicit test corpus and refreshed automatically.
 
-## 10. Pine migration boundaries
+## 11. Pine migration boundaries
 
 Pine concepts such as `strategy()`, alerts, external libraries, unrestricted chart objects, complete repaint semantics, and broker/order execution are not equivalent to formula evaluation.
 
 Move unsupported strategy and application behavior to the host application instead of forcing it into the formula runtime.
 
-## 11. Warm-up and NaN policy
+## 12. Warm-up and NaN policy
 
 Rolling formula functions generally preserve input length and emit leading `NaN` values while lookback is incomplete.
 
@@ -229,7 +256,7 @@ signal[ready] = series_a[ready] > series_b[ready]
 
 Do not independently drop warm-up rows from multiple series because that can destroy bar alignment.
 
-## 12. Performance model
+## 13. Performance model
 
 For repeated workloads:
 
@@ -243,7 +270,7 @@ Finkit has benchmark, allocation, and relative-performance gates, but measured r
 
 See [formula-performance.md](formula-performance.md).
 
-## 13. Debugging
+## 14. Debugging
 
 Formula-debug support is **binding-specific**, not one universally named cross-language API.
 

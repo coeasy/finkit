@@ -1934,6 +1934,25 @@ let json = serde_json::to_string_pretty(&registry_document()).unwrap();
 
 公式引擎支持表达式计算，类似通达信/同花顺公式。
 
+Rust 的 `FormulaEngine` 默认使用 `FormulaExecutionMode::Tree`。可显式选择编译计划后端：
+
+```rust
+use finkit::formula::{FormulaEngine, FormulaExecutionMode};
+
+let mut engine = FormulaEngine::new();
+engine.set_execution_mode(FormulaExecutionMode::Plan);
+let result = engine.eval("MA(CLOSE, 20)", &mut context)?;
+```
+
+Plan 与 Tree 在仓库公式语料上逐值一致，但性能依方言和公式结构而异；当前测量中 Plan
+适合 Pine 语料，国内终端语料仍较慢，因此暂不作为默认。部分入口明确仅支持 Tree，选择
+Plan 时会返回 `BackendUnsupported`；完整入口分类见[公式入口矩阵](architecture/formula-entry-matrix.md)。
+
+Rust `FormulaContext` 中的 `EM_REF`、`BLOCKDATA`、`BLOCKINDEX`、`BLOCKAVG` 会从上下文的
+`EmData` / `BlockData` 读取字符串索引所指向的外部序列。未提供相应 host 数据时返回全 `NaN`；
+已提供数据但 key 不存在时返回错误；序列长度不匹配时返回全 `NaN`。绑定没有暴露这些 host
+输入时，不能通过公式字符串自行读取外部数据。
+
 ### 基础使用
 
 Python 侧的入口是模块级函数 `formula_eval`，它返回 `{输出名: ndarray}` 的字典。

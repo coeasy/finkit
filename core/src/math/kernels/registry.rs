@@ -29,7 +29,7 @@ pub struct KernelCapability {
     pub family: KernelFamily,
     /// Supports O(1) streaming updates for canonical state implementations.
     pub streaming: bool,
-    /// Can participate in DirtyRange execution. Recursive members require a
+    /// Can participate in `DirtyRange` execution. Recursive members require a
     /// row-addressable checkpoint; fixed-window members can use finite replay.
     pub dirty_range: bool,
     /// Family contains recursive-state kernels and therefore must not be

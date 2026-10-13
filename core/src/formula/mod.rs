@@ -15,6 +15,7 @@
 
 pub mod analysis;
 pub mod ast;
+pub(crate) mod bridge_dispatch;
 pub mod bytecode;
 pub mod compat;
 pub mod compiler;
@@ -39,6 +40,7 @@ mod functions_legacy;
 pub mod functions_talib_081;
 pub mod hot_plan;
 pub mod jit;
+pub(crate) mod kernel_string_index;
 pub mod memory_pool;
 pub mod ops;
 pub mod opt_level;

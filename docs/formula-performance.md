@@ -34,6 +34,52 @@ The Formula Engine supports three execution modes:
 | Optimized Execution | 1.1-1.5x faster than AST | Production systems |
 | Builtin Function Mapping | Near-native (1.0-1.3x native) | Direct indicator calculation |
 
+## Backend Choice: Tree vs Plan
+
+The table above compares *interpretation strategies within the tree backend*
+(AST / bytecode / optimized). It does not cover the orthogonal axis:
+`FormulaExecutionMode::{Tree, Plan}`, which selects between the AST tree-walker
+and the compiled-plan executor. That axis is measured separately, over the real
+checked-in corpora, by:
+
+```bash
+cargo run -p finkit --release --example formula_mode_workload_probe -- --scaled
+```
+
+Measured 2026-10-13 over 60 corpus cases (35 domestic terminal formulas + 25
+Pine scripts), warm (cached) execution, 250 and 5000 bars. Ratios are
+`Plan / Tree`; below 1.0 means Plan is faster.
+
+| Corpus | Bars | warm time | warm allocations |
+|---|---:|---:|---:|
+| domestic | 250 | 1.84x (Plan slower) | 1.39x |
+| domestic | 5000 | 1.27x (Plan slower) | 1.39x |
+| Pine | 250 | **0.25x (Plan 4x faster)** | **0.089x** |
+| Pine | 5000 | **0.49x (Plan 2x faster)** | **0.089x** |
+
+The domestic 5000-bar and allocation figures improved on the same day from
+1.53x and 1.54x after fixing a hotspot in the `CALL:` compatibility bridge:
+each bridged node built a full-length `FormulaContext` — five `len`-sized
+zero-filled arrays — although all 57 functions behind the bridge read only
+`data_len`. At 5000 bars that was ~200 KB of pointless memory traffic per call,
+which dominated call-heavy formulas (`smi_cross` measured 4.36x before, 2.99x
+after). The 250-bar tier is unchanged, as expected: the removed cost is per
+*call*, so it only matters once `len` is large.
+
+Two things drive the split, and neither is obvious from the numbers alone:
+
+- **Pine favours Plan heavily** because `eval_with_dialect`'s tree branch
+  re-parses and re-maps Pine on every call — Pine has no AST cache — while the
+  plan path caches for every dialect. The gap narrows as data grows, because the
+  re-parse cost is fixed while execution scales.
+- **Domestic favours Tree slightly** because its tree branch caches the compiled
+  formula and the plan executor's per-node dispatch costs more than an AST walk
+  at these sizes.
+
+Allocation counts do not scale with bar count (they are per-call, not per-bar).
+The same probe also reports coverage and Tree/Plan consistency, and flags any
+case where both backends agree while computing nothing.
+
 ## Test Environment
 
 - **CPU**: Intel Core i7-12700K (12 cores, 20 threads)

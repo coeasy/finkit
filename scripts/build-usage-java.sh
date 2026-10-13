@@ -31,7 +31,15 @@ case "$( uname -s )" in
 esac
 
 OUT_DIR="${ROOT}/dist/java/${PLATFORM}"
-mkdir -p "${OUT_DIR}/natives"
+case "${PLATFORM}" in
+  windows-x64) NATIVE_PLATFORM="windows-x86_64" ;;
+  macos-x64) NATIVE_PLATFORM="macos-x86_64" ;;
+  macos-arm64) NATIVE_PLATFORM="macos-aarch64" ;;
+  linux-x64) NATIVE_PLATFORM="linux-x86_64" ;;
+  linux-arm64) NATIVE_PLATFORM="linux-aarch64" ;;
+esac
+NATIVE_RESOURCE_DIR="${OUT_DIR}/natives/${NATIVE_PLATFORM}"
+mkdir -p "${NATIVE_RESOURCE_DIR}"
 
 VERSION="$( grep -E '^version' "${ROOT}/Cargo.toml" | head -1 | sed -E 's/.*"([^"]+)".*/\1/' )"
 JAR_NAME="finkit-${VERSION}.jar"
@@ -53,24 +61,24 @@ if [[ ! -f "${ROOT}/target/release/${NATIVE}" ]]; then
   echo "[build-usage-java] ERROR: native lib not found: ${NATIVE}" >&2
   exit 1
 fi
-cp "${ROOT}/target/release/${NATIVE}" "${OUT_DIR}/natives/"
-echo "[build-usage-java] staged natives/${NATIVE}"
+cp "${ROOT}/target/release/${NATIVE}" "${NATIVE_RESOURCE_DIR}/"
+echo "[build-usage-java] staged natives/${NATIVE_PLATFORM}/${NATIVE}"
 
 # 3. Maven package --------------------------------------------------------
 if has_tool mvn; then
   echo "[build-usage-java] mvn package -DskipTests"
   ( cd "${BINDING_DIR}" && mvn -B -q package -DskipTests -Dmaven.javadoc.skip=true )
 
-  # Pick the primary jar (skip sources/javadoc).
-  for jar in "${BINDING_DIR}/target/"*.jar; do
-    base="$( basename "${jar}" )"
-    if [[ "${base}" == *sources* || "${base}" == *javadoc* ]]; then
-      continue
-    fi
-    cp "${jar}" "${OUT_DIR}/${JAR_NAME}"
-    echo "[build-usage-java] staged ${JAR_NAME}"
-    break
-  done
+  # Select the workspace-versioned Finkit artifact explicitly. The module also
+  # emits an older alpha-ta compatibility jar, which sorts first and contains
+  # no current com.alphata API classes.
+  PRIMARY_JAR="${BINDING_DIR}/target/finkit-${VERSION}.jar"
+  if [[ ! -f "${PRIMARY_JAR}" ]]; then
+    echo "[build-usage-java] ERROR: expected artifact missing: ${PRIMARY_JAR}" >&2
+    exit 1
+  fi
+  cp "${PRIMARY_JAR}" "${OUT_DIR}/${JAR_NAME}"
+  echo "[build-usage-java] staged ${JAR_NAME}"
 else
   echo "[build-usage-java] mvn not found, skipping jar packaging"
 fi
@@ -78,7 +86,7 @@ fi
 # 4. Merge the native lib *inside* the jar -------------------------------
 if [[ -f "${OUT_DIR}/${JAR_NAME}" ]]; then
   echo "[build-usage-java] embedding native lib into ${JAR_NAME}"
-  ( cd "${OUT_DIR}" && jar uf "${JAR_NAME}" -C natives "${NATIVE}" )
+  ( cd "${OUT_DIR}" && jar uf "${JAR_NAME}" -C . "natives/${NATIVE_PLATFORM}/${NATIVE}" )
 fi
 
 # 5. Drop the staging natives/ directory now that it is inside the jar ----

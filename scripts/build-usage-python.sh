@@ -37,41 +37,42 @@ OUT_DIR="${ROOT}/dist/python/${PLATFORM}"
 mkdir -p "${OUT_DIR}"
 
 # --- helpers ----------------------------------------------------------------
-PYTHON_VERSIONS=( "3.10" "3.11" "3.12" "3.13" "3.14" )
+PYTHON_BIN="${FINKIT_PYTHON:-python3}"
+export PYO3_PYTHON="${PYTHON_BIN}"
+if [[ "$( uname -s )" == MINGW* || "$( uname -s )" == MSYS* || "$( uname -s )" == CYGWIN* ]]; then
+  PYTHON_DIR="$( dirname "${PYTHON_BIN}" )"
+  export PATH="${PYTHON_DIR}/Scripts:${PATH}"
+fi
 
 has_tool() { command -v "$1" >/dev/null 2>&1; }
 
-# Find the pythonX.Y interpreter for a given X.Y version. Echoes the path
-# (or empty). Fixes the `return` bug in build-all-packages.sh.
-python_for_version() {
-  local v="$1"
-  if has_tool "python${v}"; then
-    echo "python${v}"; return 0
-  fi
-  if has_tool "python3"; then
-    local cur
-    cur="$( python3 --version 2>&1 | awk '{print $2}' )"
-    if [[ "${cur}" == "${v}"* ]]; then
-      echo "python3"; return 0
-    fi
-  fi
-  return 1
-}
-
 ensure_maturin() {
+  if "${PYTHON_BIN}" -m maturin --version >/dev/null 2>&1; then return 0; fi
   if has_tool maturin; then return 0; fi
   echo "[build-usage-python] maturin not found, installing..."
-  python3 -m pip install --quiet maturin
+  "${PYTHON_BIN}" -m pip install --quiet maturin
 }
 
-# --- 1) abi3 stable wheel (Python 3.8+) ------------------------------------
+# Prefer the module installed for the selected Python interpreter. This also
+# works on Windows environments where the Python Scripts directory is not on
+# Git Bash's PATH and the `maturin` shim cannot be discovered.
+maturin() {
+  if "${PYTHON_BIN}" -m maturin --version >/dev/null 2>&1; then
+    "${PYTHON_BIN}" -m maturin "$@"
+  else
+    command maturin "$@"
+  fi
+}
+
+# --- abi3 stable wheel (Python 3.8+) --------------------------------------
 build_abi3() {
   echo "[build-usage-python] building abi3 stable wheel"
   (
     cd "${BINDING_DIR}"
-    # maturin refuses `--interpreter` together with `--features abi3`, so
-    # we build the cdylib here and let maturin pick the abi3 layout.
-    cargo build --release --features abi3 >/dev/null 2>&1 || true
+    # The project config enables PyO3 abi3 globally. One stable-ABI wheel
+    # covers all supported interpreters; repeating builds with each
+    # --interpreter only overwrote the same cp38-abi3 artifact and could hide
+    # failed cargo builds behind `|| true`.
     maturin build --release --out "${OUT_DIR}" --features abi3 --strip
   )
   local n
@@ -79,28 +80,9 @@ build_abi3() {
   echo "[build-usage-python] abi3 wheels: ${n}"
 }
 
-# --- 2) version-specific wheels --------------------------------------------
-build_specific() {
-  local v="$1"
-  local py
-  if ! py="$( python_for_version "${v}" )"; then
-    echo "[build-usage-python] Python ${v} not found, skipping"
-    return 0
-  fi
-
-  echo "[build-usage-python] building wheel for Python ${v} (${py})"
-  (
-    cd "${BINDING_DIR}"
-    maturin build --release --out "${OUT_DIR}" --interpreter "${py}" --strip
-  )
-}
-
 # --- main -------------------------------------------------------------------
 ensure_maturin
 build_abi3
-for v in "${PYTHON_VERSIONS[@]}"; do
-  build_specific "${v}"
-done
 
 # Sanity: drop any wheel that still carries the legacy `rust_ta_lib` name.
 LEGACY=$( find "${OUT_DIR}" -name 'rust_ta_lib-*.whl' 2>/dev/null || true )

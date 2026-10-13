@@ -13,15 +13,20 @@
 //! * the literal texts reach `ctx.string_table` in the same order on both paths,
 //!   including when the caller pre-populated the table (the index offset case),
 //! * the emitted index is the absolute table position, and
-//! * the string-consuming functions the plan dispatcher still cannot run are
-//!   listed explicitly, one by one, instead of being silently absent.
+//! * the four functions that *consume* that index (`EM_REF`, `BLOCKDATA`,
+//!   `BLOCKINDEX`, `BLOCKAVG`) run on the plan path and agree with the tree path
+//!   when host data is supplied.
+//!
+//! The consuming kernels used to be absent, so any formula that read its own
+//! literal failed at dispatch. They now resolve the index through the
+//! dispatcher's `string_table` and read `ctx.em_data` / `ctx.block_data`, which
+//! travel to the plan executor in `HostContext`.
 
 use finkit::formula::{
-    parse_formula, unified_formula_executor, FormulaContext, FormulaEngine, FormulaExecutionMode,
-    FormulaHotPlan,
+    parse_formula, unified_formula_executor, BlockData, EmData, FormulaContext, FormulaEngine,
+    FormulaExecutionMode, FormulaHotPlan,
 };
 use ndarray::Array1;
-use std::collections::BTreeMap;
 
 fn context(len: usize) -> FormulaContext {
     FormulaContext::new(
@@ -158,48 +163,136 @@ fn string_literal_kernel_emits_base_plus_local_index() {
     }
 }
 
-/// String-consuming functions the plan dispatcher has no kernel for.
+/// The four functions that consume a string literal's index.
 ///
-/// The literal itself is handled — the text lands in `ctx.string_table` and the
-/// index is produced correctly (the tests above prove it) — but these four call
-/// targets are absent from the dispatcher, so the arithmetic that consumes the
-/// index still cannot run. They are listed rather than left implicit: a stale
-/// entry fails the test below, so closing one of them forces this list to
-/// shrink.
-const STRING_KERNEL_BACKLOG: &[(&str, &str)] = &[
-    ("EM_REF(\"IDX\", 1)", "no kernel for CALL:EM_REF"),
-    (
-        "BLOCKDATA(\"BK\", \"FIELD\")",
-        "no kernel for CALL:BLOCKDATA",
-    ),
-    ("BLOCKINDEX(\"BK\")", "no kernel for CALL:BLOCKINDEX"),
-    ("BLOCKAVG(\"BK\")", "no kernel for CALL:BLOCKAVG"),
+/// They were the *entire* remaining string-literal gap on the plan path: the
+/// literal itself already reached `ctx.string_table` on both paths, but nothing
+/// could read it back. The kernels now exist, so these sources must **run** on
+/// the plan path (yielding `NaN` without host data) instead of failing with a
+/// missing kernel. Keeping the roster here means removing a kernel turns this
+/// red rather than silently shrinking a backlog list.
+const STRING_CONSUMING_SOURCES: &[&str] = &[
+    "EM_REF(\"IDX\", 1)",
+    "BLOCKDATA(\"BK\", \"FIELD\")",
+    "BLOCKINDEX(\"BK\")",
+    "BLOCKAVG(\"BK\")",
 ];
 
 #[test]
-fn string_consuming_kernel_backlog_matches_reality() {
-    let mut observed = BTreeMap::new();
-    for (source, _) in STRING_KERNEL_BACKLOG {
+fn string_consuming_functions_run_on_the_plan_path() {
+    for source in STRING_CONSUMING_SOURCES {
         let mut ctx = context(5);
         let outcome = engine(FormulaExecutionMode::Plan).eval(source, &mut ctx);
-        if let Err(error) = outcome {
-            let text = error.to_string();
-            // A missing kernel is the documented reason. Anything else — a
-            // numeric divergence, a lost literal — must fail this test instead
-            // of being absorbed into the backlog.
+        assert!(
+            outcome.is_ok(),
+            "`{source}` must run on the plan path now that its kernel exists: {:?}",
+            outcome.err()
+        );
+    }
+}
+
+/// A context carrying the host data the consuming kernels read.
+fn context_with_host(len: usize) -> FormulaContext {
+    let series =
+        |base: f64| Array1::from_vec((0..len).map(|i| base + i as f64).collect::<Vec<_>>());
+
+    let mut em = EmData::default();
+    em.external_data.insert("IDX".to_string(), series(100.0));
+
+    let mut block = BlockData::default();
+    block.index_close.insert("BK".to_string(), series(200.0));
+    block.avg_price.insert("BK".to_string(), series(300.0));
+    block.pct_change.insert("BK".to_string(), series(0.5));
+    block.volume.insert("BK".to_string(), series(1000.0));
+    block.amount.insert("BK".to_string(), series(5000.0));
+    let mut fields = std::collections::HashMap::new();
+    fields.insert("CUSTOM".to_string(), series(7.0));
+    block.custom_fields.insert("BK".to_string(), fields);
+
+    context(len).with_em_data(em).with_block_data(block)
+}
+
+/// With host data present, the plan kernels must reproduce the tree path
+/// *value for value* — not merely both return `NaN`.
+///
+/// The finite-count assertion is the load-bearing half: an implementation that
+/// returned an all-`NaN` series would still agree with itself on both paths, so
+/// path equality alone would not notice.
+#[test]
+fn string_consuming_functions_match_the_tree_path_with_host_data() {
+    const CASES: &[&str] = &[
+        "EM_REF(\"IDX\", 1)",
+        "EM_REF(\"IDX\", 3)",
+        "BLOCKINDEX(\"BK\")",
+        "BLOCKAVG(\"BK\")",
+        "BLOCKDATA(\"BK\", \"INDEX\")",
+        "BLOCKDATA(\"BK\", \"VOL\")",
+        "BLOCKDATA(\"BK\", \"AMOUNT\")",
+        "BLOCKDATA(\"BK\", \"CUSTOM\")",
+        "BLOCKAVG(\"BK\") + CLOSE",
+    ];
+
+    let finite_count = |series: &[f64]| series.iter().filter(|value| value.is_finite()).count();
+
+    for source in CASES {
+        let tree = engine(FormulaExecutionMode::Tree)
+            .eval(source, &mut context_with_host(8))
+            .unwrap_or_else(|error| panic!("tree failed on `{source}`: {error}"));
+        let plan = engine(FormulaExecutionMode::Plan)
+            .eval(source, &mut context_with_host(8))
+            .unwrap_or_else(|error| panic!("plan failed on `{source}`: {error}"));
+
+        assert_eq!(tree.len(), plan.len(), "length mismatch on `{source}`");
+        let tree_values = tree.as_slice().expect("tree output is contiguous");
+        let plan_values = plan.as_slice().expect("plan output is contiguous");
+        assert!(
+            finite_count(tree_values) > 0,
+            "`{source}` produced no finite value on the reference path; the case proves nothing"
+        );
+        assert_eq!(
+            finite_count(tree_values),
+            finite_count(plan_values),
+            "`{source}`: tree and plan disagree on how many finite values they produce"
+        );
+        for (index, (t, p)) in tree_values.iter().zip(plan_values).enumerate() {
             assert!(
-                text.contains("kernel dispatch failed"),
-                "`{source}` failed for an unexpected reason: {text}"
+                (t - p).abs() < 1e-12 || (t.is_nan() && p.is_nan()),
+                "`{source}` index {index}: tree={t} plan={p}"
             );
-            observed.insert(*source, text);
         }
     }
+}
 
-    let mut declared: Vec<&str> = STRING_KERNEL_BACKLOG.iter().map(|(src, _)| *src).collect();
-    declared.sort_unstable();
-    let actual: Vec<&str> = observed.keys().copied().collect();
-    assert_eq!(
-        actual, declared,
-        "the declared string-kernel backlog no longer matches what the plan path cannot run"
-    );
+#[test]
+fn string_consuming_functions_preserve_legacy_arity_on_both_backends() {
+    for source in ["EM_REF(\"IDX\")", "BLOCKDATA(\"BK\")"] {
+        let tree = engine(FormulaExecutionMode::Tree).eval(source, &mut context(5));
+        let plan = engine(FormulaExecutionMode::Plan).eval(source, &mut context(5));
+        assert!(
+            tree.is_err(),
+            "tree accepted missing arguments in `{source}`"
+        );
+        assert!(
+            plan.is_err(),
+            "plan accepted missing arguments in `{source}`"
+        );
+    }
+
+    for source in [
+        "EM_REF(\"IDX\", 1, CLOSE)",
+        "BLOCKDATA(\"BK\", \"CLOSE\", CLOSE)",
+        "BLOCKINDEX(\"BK\", CLOSE)",
+        "BLOCKAVG(\"BK\", CLOSE)",
+    ] {
+        let tree = engine(FormulaExecutionMode::Tree).eval(source, &mut context(5));
+        let plan = engine(FormulaExecutionMode::Plan).eval(source, &mut context(5));
+        assert!(
+            tree.is_ok(),
+            "legacy tree path rejected trailing args in `{source}`"
+        );
+        assert!(
+            plan.is_ok(),
+            "plan path rejected trailing args in `{source}`"
+        );
+    }
 }

@@ -27,7 +27,8 @@
   Emit the manifest as JSON to stdout in addition to the file.
 
 .PARAMETER OutDir
-  Override the default dist/ output directory.
+  Must resolve to the repository's dist/ directory; per-language builders use
+  that single canonical output path.
 
 .EXAMPLE
   pwsh ./scripts/build-usage-packages.ps1
@@ -47,7 +48,14 @@ $ErrorActionPreference = "Stop"
 
 $ScriptDir = (Resolve-Path "$PSScriptRoot").Path
 $Root      = (Resolve-Path "$PSScriptRoot\..").Path
-$Dist      = if ($OutDir) { (Resolve-Path $OutDir).Path } else { Join-Path $Root "dist" }
+$Dist      = Join-Path $Root "dist"
+if ($OutDir) {
+    $requestedDist = [System.IO.Path]::GetFullPath($OutDir)
+    $canonicalDist = [System.IO.Path]::GetFullPath($Dist)
+    if (-not [string]::Equals($requestedDist, $canonicalDist, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "-OutDir must be the repository dist directory ($canonicalDist); per-language builders do not support alternate roots."
+    }
+}
 $null      = New-Item -ItemType Directory -Force -Path $Dist
 
 # --- version ----------------------------------------------------------------
@@ -68,8 +76,8 @@ function Write-Err  ([string]$m) { Write-Host "  [FAIL] $m" -ForegroundColor Red
 function Write-Info ([string]$m) { Write-Host "  [INFO] $m" -ForegroundColor Cyan }
 function Write-Hdr  ([string]$m) { Write-Host ""; Write-Host "=== $m ===" -ForegroundColor DarkCyan }
 
-$Py = "python"
-$Pip = "pip"
+$Py = if ($env:FINKIT_PYTHON) { $env:FINKIT_PYTHON } else { "python" }
+$Bash = if (Test-Path "${env:ProgramFiles}\Git\bin\bash.exe") { "${env:ProgramFiles}\Git\bin\bash.exe" } else { "bash" }
 
 # --- builders / verifiers ---------------------------------------------------
 # Generic dispatch helper: try <lang>.ps1, fall back to <lang>.sh via bash.
@@ -82,7 +90,8 @@ function Invoke-LangBuilder {
     if (Test-Path $ps1) {
         & $ps1
     } elseif (Test-Path $sh) {
-        & bash $sh
+        & $Bash $sh
+        if ($LASTEXITCODE -ne 0) { throw "$Lang builder exited $LASTEXITCODE" }
     } else {
         throw "no builder for $Lang (looked for $ps1 and $sh)"
     }
@@ -122,15 +131,17 @@ $Verifiers = [ordered]@{
         if ($LASTEXITCODE -ne 0) { throw "verify_install.py exited $LASTEXITCODE" }
     }
     node = {
-        $tgz = Get-ChildItem -Path (Join-Path $Dist "node\$Platform") -Filter "finkit-*.tgz" -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $tgz) { throw "no tgz to verify" }
+        $nodeDir = Join-Path $Dist "node\$Platform"
+        $rootTgz = Join-Path $nodeDir "finkit-$Version.tgz"
+        $platformTgz = Get-ChildItem -Path $nodeDir -Filter "finkit-*-*.tgz" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not (Test-Path $rootTgz) -or -not $platformTgz) { throw "root or platform npm package missing" }
         $scratch = Join-Path $Root ".test_venv\_usage_node"
         Remove-Item -Recurse -Force $scratch -ErrorAction SilentlyContinue
         $null = New-Item -ItemType Directory -Force -Path $scratch
         Push-Location $scratch
         try {
             npm init -y | Out-Null
-            npm install --silent $tgz.FullName | Out-Null
+            npm install --silent --no-save --omit=optional $platformTgz.FullName $rootTgz | Out-Null
             Copy-Item (Join-Path $Root "packaging\usage\node\verify_install.js") .
             node verify_install.js
         } finally { Pop-Location }
@@ -152,14 +163,27 @@ $Verifiers = [ordered]@{
         $mod = Join-Path $Root "packaging\usage\go\tests\go.mod"
         $goDist = Join-Path $Dist "go\$Platform\finkit"
         if (-not (Test-Path $goDist)) { throw "no go module to verify" }
-        (Get-Content $mod) -replace 'replace github.com/coeasy/finkit => .*', "replace github.com/coeasy/finkit => $goDist" | Set-Content $mod
-        Push-Location (Join-Path $Root "packaging\usage\go\tests")
-        try { & go run ..\verify_install.go } finally { Pop-Location }
+        $scratch = Join-Path $Root ".test_venv\_usage_go"
+        Remove-Item -Recurse -Force $scratch -ErrorAction SilentlyContinue
+        $null = New-Item -ItemType Directory -Force -Path $scratch
+        Copy-Item (Join-Path $Root "packaging\usage\go\tests\*") $scratch -Recurse -Force
+        Copy-Item (Join-Path $Root "packaging\usage\go\verify_install.go") $scratch
+        (Get-Content $mod) -replace 'replace github.com/coeasy/finkit => .*', "replace github.com/coeasy/finkit => $goDist" | Set-Content (Join-Path $scratch "go.mod")
+        Push-Location $scratch
+        $oldPath = $env:PATH
+        try {
+            $env:PATH = (Join-Path $Dist "go\$Platform\lib") + ";" + $env:PATH
+            & go run verify_install.go
+            if ($LASTEXITCODE -ne 0) { throw "go verifier exited $LASTEXITCODE" }
+        } finally { $env:PATH = $oldPath; Pop-Location }
     }
     c = {
-        $bash = "bash"
+        $bash = $Bash
         $test = Join-Path $Root "packaging\usage\c\tests\test_c_install.sh"
-        if (Test-Path $test) { & $bash $test } else { Write-Warn "no c verifier — skipping" }
+        if (-not (Test-Path $test)) { throw "missing C install verifier: $test" }
+        $env:PATH = (Join-Path $Dist "c\$Platform\installed\bin") + ";" + $env:PATH
+        & $bash $test
+        if ($LASTEXITCODE -ne 0) { throw "C verifier exited $LASTEXITCODE" }
     }
     dotnet = {
         $nupkg = Get-ChildItem -Path (Join-Path $Dist "dotnet\$Platform") -Filter "Finkit.*.nupkg" -ErrorAction SilentlyContinue | Select-Object -First 1
@@ -168,12 +192,19 @@ $Verifiers = [ordered]@{
         Remove-Item -Recurse -Force $feed -ErrorAction SilentlyContinue
         $null = New-Item -ItemType Directory -Force -Path $feed
         Copy-Item $nupkg.FullName $feed
-        Push-Location (Join-Path $Root "packaging\usage\dotnet\tests")
+        $scratch = Join-Path $Root ".test_venv\_usage_dotnet"
+        Remove-Item -Recurse -Force $scratch -ErrorAction SilentlyContinue
+        $null = New-Item -ItemType Directory -Force -Path $scratch
+        Copy-Item (Join-Path $Root "packaging\usage\dotnet\tests\*") $scratch -Recurse -Force
+        Push-Location $scratch
         try {
-            # Build + run on the same line so we can inspect $LASTEXITCODE.
-            # `dotnet run` swallows non-zero exit codes when piped, so
-            # we explicitly capture and rethrow.
-            $out = & dotnet run --source $feed 2>&1
+            $feedSource = [System.Security.SecurityElement]::Escape($feed)
+            @"
+<configuration><packageSources><clear/><add key="candidate" value="$feedSource"/><add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3"/></packageSources></configuration>
+"@ | Set-Content -Encoding utf8 (Join-Path $scratch "NuGet.Config")
+            & dotnet restore --configfile (Join-Path $scratch "NuGet.Config")
+            if ($LASTEXITCODE -ne 0) { throw "dotnet restore exited $LASTEXITCODE" }
+            $out = & dotnet run --no-restore 2>&1
             $rc  = $LASTEXITCODE
             $out | Select-Object -Last 10
             if ($rc -ne 0) { throw "dotnet run exited $rc" }
@@ -181,7 +212,7 @@ $Verifiers = [ordered]@{
     }
     wasm = {
         Push-Location (Join-Path $Root "packaging\usage\wasm\tests")
-        try { & node verify_install.js } finally { Pop-Location }
+        try { & node verify_install.js (Join-Path $Dist "wasm\nodejs") } finally { Pop-Location }
     }
 }
 
@@ -197,6 +228,15 @@ $okCount  = 0
 $failCount = 0
 
 foreach ($lang in $Languages) {
+    $langOut = if ($lang -eq "wasm") { Join-Path $Root "dist\wasm" } else { Join-Path $Root "dist\$lang\$Platform" }
+    $expectedParent = if ($lang -eq "wasm") { Join-Path $Root "dist" } else { Join-Path $Root "dist\$lang" }
+    $resolvedOut = [System.IO.Path]::GetFullPath($langOut)
+    $resolvedParent = [System.IO.Path]::GetFullPath($expectedParent)
+    if (-not $resolvedOut.StartsWith($resolvedParent + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -and
+        -not [string]::Equals($resolvedOut, [System.IO.Path]::GetFullPath((Join-Path $Root "dist\wasm")), [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "refusing to clean output outside dist/: $resolvedOut"
+    }
+    if (Test-Path $langOut) { Remove-Item -LiteralPath $langOut -Recurse -Force }
     Write-Hdr "[$lang] build"
     try {
         & $Builders[$lang]
@@ -234,9 +274,11 @@ langs = os.environ["LANGS"].split(",")
 plat  = os.environ["PLATFORM"]
 components = []
 for lang in langs:
-    base = root / lang / plat
+    # WASM outputs are shared across hosts and grouped by environment target.
+    base = root / "wasm" if lang == "wasm" else root / lang / plat
     if not base.exists():
         continue
+    component_platform = "wasm32-unknown-unknown" if lang == "wasm" else plat
     for f in base.rglob("*"):
         if not f.is_file():
             continue
@@ -246,18 +288,20 @@ for lang in langs:
             continue
         components.append({
             "language": lang,
-            "platform": plat,
+            "platform": component_platform,
             "path": str(f.relative_to(root)).replace(os.sep, "/"),
             "size_bytes": f.stat().st_size,
             "sha256": hashlib.sha256(f.read_bytes()).hexdigest(),
         })
+covered = sorted({component["language"] for component in components})
 manifest = {
     "name": "finkit",
     "version": os.environ["VERSION"],
     "platform": plat,
+    "languages": covered,
     "components": components,
 }
-pathlib.Path(os.environ["MANIFEST_OUT"]).write_text(json.dumps(manifest, indent=2))
+pathlib.Path(os.environ["MANIFEST_OUT"]).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 print(f"wrote {os.environ['MANIFEST_OUT']} ({len(components)} components)")
 '@
 
@@ -281,19 +325,37 @@ if ($Json) { Get-Content $manifestPath }
 if (-not $NoBundle -and $failCount -eq 0) {
     Write-Hdr "bundle"
     $bundle = Join-Path $Dist "finkit-$Version-$Platform-usage-bundle.zip"
-    $paths = @()
-    foreach ($l in $Languages) {
-        $p = Join-Path $Dist "$l\$Platform"
-        if (Test-Path $p) { $paths += $p }
-    }
-    $wasmPath = Join-Path $Dist "wasm"
-    if (Test-Path $wasmPath) { $paths += $wasmPath }
-    $paths += $manifestPath
+    $bundlePy = @'
+import os, pathlib, zipfile
+root = pathlib.Path(os.environ["DIST"])
+bundle = pathlib.Path(os.environ["BUNDLE"])
+langs = os.environ["LANGS"].split(",")
+platform = os.environ["PLATFORM"]
+with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    for lang in langs:
+        base = root / "wasm" if lang == "wasm" else root / lang / platform
+        if base.exists():
+            for path in sorted(base.rglob("*")):
+                if path.is_file() and not any(part.startswith(".") for part in path.parts):
+                    archive.write(path, path.relative_to(root).as_posix())
+    archive.write(root / "manifest.json", "manifest.json")
+print(f"bundle: {bundle}")
+'@
+    $env:DIST = $Dist
+    $env:BUNDLE = $bundle
+    $env:LANGS = $langs
+    $env:PLATFORM = $Platform
+    $tmpBundlePy = [System.IO.Path]::GetTempFileName() + ".py"
+    [System.IO.File]::WriteAllText($tmpBundlePy, $bundlePy, [System.Text.Encoding]::UTF8)
     try {
-        Compress-Archive -Path $paths -DestinationPath $bundle -Force
+        & $Py $tmpBundlePy
+        if ($LASTEXITCODE -ne 0) { throw "bundle writer exited $LASTEXITCODE" }
         Write-Ok "bundle: $bundle"
     } catch {
-        Write-Err "Compress-Archive failed: $_"
+        Write-Err "bundle creation failed: $_"
+        $failCount++
+    } finally {
+        Remove-Item $tmpBundlePy -ErrorAction SilentlyContinue
     }
 }
 

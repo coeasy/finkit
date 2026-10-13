@@ -50,10 +50,24 @@ other one.
 gated on coverage, numerical parity and a version-migration plan — it is not a
 pending "finish the kernels" task. The historical kernel gap was closed on
 2026-09-24 (`unified_dispatch.rs` routes every TA-Lib `CALL:<NAME>` kernel
-through `dispatch_modern_call`); the remaining structural blocker is that a
-formula containing a **string literal** cannot run under `Plan` at all, because
-the tree path appends the literal to `FormulaContext::string_table` and the plan
-executor receives only `&[&[f64]]` with no context to append to.
+through `dispatch_modern_call`), and the **string-literal** story is now closed
+end to end:
+
+- 2026-10-04: both paths publish literal texts into
+  `FormulaContext::string_table` in the same order and emit the **absolute**
+  table position (the plan dispatcher adds its `string_base` to the compile-time
+  local index), so a formula no longer fails merely for *containing* a literal;
+- the four call targets that *consume* that index — `EM_REF`, `BLOCKDATA`,
+  `BLOCKINDEX`, `BLOCKAVG` — now have plan kernels. They resolve the index
+  through the dispatcher's `string_table` and read `ctx.em_data` /
+  `ctx.block_data`, which travel to the plan executor in `HostContext`. With no
+  host data they yield `NaN`, exactly as the tree path does; with host data they
+  reproduce it value for value
+  (`core/tests/formula_string_literals.rs`).
+
+The exhaustive per-entry backend split — every `eval*` entry, its governance
+class and its range/last/into reach on each backend — lives in
+[Formula entry matrix](formula-entry-matrix.md).
 
 ### Entry-point matrix
 
@@ -63,7 +77,7 @@ The split below is exhaustive and machine-checked by
 
 | Family | Entries | Under `Plan` |
 |---|---|---|
-| Governed, plan-capable | `eval`, `eval_with_dialect`, `eval_with_params`, `eval_multi`, `eval_multi_with_dialect`, `eval_incremental`, `eval_simd`, `eval_batch`, `eval_batch_shared` | run on the plan backend (the plan cache is populated) |
+| Governed, plan-capable | `eval`, `eval_with_dialect`, `eval_with_params`, `eval_multi`, `eval_multi_with_dialect`, `eval_incremental`, `eval_simd`, `eval_batch`, `eval_batch_shared`, `eval_partial` | run on the plan backend (the plan cache is populated) |
 | Governed, tree-only | `eval_ast`, `eval_lazy`, `eval_parallel`, `eval_optimized`, `eval_with_debug`, `eval_template`, `eval_with_validation`, `eval_with_defaults`, `eval_zero_copy`, `eval_zero_copy_cached`, `eval_zero_alloc`, `eval_multi_with_dialect(Pine)`, `eval_multi_with_pine_security` | `FormulaError::BackendUnsupported { backend: "plan", entry }` |
 | Backend-explicit (never governed) | `eval_plan*`, `compile_plan*`, `eval_jit`, `compile_jit`, `execute_jit`, `compile_bytecode`, `execute_bytecode`, and every entry taking a `&CompiledFormula` | runs the backend its argument type declares |
 
@@ -171,6 +185,7 @@ See [Formula runtime contract](../formula-runtime-contract.md) for the runtime e
 
 - [Overview](overview.md)
 - [Data flow](dataflow.md)
+- [Formula entry matrix](formula-entry-matrix.md)
 - [Numerical semantics](numerical-semantics.md)
 - [Runtime and cache contract](runtime-and-cache-contract.md)
 - [api-reference.md](../api-reference.md) (English) · [api-reference-zh.md](../api-reference-zh.md) (中文)

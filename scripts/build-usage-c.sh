@@ -64,12 +64,15 @@ else
     CMAKE_ARCH=""
 fi
 
+cmake_args=()
+if [[ "${PLATFORM}" != windows-* ]]; then
+    cmake_args+=( -DCMAKE_BUILD_TYPE=Release )
+fi
 cmake -S "$(to_win "${BINDING_DIR}")" -B "$(to_win "${BUILD_DIR}")" \
-      -G "${CMAKE_GENERATOR}" ${CMAKE_ARCH} \
-      -DCMAKE_BUILD_TYPE=Release \
-      -DALPHA_TA_AUTO_BUILD_RS=OFF \
-      -DALPHA_TA_BUILD_TESTS=OFF \
-      -DALPHA_TA_BUILD_EXAMPLES=OFF
+      -G "${CMAKE_GENERATOR}" ${CMAKE_ARCH} "${cmake_args[@]}" \
+      -DFINKIT_AUTO_BUILD_RS=OFF \
+      -DFINKIT_BUILD_TESTS=OFF \
+      -DFINKIT_BUILD_EXAMPLES=OFF
 cmake --build "$(to_win "${BUILD_DIR}")" --config Release --parallel
 cmake --install "$(to_win "${BUILD_DIR}")" --config Release --prefix "$(to_win "${PREFIX}")"
 

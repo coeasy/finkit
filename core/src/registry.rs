@@ -1426,6 +1426,64 @@ pub fn builtin_function_registry() -> FunctionRegistry {
             streaming: true,
             deterministic: true,
         },
+        // The four string-index readers. Their operand is not a series but a
+        // `STRING_LITERAL` index, which the plan path emits into
+        // `FormulaContext::string_table` and these resolve back to the name that
+        // keys the host data (`ctx.em_data`, `ctx.block_data`) -- hence
+        // `InputKind::Dynamic`: there is no numeric signature to advertise.
+        //
+        // Declaring them is the same obligation as the readers above: the SSOT
+        // gate requires every plan kernel to be registered, and registration is
+        // what makes the planner treat it as pure rather than as a stateful
+        // barrier with a phantom tail dependency.
+        //
+        // `EM_REF(name, n)` is `data[i - n]`, so its warm-up is the caller's
+        // shift (parameter-driven, hence `Dynamic`); the `BLOCK*` trio reads one
+        // host series elementwise with no warm-up at all, so `None` is exact.
+        FunctionSpec {
+            name: "EM_REF",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::Dynamic,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "BLOCKDATA",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "BLOCKINDEX",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: false,
+            deterministic: true,
+        },
+        FunctionSpec {
+            name: "BLOCKAVG",
+            aliases: &[],
+            category: FunctionCategory::Formula,
+            input: InputKind::Dynamic,
+            params: &[],
+            outputs: 1,
+            lookback: LookbackSpec::None,
+            streaming: false,
+            deterministic: true,
+        },
         FunctionSpec {
             name: "REFDATE",
             aliases: &[],

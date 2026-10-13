@@ -930,11 +930,13 @@ impl FormulaEngine {
         // length, exactly as before.
         let length = inputs.first().map_or(ctx.data_len, |input| input.len());
 
-        // Host data (chip distribution, chart period, money flow, implicit OHLC)
-        // cannot travel in a numeric slot, so it is handed to the dispatcher
-        // separately. Without this, `WINNER`/`COST`/`PERIODTYPE`/`TR` and the
-        // zero-argument money-flow family would return NaN on the plan path while
-        // the tree path returned real values -- a silent cross-path divergence.
+        // Host data cannot travel in a numeric slot, so it is handed to the
+        // dispatcher separately: the chip distribution, chart period, money-flow
+        // series and implicit OHLC for `WINNER`/`COST`/`PERIODTYPE`/`TR` and the
+        // money-flow family, plus the string table and the `EM_REF`/`BLOCK*`
+        // data the literal-consuming kernels resolve against. Without it those
+        // kernels would return NaN (or fail) on the plan path while the tree
+        // path returned real values -- a silent cross-path divergence.
         //
         // Borrowed rather than cloned, and scoped to this block: the executor is
         // the only holder of the borrow, and it is dropped with `output`, so the
@@ -950,6 +952,9 @@ impl FormulaEngine {
                     close: ctx.close.as_slice(),
                 }),
                 capital: ctx.capital,
+                string_table: Some(ctx.string_table.as_slice()),
+                em_data: ctx.em_data.as_ref(),
+                block_data: ctx.block_data.as_ref(),
             };
             let mut executor = unified_formula_executor_with_host(&plan, host);
             executor.dispatcher_mut().set_string_base(string_base);

@@ -12,6 +12,7 @@ set -euo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ROOT="$( cd "${SCRIPT_DIR}/.." && pwd )"
 BINDING_DIR="${ROOT}/ffi/go-binding"
+PYTHON="${FINKIT_PYTHON:-python3}"
 
 case "$( uname -s )" in
   MINGW*|MSYS*|CYGWIN*) PLATFORM="windows-x64" ;;
@@ -52,13 +53,13 @@ echo "[build-usage-go] staged lib/${NATIVE}"
 rm -rf "${OUT_DIR}/finkit"
 mkdir -p "${OUT_DIR}/finkit"
 cp -r "${BINDING_DIR}/go/." "${OUT_DIR}/finkit/"
+# The checked-in Go binding may contain local build output under target/. It is
+# not part of the module API and is not needed once lib/ has the native payload.
+rm -rf "${OUT_DIR}/finkit/target"
 
 # 2a. Drop references to JIT/SIMD functions that the Rust finkit-go crate
 #     does not export (they would otherwise break cgo linking).
-python "${SCRIPT_DIR}/drop_jit_simd.py" "${OUT_DIR}/finkit/ta/ta.go" 2>/dev/null \
-  || "${ROOT}/.test_venv/Scripts/python.exe" "${SCRIPT_DIR}/drop_jit_simd.py" "${OUT_DIR}/finkit/ta/ta.go" 2>/dev/null \
-  || "${ROOT}/.test_venv/bin/python" "${SCRIPT_DIR}/drop_jit_simd.py" "${OUT_DIR}/finkit/ta/ta.go" \
-  || echo "[build-usage-go] WARN: drop_jit_simd.py failed; continuing"
+"${PYTHON}" "${SCRIPT_DIR}/drop_jit_simd.py" "${OUT_DIR}/finkit/ta/ta.go"
 
 # 2b. (line ending fix is done at the end of the script, AFTER all python
 #     file rewrites have happened, because python on Windows re-introduces
@@ -71,10 +72,9 @@ rm -rf "${OUT_DIR}/finkit/ta/ta_test.go" 2>/dev/null || true
 # The source ta.go references `../target/release` (relative to the source
 # tree). When installed as a Go module, that path doesn't exist; rewrite
 # the LDFLAGS to point at the lib/ directory we just created.
-python "${SCRIPT_DIR}/patch_go_cgo_ldflags.py" "${OUT_DIR}/finkit/ta/ta.go" 2>/dev/null \
-  || "${ROOT}/.test_venv/Scripts/python.exe" "${SCRIPT_DIR}/patch_go_cgo_ldflags.py" "${OUT_DIR}/finkit/ta/ta.go" 2>/dev/null \
-  || "${ROOT}/.test_venv/bin/python" "${SCRIPT_DIR}/patch_go_cgo_ldflags.py" "${OUT_DIR}/finkit/ta/ta.go" \
-  || { tmp="${OUT_DIR}/finkit/ta/ta.go.lf"; tr -d '\r' < "${OUT_DIR}/finkit/ta/ta.go" > "$tmp" && mv "$tmp" "${OUT_DIR}/finkit/ta/ta.go"; sed -i 's|-L\.\./target/release|-L${SRCDIR}/../../lib|' "${OUT_DIR}/finkit/ta/ta.go"; }
+"${PYTHON}" "${SCRIPT_DIR}/patch_go_cgo_ldflags.py" "${OUT_DIR}/finkit/ta/ta.go" \
+  || { tmp="${OUT_DIR}/finkit/ta/ta.go.lf"; tr -d '\r' < "${OUT_DIR}/finkit/ta/ta.go" > "$tmp" && mv "$tmp" "${OUT_DIR}/finkit/ta/ta.go" && sed -i 's|-L\.\./target/release|-L${SRCDIR}/../../lib|' "${OUT_DIR}/finkit/ta/ta.go"; } \
+  || { echo "[build-usage-go] ERROR: could not patch cgo library path" >&2; exit 1; }
 
 # 5. Pin the module path so the wrapper is self-contained ---------------
 cat > "${OUT_DIR}/finkit/go.mod" <<EOF
@@ -93,7 +93,7 @@ cat > "${OUT_DIR}/finkit/finkit.go" <<'EOF'
 // `finkit.Sma(...)` without ever knowing about the internal `ta` subpackage.
 package finkit
 
-import "github.com/coeasy/finkit/go/ta"
+import "github.com/coeasy/finkit/ta"
 
 // Re-exported indicator result types
 type (

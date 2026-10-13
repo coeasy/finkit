@@ -7,6 +7,9 @@
 
 use crate::error::TaError;
 use crate::execution_plan::KernelId;
+use crate::formula::bridge_dispatch::{
+    bridge_context, dispatch_formula_bridge_call, SCREENING_KERNELS, TALIB_FORMULA_GAP_KERNELS,
+};
 use crate::formula::truth;
 use crate::formula::types::HostContext;
 use crate::state_arena::StateArena;
@@ -37,9 +40,9 @@ pub struct FormulaKernelDispatcher<'a> {
 }
 
 impl<'a> FormulaKernelDispatcher<'a> {
-    const ERR_UNSUPPORTED_KERNEL: u32 = 1;
-    const ERR_ARITY: u32 = 2;
-    const ERR_PARAMETER: u32 = 3;
+    pub(crate) const ERR_UNSUPPORTED_KERNEL: u32 = 1;
+    pub(crate) const ERR_ARITY: u32 = 2;
+    pub(crate) const ERR_PARAMETER: u32 = 3;
 
     /// Create a dispatcher with no host context: host-dependent kernels such as
     /// `WINNER` evaluate to `NaN`, matching the tree path without chip data.
@@ -411,6 +414,13 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
         // run the cross-period corpus at all.
         if call.kernel == KernelId::from_static("CALL:REFDATE") {
             return dispatch_refdate_call(call, buffers);
+        }
+
+        // The string-consuming family (`EM_REF`, `BLOCKDATA`, `BLOCKINDEX`,
+        // `BLOCKAVG`) resolves a `STRING_LITERAL` index back to text; see the
+        // module for why that is the whole string-literal surface.
+        if super::kernel_string_index::handles(call.kernel) {
+            return super::kernel_string_index::dispatch(&self.host, call, buffers);
         }
 
         if call.kernel == KernelId::from_static("DRAW_GENERIC")
@@ -2950,214 +2960,6 @@ fn dispatch_draw_call(
     Ok(())
 }
 
-/// The domestic screening / conditional-counting family.
-///
-/// These are the *canonical* names behind a much larger alias surface: the
-/// planner resolves every registry alias to its canonical name
-/// (`compute_ir::function_metadata` uses `canonical_name(spec.name)`), so
-/// `CROSSUP`, `BULLISH_CROSS`, `VOLSURGE`, `VOLUME_EXPANSION`, `TENKAN`,
-/// `BREAKOUT_SCREEN` and the rest never appear as their own `CALL:` node — they
-/// all lower to one of the eleven names below. A missing kernel here therefore
-/// broke every alias pointing at it at once.
-///
-/// Unlike [`TALIB_FORMULA_GAP_KERNELS`] these are **not** routed through the
-/// compatibility bridge: each has an explicit canonical delegate in
-/// [`SCREENING_DELEGATES`], which is the same function the tree/bytecode/JIT
-/// frontends call, so the plan path's output is identical by construction
-/// rather than by agreement.
-const SCREENING_KERNELS: &[&str] = &[
-    "CALL:BARSLAST",
-    "CALL:BREAKDOWN",
-    "CALL:BREAKOUT",
-    "CALL:COUNT",
-    "CALL:DEAD_CROSS",
-    "CALL:GAP_SIGNAL",
-    "CALL:GOLDEN_CROSS",
-    "CALL:MA_ALIGN",
-    "CALL:RELATIVE_STRENGTH",
-    "CALL:TREND_BREAKOUT",
-    "CALL:VOLUME_SURGE",
-];
-
-/// TA-Lib functions that already have a formula implementation but do not yet
-/// have a hand-written in-place plan kernel. They are routed through the cached
-/// formula function table below. This is an intentional compatibility bridge:
-/// it closes plan reachability first, while the specialized kernels can later
-/// remove the allocation/copy path one family at a time without changing the
-/// numeric contract.
-const TALIB_FORMULA_GAP_KERNELS: &[&str] = &[
-    "CALL:ADXR",
-    "CALL:APO",
-    "CALL:AROONOSC",
-    "CALL:AVGPRICE",
-    "CALL:AVGDEV",
-    "CALL:BETA",
-    "CALL:BOP",
-    "CALL:CDL2CROWS",
-    "CALL:CDL3BLACKCROWS",
-    "CALL:CDL3INSIDE",
-    "CALL:CDL3LINESTRIKE",
-    "CALL:CDL3OUTSIDE",
-    "CALL:CDL3STARSINSOUTH",
-    "CALL:CDL3WHITESOLDIERS",
-    "CALL:CDLDOJI",
-    "CALL:CDLDOJISTAR",
-    "CALL:CDLDRAGONFLYDOJI",
-    "CALL:CDLENGULFING",
-    "CALL:CDLEVENINGDOJISTAR",
-    "CALL:CDLGRAVESTONEDOJI",
-    "CALL:CDLHAMMER",
-    "CALL:CDLHANGINGMAN",
-    "CALL:CDLHARAMI",
-    "CALL:CDLMARUBOZU",
-    "CALL:CDLPIERCING",
-    "CALL:CDLSHOOTINGSTAR",
-    "CALL:CDLSPINNINGTOP",
-    "CALL:CDLABANDONEDBABY",
-    "CALL:CDLADVANCEBLOCK",
-    "CALL:CDLBELTHOLD",
-    "CALL:CDLBREAKAWAY",
-    "CALL:CDLCLOSINGMARUBOZU",
-    "CALL:CDLCONCEALBABYSWALL",
-    "CALL:CDLCOUNTERATTACK",
-    "CALL:CDLDARKCLOUDCOVER",
-    "CALL:CDLEVENINGSTAR",
-    "CALL:CDLGAPSIDESIDEWHITE",
-    "CALL:CDLHARAMICROSS",
-    "CALL:CDLHIGHWAVE",
-    "CALL:CDLHIKKAKE",
-    "CALL:CDLHIKKAKEMOD",
-    "CALL:CDLHOMINGPIGEON",
-    "CALL:CDLIDENTICAL3CROWS",
-    "CALL:CDLINNECK",
-    "CALL:CDLINVERTEDHAMMER",
-    "CALL:CDLKICKING",
-    "CALL:CDLKICKINGBYLENGTH",
-    "CALL:CDLLADDERBOTTOM",
-    "CALL:CDLLONGLEGGEDDOJI",
-    "CALL:CDLLONGLINE",
-    "CALL:CDLMATCHINGLOW",
-    "CALL:CDLMATHOLD",
-    "CALL:CDLMORNINGDOJISTAR",
-    "CALL:CDLMORNINGSTAR",
-    "CALL:CDLONNECK",
-    "CALL:CDLRICKSHAWMAN",
-    "CALL:CDLRISEFALL3METHODS",
-    "CALL:CDLSEPARATINGLINES",
-    "CALL:CDLSHORTLINE",
-    "CALL:CDLSTALLEDPATTERN",
-    "CALL:CDLSTICKSANDWICH",
-    "CALL:CDLTAKURI",
-    "CALL:CDLTASUKIGAP",
-    "CALL:CDLTHRUSTING",
-    "CALL:CDLTRISTAR",
-    "CALL:CDLUNIQUE3RIVER",
-    "CALL:CDLUPSIDEGAP2CROWS",
-    "CALL:CDLXSIDEGAP3METHODS",
-    "CALL:CMO",
-    "CALL:DEMA",
-    "CALL:DPO",
-    "CALL:DX",
-    "CALL:HT_DCPERIOD",
-    "CALL:HT_DCPHASE",
-    "CALL:HT_PHASOR",
-    "CALL:HT_SINE",
-    "CALL:HT_TRENDLINE",
-    "CALL:HT_TRENDMODE",
-    "CALL:IMI",
-    "CALL:LINEARREG",
-    "CALL:LINEARREG_ANGLE",
-    "CALL:LINEARREG_INTERCEPT",
-    "CALL:MACDEXT",
-    "CALL:MACDFIX",
-    "CALL:MAVP",
-    "CALL:MEDPRICE",
-    "CALL:MIDPOINT",
-    "CALL:MIDPRICE",
-    "CALL:MINMAX",
-    "CALL:MINMAXINDEX",
-    "CALL:MINUS_DM",
-    "CALL:PLUS_DM",
-    "CALL:PERCENTILE",
-    "CALL:PPO",
-    "CALL:SAREXT",
-    "CALL:STOCH",
-    "CALL:STOCHRSI",
-    "CALL:T3",
-    "CALL:TEMA",
-    "CALL:TSF",
-    "CALL:TYPPRICE",
-    "CALL:ULTOSC",
-    "CALL:WCLPRICE",
-];
-
-/// Execute one TA-Lib formula function through the plan-owned buffers.
-///
-/// This fallback deliberately allocates only at the boundary: canonical legacy
-/// functions accept `Array1<f64>` arguments and the hot-plan ABI owns `Vec<f64>`
-/// buffers. The function table itself is cached, so subsequent calls avoid its
-/// construction cost. Families with a proven in-place kernel should stay on
-/// their specialized dispatch branch above.
-fn dispatch_formula_bridge_call(
-    call: KernelCall<'_>,
-    buffers: &mut [Vec<f64>],
-    name: &str,
-) -> Result<(), KernelDispatchError> {
-    let output_slot = call.output.0;
-    let len = match buffers.get(output_slot) {
-        Some(output) if !output.is_empty() => output.len(),
-        _ => {
-            return Err(KernelDispatchError::new(
-                FormulaKernelDispatcher::ERR_PARAMETER,
-            ))
-        }
-    };
-    for input in call.inputs {
-        if input.0 == output_slot
-            || buffers
-                .get(input.0)
-                .is_none_or(|values| values.len() != len)
-        {
-            return Err(KernelDispatchError::new(
-                FormulaKernelDispatcher::ERR_PARAMETER,
-            ));
-        }
-    }
-
-    let args: Vec<Array1<f64>> = call
-        .inputs
-        .iter()
-        .map(|slot| Array1::from(buffers[slot.0].clone()))
-        .collect();
-    let context_series = |index: usize| {
-        args.get(index)
-            .cloned()
-            .unwrap_or_else(|| Array1::zeros(len))
-    };
-    let ctx = crate::formula::types::FormulaContext::new(
-        context_series(0),
-        context_series(1),
-        context_series(2),
-        context_series(3),
-        context_series(4),
-        None,
-    );
-    let Some(kernel) = crate::formula::functions::lookup_builtin_function(name) else {
-        return Err(KernelDispatchError::new(
-            FormulaKernelDispatcher::ERR_UNSUPPORTED_KERNEL,
-        ));
-    };
-    match kernel(&ctx, &args) {
-        Ok(series) if series.len() == len => {
-            buffers[output_slot].copy_from_slice(series.as_slice().unwrap());
-        }
-        Ok(_) | Err(_) => {
-            buffers[output_slot].fill(f64::NAN);
-        }
-    }
-    Ok(())
-}
-
 /// Execute the formula catalogue's popular non-TA-Lib indicators through the
 /// same hot-plan ABI as the TA-Lib-compatible kernels.  The two most common
 /// rolling transforms (ZSCORE and VWMA) write directly into the plan buffer;
@@ -3370,14 +3172,7 @@ fn dispatch_modern_call(
                 .iter()
                 .map(|slot| Array1::from(buffers[slot.0].clone()))
                 .collect();
-            let ctx = crate::formula::types::FormulaContext::new(
-                Array1::zeros(len),
-                Array1::zeros(len),
-                Array1::zeros(len),
-                Array1::zeros(len),
-                Array1::zeros(len),
-                None,
-            );
+            let ctx = bridge_context(len);
             match kernel(&ctx, &args) {
                 Ok(series) => {
                     let out = &mut buffers[output_slot];
@@ -3481,14 +3276,7 @@ fn dispatch_modern_call(
                 .iter()
                 .map(|slot| Array1::from(buffers[slot.0].clone()))
                 .collect();
-            let ctx = crate::formula::types::FormulaContext::new(
-                Array1::zeros(len),
-                Array1::zeros(len),
-                Array1::zeros(len),
-                Array1::zeros(len),
-                Array1::zeros(len),
-                None,
-            );
+            let ctx = bridge_context(len);
             match kernel(&ctx, &args) {
                 Ok(series) => {
                     let out = &mut buffers[output_slot];

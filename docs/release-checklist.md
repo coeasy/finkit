@@ -92,9 +92,12 @@ claim registry installation commands before a clean consumer test exists.
 - [ ] Build the per-language usage packages: `bash scripts/build-usage-packages.sh`
       (add `--no-bundle` to skip the zip, drop `--no-verify` to install and run
       each artifact rather than only producing it). Toolchain prerequisites, one
-      per language: `maturin` on `PATH` for Python, Node plus a package manager,
-      Maven and a JDK for Java, Go, CMake and a C compiler, the .NET SDK, and
-      `wasm-pack` for WASM. Each language's `dist/<lang>/<platform>` tree is
+      per language: `maturin` and NumPy for Python, Node plus npm, Maven and a
+      JDK for Java, Go/CGO plus a C compiler, the .NET SDK, and the
+      `wasm-bindgen-cli` version pinned by `Cargo.lock` for WASM. Node builds
+      both the root package and its matching native platform package; Java
+      embeds the native library under the exact resource path used by its loader.
+      Each language's `dist/<lang>/<platform>` tree is
       **cleared before its build**, so the run's output is the only thing the
       manifest can see; a failing language leaves its tree empty and is reported
       as uncovered instead of silently contributing last month's files.

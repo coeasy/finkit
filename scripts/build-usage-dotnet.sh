@@ -98,6 +98,7 @@ echo "[build-usage-dotnet] dotnet pack -c Release"
 
 # Drop the staging tree
 rm -rf "${LINK_TARGET}"
+rm -rf "${OUT_DIR}/runtimes"
 
 echo
 echo "[build-usage-dotnet] done. Artifacts in ${OUT_DIR}:"

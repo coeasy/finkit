@@ -94,6 +94,13 @@ const PLAN_KERNELS: &[&str] = &[
     // (see `HostContext`), so they are only executable when the caller supplies it.
     "CAPITAL",
     "COST",
+    // The four string-index readers (`formula/kernel_string_index.rs`). Their
+    // operand is a `STRING_LITERAL` index, not a series, so they are executable
+    // only when the caller's context carries the matching host table.
+    "BLOCKAVG",
+    "BLOCKDATA",
+    "BLOCKINDEX",
+    "EM_REF",
     "DEA",
     "DEAD_CROSS",
     "DIV",
@@ -679,10 +686,19 @@ fn the_three_surfaces_have_the_expected_sizes() {
     // delegates to the `canonical_*` / `fn_*` implementation the tree path
     // already used — so this is reachability, not new numerics. The formula and
     // registry surfaces are unchanged because the names were already there.
+    //
+    // 321 -> 325 and 287 -> 291, formula surface unchanged at 452: the four
+    // string-index readers (`EM_REF`, `BLOCKDATA`, `BLOCKINDEX`, `BLOCKAVG`)
+    // became executable from a compiled plan when `formula/kernel_string_index.rs`
+    // landed, which made them plan kernels. They had always been callable from a
+    // formula, so the formula surface did not move; the registry had simply never
+    // declared them, and an undeclared plan kernel lowers to a stateful barrier
+    // with a phantom tail dependency. Registering them restores the invariant the
+    // zero-argument host readers above already satisfied.
     let actual = (registry.len(), formulas.len(), kernels.len());
     assert_eq!(
         actual,
-        (321, 452, 287),
+        (325, 452, 291),
         "surface sizes changed: (registry, formula, plan kernels)"
     );
 }

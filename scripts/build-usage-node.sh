@@ -38,47 +38,38 @@ PKG_NAME="finkit-${VERSION}.tgz"
 
 has_tool() { command -v "$1" >/dev/null 2>&1; }
 
-# Build the native .node for the current triple ---------------------------
-echo "[build-usage-node] cargo build --release -p finkit-node"
-( cd "${ROOT}" && cargo build --release -p finkit-node )
+# Build the N-API module for the current triple. `cargo build -p finkit-node`
+# only emits the intermediate DLL; `napi build` applies the N-API filename and
+# platform packaging contract required by the JavaScript loader.
+echo "[build-usage-node] npm run build (N-API native module)"
+( cd "${BINDING_DIR}" && npm run build )
+
+PKG_BASENAME="$( grep -m1 '"name"' "${BINDING_DIR}/package.json" \
+  | sed -E 's/.*"name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' \
+  | awk -F/ '{print $NF}' )"
+PKG_BASENAME="${PKG_BASENAME:-finkit}"
 
 # Copy the .node binary into the package output ---------------------------
 # N-API produces platform-specific names like: finkit.win32-x64-msvc.node
-for cand in "${ROOT}/target/release/finkit".*.node; do
+for cand in "${BINDING_DIR}/${PKG_BASENAME}."*.node; do
   if [[ -f "${cand}" ]]; then
     cp "${cand}" "${OUT_DIR}/"
     echo "[build-usage-node] staged $( basename "${cand}" )"
   fi
 done
 
-# Stage the binding manifest so `npm install` can find it ----------------
-cp -r "${BINDING_DIR}/." "${OUT_DIR}/" 2>/dev/null || true
-# Drop the heavyweight node_modules from the stage
-rm -rf "${OUT_DIR}/node_modules"
+# Stage only the files the root npm package can publish. Copying the complete
+# binding checkout also copied Cargo sources, tests, npm platform templates,
+# lockfiles and build outputs into the release bundle even though package.json
+# exposes only these runtime entry points.
+for file in package.json index.js index.mjs index.d.ts README.md; do
+  cp "${BINDING_DIR}/${file}" "${OUT_DIR}/"
+done
 
-# The copy above takes the *whole* binding directory, and a working directory
-# collects gitignored build output. This one still held
-# `alpha_ta.win32-x64-msvc.node`, a binary from the product's previous name that
-# no `index.js` resolves.
-#
-# It would not reach a consumer through the npm tarball -- that is JS-only by
-# `package.json`'s `files` field, and the native binary ships in the per-platform
-# `finkit-<triple>` optional dependencies -- but it does reach everything built
-# from this directory: the loose `dist/node/<platform>/` tree that the manifest
-# records, and the usage-bundle zip assembled from it. A dead native module in a
-# release asset is a support question waiting to happen, and its presence made
-# the manifest's coverage look broader than the products actually behind it.
-#
-# The rule is "the package's own binary", not "the files copied above": the
-# `target/release/finkit.*.node` glob two blocks up does not match on this
-# tree at all (cargo emits `finkit_node.dll`; the `.node` is produced by the
-# binding's own napi step), so a prune driven by what that loop staged would
-# delete the real binary as well as the stale one. napi names the binary after
-# the package, so read the package name and keep exactly `<name>.*.node`.
-PKG_BASENAME="$( grep -m1 '"name"' "${BINDING_DIR}/package.json" 2>/dev/null \
-  | sed -E 's/.*"name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' \
-  | awk -F/ '{print $NF}' )"
-PKG_BASENAME="${PKG_BASENAME:-finkit}"
+# napi can leave ignored native binaries from an earlier product name in the
+# binding checkout. Keep only the binary whose basename matches this package.
+# The root tarball is JavaScript-only; the current native binary is packed into
+# the matching optional platform package below.
 for present in "${OUT_DIR}"/*.node; do
   [[ -e "${present}" ]] || continue
   case "$( basename "${present}" )" in
@@ -92,8 +83,38 @@ done
 echo "[build-usage-node] npm pack -> ${PKG_NAME}"
 ( cd "${OUT_DIR}" && npm pack --silent )
 
-# Cleanup staging copy (we kept only the .tgz + .node + manifest files in OUT_DIR)
-# (no-op; OUT_DIR was filled by the cp above; we now keep everything in place)
+# The root package intentionally delegates native loading to an optional
+# platform package. A root tarball without that companion is not installable,
+# so emit the current target's package alongside it and verify both together.
+case "${PLATFORM}" in
+  windows-x64) PLATFORM_PACKAGE="finkit-win32-x64-msvc" ;;
+  linux-x64) PLATFORM_PACKAGE="finkit-linux-x64-gnu" ;;
+  linux-arm64) PLATFORM_PACKAGE="finkit-linux-arm64-gnu" ;;
+  macos-x64) PLATFORM_PACKAGE="finkit-darwin-x64" ;;
+  macos-arm64) PLATFORM_PACKAGE="finkit-darwin-arm64" ;;
+  *) echo "[build-usage-node] unsupported native npm platform: ${PLATFORM}" >&2; exit 1 ;;
+esac
+PLATFORM_DIR="${OUT_DIR}/${PLATFORM_PACKAGE}"
+rm -rf "${PLATFORM_DIR}"
+mkdir -p "${PLATFORM_DIR}"
+cp "${OUT_DIR}/finkit."*.node "${PLATFORM_DIR}/"
+NATIVE_BASENAME="$( basename "${PLATFORM_DIR}/"*.node )"
+cat > "${PLATFORM_DIR}/package.json" <<EOF
+{
+  "name": "${PLATFORM_PACKAGE}",
+  "version": "${VERSION}",
+  "main": "./${NATIVE_BASENAME}",
+  "os": ["$( case "${PLATFORM}" in windows-*) echo win32 ;; macos-*) echo darwin ;; *) echo linux ;; esac )"],
+  "cpu": ["$( case "${PLATFORM}" in *arm64) echo arm64 ;; *) echo x64 ;; esac )"]
+}
+EOF
+( cd "${PLATFORM_DIR}" && npm pack --silent --pack-destination "${OUT_DIR}" )
+
+# The binary is already included in the platform tarball. Drop the staging copy
+# from the loose release tree so the bundle contains only installable packages.
+rm -f "${OUT_DIR}/"*.node
+
+# Keep the two npm tarballs and package metadata in the output tree.
 
 echo
 echo "[build-usage-node] done. Artifacts in ${OUT_DIR}:"

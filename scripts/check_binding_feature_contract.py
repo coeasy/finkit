@@ -141,7 +141,7 @@ def actual_tree_features(pkg: str) -> set[str] | None:
     """Run cargo tree and harvest the enabled finkit feature names."""
     proc = subprocess.run(
         ["cargo", "tree", "-p", pkg, "-e", "features", "-i", "finkit"],
-        cwd=REPO, capture_output=True, text=True,
+        cwd=REPO, capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if proc.returncode != 0:
         print(f"[FAIL] cargo tree -p {pkg} failed:\n{proc.stderr.strip()}")

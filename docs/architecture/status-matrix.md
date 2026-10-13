@@ -1,8 +1,9 @@
 # 实现现状矩阵
 
-- 基线：`main`，HEAD `496763b7`（2026-10-08，workspace `0.2.0`）
-- 状态生成日期：2026-10-10
-- 依据：[架构审查与重构方案](../ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-10.md) 阶段 0
+- 基线：`main`，HEAD `5854e6fb`（2026-10-13，workspace `0.2.0`）
+- 状态更新日期：2026-10-14（基线审查于 2026-10-13）
+- 依据：[架构审查与重构方案（2026-10-13）](../ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) 阶段 0
+- 上一版基线：`496763b7`（2026-10-10），记录见 §5
 
 本矩阵给出"**当前源码和可执行合同**"的现状。它存在的目的是**阻止把四种不同状态
 混成一个完成度百分比**：
@@ -18,19 +19,37 @@
 **四种状态不等于四种完成度。** 一个"可编译 + 专项测试"但没有 parity 门禁的面，
 不能被读成"完成了 50%"；一个 78/78 的绑定覆盖率也不能说明公式面/研究面 parity。
 
+## 0. 证据分类（必须分开读）
+
+每条"已实现 / 已验证 / 已发布"都必须能落到下面某一类；不得从一类外推到另一类：
+
+| 类别 | 含义 | 本次（2026-10-13）覆盖情况 |
+|---|---|---|
+| **静态检查** | 读源码 / 文档 / 门禁脚本本身得出的结论 | ✅ 本次执行（§4） |
+| **历史本地测试** | 旧 SHA 上本机跑过的测试记录 | 仅作历史证据（§6），**不代表当前工作树** |
+| **当前 CI** | GitHub Actions 在当前 SHA 上的结果 | 本机不可查，标 **unknown**；以 CI 页面为准 |
+| **公开发行** | registry / Release 资产的既成事实 | 未在本次验证，以仓库文档与 Release 页面为准 |
+
+> §4 记录基线时点的专项检查；扩展工作树的 crate 全套测试与发布门禁见 §5。
+> macOS / Android / iOS 原生目标、远端 Actions 与 registry 状态仍以 CI 和对应平台为准。
+
 ## 1. 核心入口矩阵
 
 | 面 | 源码入口 | 可编译 | 专项测试 | parity / 一致性 | CI target | 发行状态 |
 |---|---|---|---|---|---|---|
 | 批量指标 / 数值核 | `core/src/indicators/`、`core/src/math/` | ✅ | `golden_tests.rs`、`golden_talib_tests.rs`、`talib_coverage_matrix.rs`、`adx_nan_golden.rs`、`indicator_api_surface.rs` | TA-Lib golden；`allocating == into`（`runtime_convergence.rs`） | `test` | 源码 + v0.1.15 `.crate` |
 | 公式 tree 后端（默认） | `core/src/formula/engine.rs` `eval*` | ✅ | `formula_execution_mode.rs`、`formula_differential_tests.rs`、`formula_input_bounds.rs` | `tree == plan`（rostered，`formula_plan_differential.rs`） | `test` | 源码 + v0.1.15 |
-| 公式 plan 后端（opt-in） | `formula/compute_ir.rs`、`executor.rs`、`unified_dispatch.rs` | ✅ | `formula_plan_differential.rs` | 同上；tree-only 入口 `BackendUnsupported` 明确失败 | `test` | 源码（默认关闭） |
+| 公式 plan 后端（opt-in） | `formula/compute_ir.rs`、`executor.rs`、`unified_dispatch.rs` | ✅ | `formula_plan_differential.rs`、`formula_string_literals.rs` | 同上；tree-only 入口 `BackendUnsupported` 明确失败 | `test` | 源码（默认关闭） |
 | streaming | `core/src/streaming/` | ✅ | `runtime_convergence.rs`、`repaint_tests.rs`、`long_run_stability.rs` | `batch == streaming`；注册表双向门禁 | `test` | 源码 + v0.1.15 |
 | 因子图 / 统一运行时 / DirtyRange | `semantic_graph.rs`、`unified_runtime.rs`、`compute.rs` | ✅ | `factor_graph_contract.rs`、`unified_operation_seam.rs`、`runtime_convergence.rs` | `full == range`；增量保守回退 | `runtime-integration-tests` | next-release（非 v0.1.15） |
 | Factor Research | `factor-analysis/` | ✅ | `research_invariants.rs`、`ssot_contracts.rs` + 47 单元 | point-in-time 不变量 | `research-test` | next-release |
 | CLI | `cli/src/`、`cli/src/bin/` | ✅ | 12 单元（`csv_io`）+ `schema_cli.rs`（3） | — | `test` | v0.1.15 CLI 资产 |
 | 可视化 | `visualization/` | ✅ | `polars_integration_tests.rs` 等 | — | `workspace-check` | 源码 |
 | WASM | `wasm/` | ✅（host） | — | — | `future-compat`/`multilang-cross-platform` | CI 候选（`wasm32` 构建） |
+
+> 公式入口的**逐项**后端归属（含 range/last/into 与字符串字面量的真实状态）见
+> [公式入口矩阵](formula-entry-matrix.md)。该矩阵由
+> `scripts/check_formula_engine_contract.py` 与源码守卫对账。
 
 ## 2. 绑定矩阵
 
@@ -50,6 +69,7 @@
 
 > tier 划分的 SSOT 是 `scripts/sync_bindings.py`（active = Rust/Python/Node）。
 > 78/78 只代表**登记的 indicator API**，不代表所有核心 API、方言或研究工作流完全 parity。
+> 移动端 15/78 是已确认的范围决策，不列入扩容目标。
 > 详见 [language-bindings.md](../language-bindings.md)。
 
 ## 3. 一致性与门禁映射
@@ -57,32 +77,71 @@
 | 断言 | 门禁 / 测试 |
 |---|---|
 | 公式默认后端是 Tree | `formula_execution_mode.rs`；`check_formula_engine_contract.py` |
-| tree-only 入口矩阵无空白 | 同上（13 项三方一致） |
+| tree-only 入口矩阵无空白（四份名册一致） | `check_formula_engine_contract.py`（engine 守卫 / formula-engine.md / runtime 合同两处名册 / 测试） |
 | 批量 == 流式 == range == into == tree/plan == FFI | `runtime_convergence.rs`（五条边 rostered） |
+| 字符串字面量两路径一致 + 缺口名册 | `formula_string_literals.rs` |
 | 缓存有界且命名空间隔离 | `engine.rs`、`unified_runtime.rs`、`formula_execution_mode.rs` |
 | 绑定指标 surface 不倒退 | `audit_binding_parity.py --check`（ratchet） |
 | 绑定 feature contract | `check_binding_feature_contract.py` |
 | 依赖方向（kernel 不依赖 adapter） | `check_dependency_direction.py` |
+| feature 组合可构建 | `check_feature_matrix.py`（SUPPORTED 必过；KNOWN_BROKEN 必仍失败） |
 | 零判定带宽 / NaN 排序 | `check_zero_guard_policy.py`、`check_nan_unsafe_ordering.py` |
 | 数值语义合同 | [numerical-semantics.md](numerical-semantics.md) |
 | 缓存合同 | [runtime-and-cache-contract.md](runtime-and-cache-contract.md) |
 
-## 4. 本次核验记录（2026-10-10）
+## 4. 本次核验记录（2026-10-13，HEAD `5854e6fb`）
+
+本机实际执行、可复现的记录（**仅本机能重建的面**）：
+
+| 核验 | 命令 | 结果 |
+|---|---|---|
+| 公式后端契约 | `cargo test -p finkit --locked --test formula_execution_mode` | **13/13 通过**（默认 Tree；13 个 tree-only 守卫；plan 可用入口填充 plan 缓存） |
+| 公式差分 | `cargo test -p finkit --locked --test formula_plan_differential` | **4/4 通过**（国内/Pine 语料 tree==plan） |
+| 字符串字面量 | `cargo test -p finkit --locked --test formula_string_literals` | **6/6 通过**（两路径 `string_table` 一致；`string_base` 偏移；4 个消费下标的函数在 Plan 下运行且与 tree 逐值一致；参数边界保留 Tree 既有兼容行为） |
+| 相邻公式面 | `cargo test -p finkit --locked --test dzh_compat_tests --test em_compat_tests --test formula_dialect_coverage --test formula_corpus --test formula_terminal_contract --test runtime_convergence` | **94/94 通过**（43+21+2+10+1+17） |
+| 公式引擎合同 | `python scripts/check_formula_engine_contract.py` | 通过（13 项 tree-only 在 **四份**名册一致；默认 Tree；缓存容量一致） |
+| feature 组合 | `python scripts/check_feature_matrix.py` | 通过（**4** 个受支持组合构建成功；**6** 个 known-broken 仍按记录失败） |
+| 依赖方向 | `python scripts/check_dependency_direction.py` | 通过（30 条 shipped 边全部向下；1 条 dev-only 边已记录） |
+| 绑定 parity | `python scripts/audit_binding_parity.py --check` | 通过（8 个绑定基线一致；iOS/Android 15/78 属 ratchet 基线） |
+| 绑定 feature contract | `python scripts/check_binding_feature_contract.py` | 通过（9 个绑定编译其声明的 feature contract） |
+| 版本一致 | `python scripts/check_versions.py` | 通过（全部为 `0.2.0`） |
+| 文档链接 | `python scripts/check_docs_links.py` | 本次曾失败：`docs/README.md` 指向一个**未被 git 跟踪**的新文档；已通过纳入跟踪修复 |
+
+> 上表记录的是 2026-10-13 首轮公式/结构检查。2026-10-14 扩展工作树的
+> workspace、发布和多语言包验证见下节；二者不应被混作同一个 HEAD 记录。
+
+## 5. 扩展工作树验证记录（2026-10-14，基于 `5854e6fb`）
+
+本节记录在该基线之上的审查与修复工作树，所有结论只覆盖 Windows x64 本机：
+
+| 核验 | 命令 / 产物 | 结果 |
+|---|---|---|
+| Rust crate 全套测试 | `cargo test -p finkit -p finkit-factor-analysis -p finkit-cli -p finkit-visualization -p finkit-ffi-common -p finkit-ffi -p finkit-go -p finkit-dotnet -p finkit-java -p finkit-android -p finkit-ios -p finkit-wasm --locked --no-fail-fast` | 12 个 crate 通过 |
+| Workspace 构建 | `PYO3_PYTHON=<有效 Python> cargo check --workspace --locked` | 通过 |
+| Clippy CI 合同 | `cargo clippy -p finkit --locked`；`cargo clippy --workspace --all-targets --locked`，设 `RUSTFLAGS=-D unfulfilled_lint_expectations` | 通过；仓库 warning budget 允许既有 lint 警告，严格 `-D warnings` 不属于项目 CI 合同 |
+| Rustdoc | `RUSTDOCFLAGS="-D warnings" cargo doc -p finkit --no-deps --locked` | 通过。`check_rustdoc.sh` 的 WSL 启动器在该主机不可用，直接执行策略命令成功 |
+| crate 发布包 | `cargo package -p finkit --locked --allow-dirty` | 541 文件 / 8.1 MiB，验证成功 |
+| 使用接口包 | `bash scripts/build-usage-packages.sh` | Windows x64：Python、Node、Java、Go、C、.NET、WASM 七包全部 clean-consumer 验证通过；44 个 manifest 组件 |
+| 候选 bundle | `dist/finkit-0.2.0-windows-x64-usage-bundle.zip` | 26,280,558 字节；7 种语言、44 个组件；包 manifest 检查通过 |
+| C 原生 archive | `dist/native/windows-x64/finkit-0.2.0-native-windows-x64.zip` | 6,904,528 字节；SHA-256 `ebbf42746db5b4f4fbe70dbe04e64850223f34337b8be080f08bc4a603d15474` |
+| 未验证平台 | Linux/macOS、iOS/Android 原生 runner、远端 Actions、registry 发布 | 未覆盖，不据此宣称这些平台已发布或通过 |
+
+## 6. 历史核验记录（2026-10-10，HEAD `496763b7`）——仅供追溯
+
+以下为**旧 SHA** 上的本机记录，**不得当作当前 HEAD 的验证**：
 
 | 核验 | 结果 |
 |---|---|
-| `cargo test -p finkit --test formula_execution_mode` | **12/12 通过**（含新增的 `eval_multi_with_dialect(Pine)`、`eval_multi_with_pine_security` 两个 tree-only 覆盖） |
-| `cargo test -p finkit-factor-analysis` | **52/52 通过**（47 单元 + 3 `research_invariants` + 2 `ssot_contracts`） |
-| `cargo test -p finkit-cli` | 12 单元通过；`schema_cli.rs` 3 项在本机因 Windows `ERROR_PIPE_BUSY`（子进程管道繁忙）失败——**环境限制，非代码缺陷** |
-| `python scripts/audit_binding_parity.py --check` | 通过（8 个绑定基线一致） |
-| `python scripts/check_binding_feature_contract.py` | 通过（9 个绑定 feature contract） |
-| `python scripts/check_dependency_direction.py` | 通过（30 条 shipped 依赖边全部向下；1 条 dev-only 边已记录） |
-| `python scripts/check_formula_engine_contract.py` | 通过（13 个 tree-only 入口三方一致；默认 Tree；缓存容量一致） |
+| `cargo test -p finkit --test formula_execution_mode` | 12/12 通过 |
+| `cargo test -p finkit-factor-analysis` | 52/52 通过 |
+| `cargo test -p finkit-cli` | 12 单元通过；`schema_cli.rs` 3 项在本机因 Windows `ERROR_PIPE_BUSY` 失败——环境限制，非代码缺陷 |
+| `python scripts/audit_binding_parity.py --check` | 通过 |
+| `python scripts/check_dependency_direction.py` | 通过（30 条边） |
 
-> 本表只覆盖本机能重建的面。macOS / Android / iOS / Windows-msvc 各目标未在本机重建，
-> 不等同于发布门禁。`workspace-check` / `fmt` / `clippy` / `doc` 等 CI 作业仍以 CI 为准。
+> 与当前 HEAD 的差异示例：本次 `formula_execution_mode` 为 **13/13**（旧记录 12/12），
+> 说明测试面在两次基线之间确有变化——这正是"不得从旧 SHA 绿灯推断当前 HEAD"的理由。
 
-## 5. 待核验的旧审计结论
+## 7. 待核验的旧审计结论
 
 以下旧结论**未经本矩阵复现**，标注为"待核验"，不得直接当作当前缺陷：
 
@@ -92,11 +151,12 @@
 - "多处同源实现"的剩余清单：每保留一份重复实现都应有理由与差分测试，需继续按 kernel
   家族清点（`formula_plan_differential.rs` 的 allowlist 为空即为一项已闭合的断言）。
 
-## 6. 相关文档
+## 8. 相关文档
 
 - [架构总览](overview.md)
 - [公式引擎内部](formula-engine.md)
+- [公式入口矩阵](formula-entry-matrix.md)
 - [数值语义](numerical-semantics.md)
 - [运行时与缓存合同](runtime-and-cache-contract.md)
 - [语言绑定与发行状态](../language-bindings.md)
-- [架构审查与重构方案](../ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-10.md)
+- [架构审查与重构方案（2026-10-13）](../ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md)

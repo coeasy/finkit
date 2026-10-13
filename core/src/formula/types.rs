@@ -285,8 +285,9 @@ pub struct HostOhlc<'a> {
 /// The plan executor receives only `&[&[f64]]` numeric slots, so anything a
 /// function needs *besides* the price series has to travel separately. Carrying
 /// it explicitly is what lets `WINNER`/`COST` (chip distribution), `PERIODTYPE`
-/// (chart period), `TR` (implicit OHLC) and the zero-argument DZH money-flow
-/// family run on the plan path at all.
+/// (chart period), `TR` (implicit OHLC), the zero-argument DZH money-flow
+/// family, and the string-consuming `EM_REF` / `BLOCKDATA` / `BLOCKINDEX` /
+/// `BLOCKAVG` family run on the plan path at all.
 ///
 /// Everything here is **borrowed**, never owned. The plan path exists for
 /// throughput, and cloning every host series once per evaluation would put a
@@ -308,6 +309,21 @@ pub struct HostContext<'a> {
     pub ohlc: Option<HostOhlc<'a>>,
     /// Scalar capital value used by the implicit `CAPITAL` formula variable.
     pub capital: Option<f64>,
+    /// The context's whole `string_table`, so the string-consuming kernels
+    /// (`EM_REF`, `BLOCKDATA`, `BLOCKINDEX`, `BLOCKAVG`) can resolve the
+    /// absolute index a `STRING_LITERAL` emitted back to its text.
+    ///
+    /// The plan bakes a *plan-local* literal index and the dispatcher adds
+    /// `string_base`; the resulting value is a position in this table, so the
+    /// slice handed over must be the full table, not just the plan's literals.
+    /// Absent means those functions cannot resolve their argument and report
+    /// the same "must be a valid string" error the tree path does.
+    pub string_table: Option<&'a [String]>,
+    /// `EastMoney` external series used by `EM_REF` (`ctx.em_data`).
+    pub em_data: Option<&'a EmData>,
+    /// DZH block series used by `BLOCKDATA` / `BLOCKINDEX` / `BLOCKAVG`
+    /// (`ctx.block_data`).
+    pub block_data: Option<&'a BlockData>,
 }
 
 impl<'a> HostContext<'a> {
@@ -319,6 +335,9 @@ impl<'a> HostContext<'a> {
             money_flow: None,
             ohlc: None,
             capital: None,
+            string_table: None,
+            em_data: None,
+            block_data: None,
         }
     }
 }
@@ -405,7 +424,7 @@ pub struct BlockData {
     pub custom_fields: HashMap<String, HashMap<String, Array1<f64>>>,
 }
 
-/// 东方财富数据（EM DKCOL/EM_REF/EM_ZLCCV 支持）
+/// 东方财富数据（`DKCOL`/`EM_REF`/`EM_ZLCCV` 支持）
 #[derive(Clone, Default)]
 pub struct EmData {
     pub dkcol_data: HashMap<String, Array1<f64>>,
