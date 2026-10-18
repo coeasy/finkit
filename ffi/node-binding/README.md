@@ -139,7 +139,16 @@ For a release workflow, stage the generated host `.node` file into the matching 
 
 ## Formula entry points
 
-The native binding exposes formula functions such as `formulaEval` and `formulaValidate`. Use the repository formula documentation for language semantics:
+The native binding exposes formula functions such as `formulaEval` and `formulaValidate`. `formulaBackend()` reports the default backend (`tree`); pass a final `backend` argument of `"plan"` to `formulaEval` to opt into compiled-plan execution. Omitting it preserves the existing Tree behavior. Backend names are case-insensitive; an unknown name is an argument error, and an unsupported Plan entry fails explicitly.
+
+```js
+const backend = finkit.formulaBackend() // "tree"
+const result = finkit.formulaEval(
+  "MA(CLOSE, 20)", open, high, low, close, volume, "plan"
+)
+```
+
+Use the repository formula documentation for language semantics:
 
 - [Formula engine](../../docs/formula.md)
 - [Formula grammar](../../docs/formula/grammar.md)

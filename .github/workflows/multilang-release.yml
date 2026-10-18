@@ -436,7 +436,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo package -p finkit --locked --no-verify
       - run: cargo build -p finkit-cli --release --locked
-      - run: mkdir -p dist/rust && cp target/package/finkit-*.crate dist/rust/ && cp target/release/finkit-cli dist/rust/finkit-cli-linux-x86_64
+      - run: mkdir -p dist/rust && cp target/package/finkit-*.crate dist/rust/ && cp target/release/finkit-cli dist/rust/finkit-cli-linux-x86_64 && cp target/release/finkit-factor-study dist/rust/finkit-factor-study-linux-x86_64
         shell: bash
       - uses: actions/upload-artifact@v7
         with:
@@ -474,7 +474,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release-assets/finkit-*.crate release-assets/finkit-cli-*
+          rm -f release-assets/finkit-*.crate release-assets/finkit-cli-* release-assets/finkit-factor-study-*
           find release-assets -maxdepth 1 -type f -print | sort
           test -n "$(find release-assets -maxdepth 1 -type f -print -quit)"
           (cd release-assets && sha256sum * > SHA256SUMS.multilang)

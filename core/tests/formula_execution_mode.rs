@@ -92,6 +92,21 @@ fn tree_is_the_default() {
 }
 
 #[test]
+fn backend_names_are_stable_and_case_insensitive() {
+    assert_eq!(FormulaExecutionMode::Tree.as_str(), "tree");
+    assert_eq!(FormulaExecutionMode::Plan.as_str(), "plan");
+    assert_eq!(
+        FormulaExecutionMode::from_name("TREE"),
+        Some(FormulaExecutionMode::Tree)
+    );
+    assert_eq!(
+        FormulaExecutionMode::from_name("Plan"),
+        Some(FormulaExecutionMode::Plan)
+    );
+    assert_eq!(FormulaExecutionMode::from_name("jit"), None);
+}
+
+#[test]
 fn both_modes_agree_on_the_primary_series() {
     for source in FORMULAS {
         let ctx = context(64);

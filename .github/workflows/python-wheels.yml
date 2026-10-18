@@ -309,6 +309,7 @@ jobs:
           cp target/package/finkit-*.crate dist/
           cargo build -p finkit-cli --release --locked
           cp target/release/finkit-cli dist/finkit-cli-linux-x86_64
+          cp target/release/finkit-factor-study dist/finkit-factor-study-linux-x86_64
           sha256sum dist/* > dist/SHA256SUMS
       - name: Create or update GitHub Release
         env:

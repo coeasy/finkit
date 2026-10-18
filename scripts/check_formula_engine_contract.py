@@ -72,13 +72,13 @@ ENTRY_MATRIX = ROOT / "docs" / "architecture" / "formula-entry-matrix.md"
 PLAN_DOC = ROOT / "docs" / "ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md"
 BINDING_ROOT = ROOT / "ffi"
 
-# A binding that could select the backend would contain one of these. The entry
-# matrix §5 asserts that *no* binding can, which is the second blocker for the
-# Plan-default flip: a binding user would have no way to pin Tree. If someone
-# adds a selector, this gate forces the matrix to be updated in the same change.
+# A binding that can select the backend contains one of these. The entry matrix
+# §5 must report the capability of each binding accurately, rather than freezing
+# the historical claim that none of them can choose a backend.
 BINDING_BACKEND_SELECTOR = re.compile(
     r"\b(?:with_execution_mode|set_execution_mode|FormulaExecutionMode)\b"
 )
+BINDING_BACKEND_REPORT = re.compile(r"\bformula_backend\b|\bformulaBackend\b")
 
 # The controlled vocabulary the entry matrix must use for each tree-only entry.
 # Phase 1.2 of the 2026-10-13 review: every guarded entry needs a recorded
@@ -228,9 +228,9 @@ def binding_crates() -> list[Path]:
     )
 
 
-def binding_matrix_rows(text: str) -> set[str]:
-    """Binding names from the entry matrix's §5 capability table."""
-    rows: set[str] = set()
+def binding_matrix_rows(text: str) -> dict[str, tuple[bool, bool]]:
+    """Binding backend selection/report claims from the §5 capability table."""
+    rows: dict[str, tuple[bool, bool]] = {}
     inside = False
     for line in text.splitlines():
         if line.startswith("## 5."):
@@ -245,7 +245,7 @@ def binding_matrix_rows(text: str) -> set[str]:
             continue
         name = cells[0].strip("`")
         if re.fullmatch(r"[a-z0-9-]+-binding", name):
-            rows.add(name)
+            rows[name] = ("✅" in cells[1], "✅" in cells[2])
     return rows
 
 
@@ -442,10 +442,9 @@ def main() -> int:
             f"engine does not guard with require_tree_backend"
         )
 
-    # 3e. The §5 binding matrix must list exactly the binding crates on disk, and
-    # its "cannot select the backend" claim must stay true. That claim is the
-    # second blocker for the Plan-default flip, so it must not rot: a binding that
-    # gains a selector has to update the matrix in the same change.
+    # 3e. The §5 binding matrix must list exactly the binding crates on disk and
+    # its selection/report claims must match the Rust source. This lets active
+    # bindings expose an opt-in backend without making the matrix stale.
     documented_bindings = binding_matrix_rows(entry_matrix)
     actual_bindings = {path.name for path in binding_crates()}
     if not documented_bindings:
@@ -453,15 +452,17 @@ def main() -> int:
             "docs/architecture/formula-entry-matrix.md has no §5 binding capability "
             "table; every binding's backend-select/report status must be recorded"
         )
-    for name in sorted(actual_bindings - documented_bindings):
+    for name in sorted(actual_bindings - documented_bindings.keys()):
         failures.append(
             f"binding crate `ffi/{name}` is missing from the entry matrix §5 table"
         )
-    for name in sorted(documented_bindings - actual_bindings):
+    for name in sorted(documented_bindings.keys() - actual_bindings):
         failures.append(
             f"the entry matrix §5 table lists `{name}`, which is not an ffi/*-binding crate"
         )
     for crate in binding_crates():
+        selected = False
+        reported = False
         for source in sorted((crate / "src").rglob("*.rs")):
             text = source.read_text(encoding="utf-8", errors="replace")
             # Skip comment-only lines: prose *about* the backend (the C header
@@ -470,11 +471,19 @@ def main() -> int:
             code = "\n".join(
                 line for line in text.splitlines() if not line.lstrip().startswith("//")
             )
-            if BINDING_BACKEND_SELECTOR.search(code):
+            selected |= bool(BINDING_BACKEND_SELECTOR.search(code))
+            reported |= bool(BINDING_BACKEND_REPORT.search(code))
+        if crate.name in documented_bindings:
+            expected_selection, expected_report = documented_bindings[crate.name]
+            if selected != expected_selection:
                 failures.append(
-                    f"{source.relative_to(ROOT)} selects the execution backend, but the "
-                    f"entry matrix §5 records every binding as unable to select it; "
-                    f"update §5 (and the plan doc's exit-condition analysis) to match"
+                    f"ffi/{crate.name} backend selection is {selected}, but the entry "
+                    f"matrix §5 records {expected_selection}"
+                )
+            if reported != expected_report:
+                failures.append(
+                    f"ffi/{crate.name} backend reporting is {reported}, but the entry "
+                    f"matrix §5 records {expected_report}"
                 )
 
     # 4. Cache capacities in the doc track the constants.

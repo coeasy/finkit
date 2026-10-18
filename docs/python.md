@@ -313,6 +313,25 @@ strategy_signal[ready] = (close[ready] > sma20[ready]) & (rsi14[ready] > 50)
 
 Do not treat leading `NaN` values as a calculation failure; they represent insufficient lookback history for many rolling indicators.
 
+## Formula backend selection
+
+One-shot formula evaluation keeps the Rust default (`tree`) unless a backend is
+explicitly selected. Query the default or normalize a backend name with
+`formula_backend`; pass `backend="plan"` to opt in to compiled-plan execution:
+
+```python
+ta.formula_backend()  # "tree"
+ta.formula_backend("PLAN")  # "plan" (names are case-insensitive)
+result = ta.formula_eval(
+    "MA(CLOSE, 20)", open_, high, low, close, volume, backend="plan"
+)
+```
+
+`formula_eval_dialect` accepts the same `backend` keyword. Unknown backend
+names raise `ValueError`; a Plan path that cannot serve an entry fails loudly
+with `NotImplementedError`. Existing calls with no backend argument retain
+Tree behavior.
+
 ## `CompiledFormula`
 
 Use `CompiledFormula` when the same formula is executed repeatedly. The object keeps the parsed/optimized plan and formula-engine caches alive across calls.

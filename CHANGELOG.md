@@ -1,11 +1,27 @@
 # Changelog
 
-## [0.2.0] - 2026-09-23
+## [0.2.0] - 2026-10-18
 
-Trial release. This cycle closes the gap between "the engine can compute it"  
-and "a user can find out that it can": the formula surface is now described by  
+Release candidate. This cycle closes the gap between "the engine can compute it"
+and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and  
 reused.
+
+### Added - 2026-10-18 (backend selection and delivery closure)
+
+- Added stable `tree` / `plan` backend names to the Rust formula API.
+- Exposed backend query and opt-in selection in Python and Node formula
+  evaluation while preserving Tree as the default.
+- Added the core workflow matrix and updated the current implementation status
+  snapshot to distinguish source, test, CI and published-release evidence.
+- Added the `finkit-factor-study` binary to the v0.2.0 GitHub Release assets.
+
+### Fixed - 2026-10-18
+
+- Corrected the Rust formula backend documentation: string literal support and
+  the `EM_REF` / block-data Plan kernels are implemented.
+- Aligned Python's unsupported-backend exception and Node's error status with
+  explicit argument/backend capability errors.
 
 
 ### Changed - 2026-10-10 (thirtieth pass — the architecture review plan, landed as contracts, docs and gates)

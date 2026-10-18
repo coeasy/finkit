@@ -104,9 +104,9 @@ parity, and do not read a missing parity gate as "unsupported".
 
 | Binding | Indicator surface (gated) | Formula surface | Research surface | Platform validation | Release state |
 | --- | --- | --- | --- | --- | --- |
-| Rust `core` | is the runtime | full | full | `cargo test -p finkit` | v0.1.15 `.crate` |
-| Python | 78 / 78 | exported (see [python.md](python.md)) | exported | CI `python-wheels` | v0.1.15 ABI3 wheels |
-| Node | 78 / 78 | exported | exported | CI native smoke (`linux-x64`, `win32-x64-msvc`, `darwin-arm64`) | CI `.tgz` candidate (not on npm) |
+| Rust `core` | is the runtime | full; `FormulaEngine` selects/reports Tree or Plan | full | `cargo test -p finkit` | v0.1.15 `.crate` |
+| Python | 78 / 78 | exported; `formula_backend` and `formula_eval(..., backend=...)` | exported | CI `python-wheels` | v0.1.15 ABI3 wheels |
+| Node | 78 / 78 | exported; `formulaBackend` and `formulaEval(..., backend?)` | exported | CI native smoke (`linux-x64`, `win32-x64-msvc`, `darwin-arm64`) | CI `.tgz` candidate (not on npm) |
 | C | 78 / 78 (extractor self-check anchor) | exported (`*_json`) | exported | CI CMake build/test/install | CI SDK candidate |
 | Go | 78 / 78 | exported | exported | CI `go test` + external-module consumer | source + CI candidate |
 | Java | 78 / 78 | exported | exported | CI JNI build + JVM smoke | CI JAR candidate |

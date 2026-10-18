@@ -1365,7 +1365,14 @@ export declare function klineDataValidationErrors(data: KlineDataNapi): Array<st
  * console.log(result.__result__);
  * ```
  */
-export declare function formulaEval(source: string, open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>): Record<string, Array<number>>
+export declare function formulaEval(source: string, open: Array<number>, high: Array<number>, low: Array<number>, close: Array<number>, volume: Array<number>, backend?: string | undefined | null): Record<string, Array<number>>
+/**
+ * Return the default formula backend or normalize a requested backend name.
+ *
+ * Formula evaluation defaults to `tree`; pass `"plan"` to `formulaEval` to
+ * opt into compiled-plan execution.
+ */
+export declare function formulaBackend(backend?: string | undefined | null): string
 export interface FormulaMultiResult {
   names: Array<string>
   values: Array<Array<number>>

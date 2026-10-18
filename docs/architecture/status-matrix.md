@@ -1,9 +1,21 @@
 # 实现现状矩阵
 
-- 基线：`main`，HEAD `5854e6fb`（2026-10-13，workspace `0.2.0`）
-- 状态更新日期：2026-10-14（基线审查于 2026-10-13）
-- 依据：[架构审查与重构方案（2026-10-13）](../ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) 阶段 0
+- 基线：`codex/release-v0.2.0-convergence`，基于 HEAD `8b398999` 的未提交候选工作树（workspace `0.2.0`）
+- 状态更新日期：2026-10-18（Windows x64；本地候选工作树验证，不代表远端 CI 或发布）
+- 依据：[项目功能、架构与重构审查（2026-10-18）](../PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md)
 - 上一版基线：`496763b7`（2026-10-10），记录见 §5
+
+## 当前证据快照（2026-10-18）
+
+| 证据类别 | 当前判断 | 依据 / 限制 |
+|---|---|---|
+| 源码与声明 | `8b398999` 加本文档/代码候选改动；workspace `0.2.0` | Git working tree；发布证据须绑定最终 commit/tag |
+| 静态架构审查 | 已审查 workspace、关键源码入口、feature 声明、binding tier、发布工作流 | 见 [2026-10-18 审查](../PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md)；静态存在不代表运行成功 |
+| 当前候选工作树测试 / 构建 | `cargo test --workspace --locked --no-fail-fast` **通过**；Node 16/16、Python 全套及 CLI 研究端到端专项测试通过 | Windows x64；候选改动在最终提交后的验证仍需重跑，不能外推到最终 SHA |
+| 当前候选 GitHub Actions | **unknown** | 本地未读取 Actions 运行详情；需要按最终提交 SHA 核验 |
+| 公开发行 | GitHub Releases 页面显示最新公开 Release 为 `v0.1.15`；`0.2.0` 是仓库当前候选版本 | [GitHub Releases](https://github.com/coeasy/finkit/releases)；候选 tag、registry 发布、平台包均须按实际完成状态更新 |
+
+下列 §4–§6 记录保留其原始日期与 SHA，仅作历史追溯。它们不是 `8b398999` 的验证结果。
 
 本矩阵给出"**当前源码和可执行合同**"的现状。它存在的目的是**阻止把四种不同状态
 混成一个完成度百分比**：
@@ -39,7 +51,7 @@
 |---|---|---|---|---|---|---|
 | 批量指标 / 数值核 | `core/src/indicators/`、`core/src/math/` | ✅ | `golden_tests.rs`、`golden_talib_tests.rs`、`talib_coverage_matrix.rs`、`adx_nan_golden.rs`、`indicator_api_surface.rs` | TA-Lib golden；`allocating == into`（`runtime_convergence.rs`） | `test` | 源码 + v0.1.15 `.crate` |
 | 公式 tree 后端（默认） | `core/src/formula/engine.rs` `eval*` | ✅ | `formula_execution_mode.rs`、`formula_differential_tests.rs`、`formula_input_bounds.rs` | `tree == plan`（rostered，`formula_plan_differential.rs`） | `test` | 源码 + v0.1.15 |
-| 公式 plan 后端（opt-in） | `formula/compute_ir.rs`、`executor.rs`、`unified_dispatch.rs` | ✅ | `formula_plan_differential.rs`、`formula_string_literals.rs` | 同上；tree-only 入口 `BackendUnsupported` 明确失败 | `test` | 源码（默认关闭） |
+| 公式 plan 后端（opt-in） | `formula/compute_ir.rs`、`executor.rs`、`bridge_dispatch.rs`、`unified_dispatch.rs` | ✅ | `formula_plan_differential.rs`、`formula_string_literals.rs` | 同上；tree-only 入口 `BackendUnsupported` 明确失败 | `test` | 源码（默认关闭） |
 | streaming | `core/src/streaming/` | ✅ | `runtime_convergence.rs`、`repaint_tests.rs`、`long_run_stability.rs` | `batch == streaming`；注册表双向门禁 | `test` | 源码 + v0.1.15 |
 | 因子图 / 统一运行时 / DirtyRange | `semantic_graph.rs`、`unified_runtime.rs`、`compute.rs` | ✅ | `factor_graph_contract.rs`、`unified_operation_seam.rs`、`runtime_convergence.rs` | `full == range`；增量保守回退 | `runtime-integration-tests` | next-release（非 v0.1.15） |
 | Factor Research | `factor-analysis/` | ✅ | `research_invariants.rs`、`ssot_contracts.rs` + 47 单元 | point-in-time 不变量 | `research-test` | next-release |
@@ -88,6 +100,24 @@
 | 零判定带宽 / NaN 排序 | `check_zero_guard_policy.py`、`check_nan_unsafe_ordering.py` |
 | 数值语义合同 | [numerical-semantics.md](numerical-semantics.md) |
 | 缓存合同 | [runtime-and-cache-contract.md](runtime-and-cache-contract.md) |
+
+## 3.1 候选工作树复验（2026-10-18）
+
+下列结果针对当前本地候选工作树，不是最终发布 SHA：
+
+| 核验 | 命令 / 产物 | 结果 |
+|---|---|---|
+| Rust workspace tests + doctests | `PYO3_PYTHON=<有效 Python> cargo test --workspace --locked --no-fail-fast` | **退出码 0**；全部执行的测试与 doctest 通过，仓库标记的 ignored 项未执行 |
+| Workspace 编译 | `PYO3_PYTHON=<有效 Python> cargo check --workspace --all-targets --locked` | 通过（14 个 crate；Windows incremental lock cleanup 有权限警告，不影响退出码 0） |
+| Clippy | `PYO3_PYTHON=<有效 Python> cargo clippy --workspace --all-targets --locked` | 通过，退出码 0；pedantic 配置产生数千条既有 warning，应作为后续质量治理项 |
+| 核心 rustdoc | `RUSTDOCFLAGS=-D warnings cargo doc -p finkit --no-deps --locked` | 通过；Windows incremental lock cleanup 有权限警告，不影响退出码 0 |
+| crates.io package 验证 | `cargo package -p finkit --locked --allow-dirty` | 通过；541 files / 8.1 MiB，包含重新编译验证 |
+| 公式执行 mode | `cargo test -p finkit --test formula_execution_mode --locked` | **14/14 通过** |
+| Feature matrix | `python scripts/check_feature_matrix.py` | 通过；具体受支持/known-broken 组合数以脚本当前清单为准 |
+| 依赖、绑定、文档与版本合同 | `check_dependency_direction.py`、`audit_binding_parity.py --check`、`check_binding_feature_contract.py`、`check_docs_links.py`、`check_versions.py`、`gen_ssot_docs.py --check`、`check_formula_engine_contract.py`、`check_python_stub.py`、`check_changelog.py` | 均通过 |
+| Python / Node / Factor Study CLI 消费测试 | `pytest` binding suites、`npm test`、`cargo test -p finkit-cli --test factor_study_cli --locked` | Python 全套通过；Node **16/16**；CLI **1/1** |
+
+完整命令和提交 SHA 需在最终候选提交完成后再次固定；该本地验证不代替 GitHub Actions、多平台 runner 或公开 registry 安装验证。
 
 ## 4. 本次核验记录（2026-10-13，HEAD `5854e6fb`）
 

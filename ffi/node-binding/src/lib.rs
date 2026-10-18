@@ -284,7 +284,9 @@ fn composite_input_expression_napi(
 }
 
 #[cfg(feature = "formula")]
-use finkit::formula::{parse_formula, FormulaContext, FormulaEngine, FormulaError};
+use finkit::formula::{
+    parse_formula, FormulaContext, FormulaEngine, FormulaError, FormulaExecutionMode,
+};
 #[cfg(feature = "formula")]
 use ndarray::Array1;
 
@@ -327,7 +329,7 @@ fn formula_error_to_napi(e: FormulaError) -> napi::Error {
             format!("Unsupported function: {}", msg),
         ),
         FormulaError::BackendUnsupported { backend, entry } => napi::Error::new(
-            napi::Status::GenericFailure,
+            napi::Status::InvalidArg,
             format!("`{}` is not available on the {} backend", entry, backend),
         ),
         FormulaError::Timeout { elapsed_ms } => napi::Error::new(
@@ -1995,7 +1997,15 @@ pub fn formula_eval(
     low: Vec<f64>,
     close: Vec<f64>,
     volume: Vec<f64>,
+    backend: Option<String>,
 ) -> Result<HashMap<String, Vec<f64>>> {
+    let backend_name = backend.as_deref().unwrap_or("tree");
+    let mode = FormulaExecutionMode::from_name(backend_name).ok_or_else(|| {
+        napi::Error::new(
+            napi::Status::InvalidArg,
+            format!("unknown formula backend {backend_name:?}; expected 'tree' or 'plan'"),
+        )
+    })?;
     let open_array = Array1::from_vec(open);
     let high_array = Array1::from_vec(high);
     let low_array = Array1::from_vec(low);
@@ -2010,7 +2020,7 @@ pub fn formula_eval(
         volume_array,
         None,
     );
-    let mut engine = FormulaEngine::new();
+    let mut engine = FormulaEngine::new().with_execution_mode(mode);
 
     let result = engine
         .eval(&source, &mut ctx)
@@ -2025,6 +2035,23 @@ pub fn formula_eval(
     output.insert("__result__".to_string(), result.to_vec());
 
     Ok(output)
+}
+
+/// Return the default formula backend or normalize a requested backend name.
+///
+/// Formula evaluation defaults to `tree`; pass `"plan"` to `formulaEval` to
+/// opt into compiled-plan execution.
+#[napi]
+#[cfg(feature = "formula")]
+pub fn formula_backend(backend: Option<String>) -> Result<String> {
+    let backend_name = backend.as_deref().unwrap_or("tree");
+    let mode = FormulaExecutionMode::from_name(backend_name).ok_or_else(|| {
+        napi::Error::new(
+            napi::Status::InvalidArg,
+            format!("unknown formula backend {backend_name:?}; expected 'tree' or 'plan'"),
+        )
+    })?;
+    Ok(mode.as_str().to_string())
 }
 
 /// Persistent registry for parameterized expression components.

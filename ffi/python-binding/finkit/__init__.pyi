@@ -756,8 +756,13 @@ def formula_eval(
     close: ArrayLike,
     volume: ArrayLike,
     amount: Optional[ArrayLike] = ...,
+    backend: str = "tree",
 ) -> Dict[str, Array1D]:
-    """Compile and execute a formula once."""
+    """Compile and execute a formula once using the selected backend."""
+    ...
+
+def formula_backend(backend: Optional[str] = ...) -> str:
+    """Return the default formula backend or normalize a requested backend."""
     ...
 
 def formula_eval_dialect(
@@ -769,8 +774,9 @@ def formula_eval_dialect(
     volume: ArrayLike,
     dialect: str = "alpha_ta",
     amount: Optional[ArrayLike] = ...,
+    backend: str = "tree",
 ) -> Dict[str, Array1D]:
-    """Compile and execute a formula using a named dialect."""
+    """Compile and execute a formula using a dialect and selected backend."""
     ...
 
 def formula_eval_contract_json(
