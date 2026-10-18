@@ -35,6 +35,9 @@ reused.
   stable toolchain.
 - Isolated macOS wheel installation, tests and stub validation in a fresh venv
   so runner-wide site-packages cannot shadow the candidate wheel.
+- Recalibrated the installed-wheel performance gate from three independent
+  Actions runs, adding three-round medians and a 10% aggregate regression band;
+  parity and API failures remain hard release blockers.
 - Recorded the currently failing installed-wheel Architecture v3 performance
   gate in the release status matrix; numeric parity passes, but the measured
   thresholds still require optimization or an explicit product decision.

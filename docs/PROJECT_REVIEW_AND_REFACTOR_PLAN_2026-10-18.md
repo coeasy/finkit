@@ -1,7 +1,7 @@
 # Finkit 项目功能、架构与重构审查（2026-10-18）
 
 > 审查起点：`main` HEAD `8b398999`（`fix formula and package release paths`），workspace `0.2.0`。当前执行分支：`codex/release-v0.2.0-convergence`。
-> 本文包含源码审查、Windows x64 候选工作树复验和 PR #30 远端 CI 观察；最近已推送代码基线为 `15429b5`，下文新增 CI 修复尚在本地工作树，需提交后重跑 Actions。验证明细见 [实现状态矩阵](architecture/status-matrix.md)。
+> 本文包含源码审查、Windows x64 候选工作树复验和 PR #30 远端 CI 观察；最近已推送代码基线为 `270e02b`；该 SHA 的其余平台 CI 已通过，原单轮性能门槛失败。三轮稳定基线 gate 已按复测数据调整，待新 SHA 复验。验证明细见 [实现状态矩阵](architecture/status-matrix.md)。
 > 范围依据仓库已有的产品边界决定：Rust 金融计算引擎、公式/流式/因子计算、因子研究、CLI/可视化及语言绑定；不把回测引擎或选股/组合构建引擎列为本库目标。
 
 ## 结论摘要
@@ -72,11 +72,11 @@ flowchart LR
 |---|---|---|
 | P0 | 多份“架构/状态/产品”文档基线过期或互相冲突 | 原状态矩阵以历史 SHA 为当前基线，README 的版本用语和目录索引也过期。本轮已加入候选验证状态、修正架构 crate 图、整理 10/18 文档索引；最终提交后仍需固定 SHA 与 CI/发布状态。 |
 | P0 | crates.io 发布 job 的 docs.rs 配置启用互斥 feature | `all-features=true` 同时启用 `std` 和 `no_std`，编译期必然失败。本轮将 docs.rs 元数据和 tag 工作流改为相同的显式默认 feature allowlist，并用对应命令在本机验证通过。 |
-| P0 | Python wheel 准备脚本仍指向旧版扁平源码路径 | PR #30 首轮四个平台都在 wheel 编译前失败：`binding_spec.py` 读取已拆分移位的 `core/src/indicators/momentum.rs`，且 batch contract 仍检查旧 `lib.rs`。已改为实际的 `momentum/mfi_impl.rs`、`momentum/willr_impl.rs` 与 `talib_compat.rs`，增强末尾函数边界支持；`verify_python_bindings.py` 和完整 `prepare_python_hot_bindings.py` 本机复跑通过，等待 GitHub job 复验。 |
-| P0 | 平台目标安装与仓库 Rust 工具链不一致 | PR #30 的 wasm、Android、iOS 和 AArch64 job 在安装目标到 `stable` 后，被 `rust-toolchain.toml` 覆盖到 1.98，导致目标组件缺失。已在这些 job 显式固定 `toolchain: "1.98"`；等待推送后的 runner 复验。 |
-| P0 | macOS Python wheel stub 检查受系统 site-packages 污染 | PR #30 arm64 wheel 构建和 135 项测试通过，但 stub 检查仍导入旧的 `/Library/Frameworks/.../site-packages/finkit`。仅固定 setup-python 解释器不足以隔离 framework site-packages；已改为在 wheel job 新建 venv 并在其中安装、测试、检查候选 wheel，新 CI 待复验。 |
-| P0 | C 数值契约生成器没有输出 JSON 字符串 token | PR #30 `cpp-linux` 的 C numeric contract 因请求生成成 `{"operation":ACCBANDS,...}` 而解析失败。已让生成器对 semantic profile 与 operation 先 JSON 序列化再做 C 字符串转义，并重产 C 头文件；生成器 `--check` 通过，本机 Windows C 测试成功编译，但运行未在本轮完成，仍需 Linux runner 复验。 |
-| P0 | 安装 wheel 的 Architecture v3 性能发布门禁未达当前阈值 | PR #30 Linux installed-wheel job 的 parity 无失败，但当前 HEAD 测量未达到 1M geomean `1.2x`（实测 `1.151x`），Top-20 最小加速比 `1.05x`（实测 `0.482x`），且 ADOSC、ADX14、ATR14、DEMA20、MACD、NATR14、SAR 多项低于一致性下限。需基于重复基准定位热路径并优化，或经产品决策重新定义有数据支撑的 release gate；不能把本次性能 gate 标成通过。 |
+| P0 | Python wheel 准备脚本仍指向旧版扁平源码路径 | PR #30 首轮四个平台都在 wheel 编译前失败：`binding_spec.py` 读取已拆分移位的 `core/src/indicators/momentum.rs`，且 batch contract 仍检查旧 `lib.rs`。已改为实际的 `momentum/mfi_impl.rs`、`momentum/willr_impl.rs` 与 `talib_compat.rs`，增强末尾函数边界支持；`verify_python_bindings.py`、完整 `prepare_python_hot_bindings.py` 本机复跑通过；最新 SHA 的 Linux、macOS arm64/x86_64 wheel 均通过，Windows job 仍运行。 |
+| P0 | 平台目标安装与仓库 Rust 工具链不一致 | PR #30 的 wasm、Android、iOS 和 AArch64 job 在安装目标到 `stable` 后，被 `rust-toolchain.toml` 覆盖到 1.98，导致目标组件缺失。显式固定 `toolchain: "1.98"` 后 AArch64 warning contract、WASM、iOS XCFramework/Swift typecheck、Android AAR、Rust package 及 Java/.NET/Go/Node 多平台 job 全部通过。 |
+| P0 | macOS Python wheel stub 检查受系统 site-packages 污染 | 只固定 setup-python 解释器仍导入旧的 `/Library/Frameworks/.../site-packages/finkit`。在 macOS wheel job 新建 venv 后，最新 arm64 wheel 构建、135 项测试和 stub 对扩展检查均通过。 |
+| P0 | C 数值契约生成器没有输出 JSON 字符串 token | PR #30 `cpp-linux` 的 C numeric contract 因请求生成成 `{"operation":ACCBANDS,...}` 而解析失败。已让生成器对 semantic profile 与 operation 先 JSON 序列化再做 C 字符串转义并重产 C 头文件；生成器 `--check` 通过，最新 Linux C unit、C++ indicator/catalog、C API smoke 与 201-vector numeric contract 全部成功。Windows 本机目标成功编译，但运行未在本轮完成。 |
+| P0 | 安装 wheel 的 Architecture v3 性能发布门禁原始阈值和单轮判定不稳定 | 三个独立 Ubuntu Actions 运行总体几何平均为 1.170/1.170/1.097x，100K 为 1.206/1.207/1.106x，1M 为 1.151/1.154/1.082x；可见跨运行噪声，而原始 1.20x 1M 与 Top-20 最低 1.05x 也不符合现有基线。按用户选择，已新增三轮中位数 gate 与三次 Actions 观测基线，使用 10% 非回归容差，并将单项最低值降为诊断指标；新 gate 需在新 SHA 上复验。 |
 | P1 | 公式双路径行为面复杂，默认与“统一运行时”产品叙述有距离 | Tree 仍是默认；Plan 可选且有 Tree-only 入口。旧审查的特定 workload 性能数据不是当前候选重测。本轮已为 Rust/Python/Node 增加 backend 查询与选择，继续保留 Tree 默认；切换默认仍要基于有代表性的 benchmark 决策。 |
 | P1 | Cargo feature 名称容易被误读为可用裁剪功能 | 分类 feature 在 `core/Cargo.toml` 中明确不可独立使用；多个组合被登记为 KNOWN_BROKEN。对使用者来说 feature 合同可理解性不足，未来拆模块前需先让声明和构建事实一致。 |
 | P1 | 完成度叙述把“源码存在、测试覆盖、CI target、发布”并列但更新节奏不同 | 项目当前有细致矩阵的雏形，不过旧矩阵只记旧 SHA/旧状态。不同成熟度 binding 与 next-release 能力容易被营销或 API 数字误推为已交付。 |

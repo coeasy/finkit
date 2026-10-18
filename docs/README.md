@@ -14,6 +14,7 @@ Choose the path that matches your goal:
 | 中文产品介绍 | [中文产品说明](product-overview-zh.md) |
 | 宣传/项目介绍素材 | [中文宣传文稿](promotion-zh.md) |
 | 评估竞品与性能优势 | [竞品对比与超越路线](competitive-positioning-zh.md) |
+| 查看性能发布门槛与校准数据 | [Architecture v3 基准](benchmark-baselines/architecture-v3-installed-wheel.json) |
 | Install and calculate something | [Getting started](getting-started.md) |
 | Verify install/release assets | [Installation](installation.md) |
 | Prepare or audit a release | [Release checklist](release-checklist.md) |
@@ -187,6 +188,7 @@ moved out of the working tree (see below); nothing here is a second baseline.
 | --- | --- |
 | [FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) | 架构与实现背景总纲 —— 分层架构地图、开发细节、V4 遗留项基线核验 |
 | [PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md](PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md) | **当前项目范围审查与重构总纲** —— 功能闭环、实现缺口、结构问题与阶段计划 |
+| [benchmark-baselines/architecture-v3-installed-wheel.json](benchmark-baselines/architecture-v3-installed-wheel.json) | Architecture v3 安装 wheel 性能门槛的三次独立 Actions 基准与 10% 非回归容差 |
 | [ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) | 历史审查记录 —— 三轮逻辑/贯通核查、整改进展、发布验证及当时限制 |
 
 ## Deleted from the working tree — recoverable from git history

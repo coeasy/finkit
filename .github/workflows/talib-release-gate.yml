@@ -17,6 +17,7 @@ on:
       - 'scripts/sync_bindings.py'
       - 'scripts/benchmark_talib_release_gate.py'
       - 'scripts/benchmark_talib_arch_v3_gate.py'
+      - 'docs/benchmark-baselines/architecture-v3-installed-wheel.json'
       - 'scripts/benchmark_talib_all_current_gate.py'
       - 'scripts/benchmark_talib_full_current_gate.py'
       - 'scripts/gen_talib_numeric_contract.py'
