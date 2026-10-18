@@ -1,7 +1,7 @@
 # 实现现状矩阵
 
-- 基线：`codex/release-v0.2.0-convergence`，性能门槛复验代码提交 `71180ba`（workspace `0.2.0`；之后仅有文档状态更新）
-- 状态更新日期：2026-10-18（Windows x64 本地验证 + PR #30 GitHub Actions；不代表公开发布）
+- 基线：`codex/release-v0.2.0-convergence`，提交 `f1fa798` 加本地候选改动（workspace `0.2.0`；最终 SHA 待提交）
+- 状态更新日期：2026-10-18（Windows x64 本地验证 + 历史 PR #30 GitHub Actions；不代表公开发布）
 - 依据：[项目功能、架构与重构审查（2026-10-18）](../PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md)
 - 上一版基线：`496763b7`（2026-10-10），记录见 §5
 
@@ -9,10 +9,11 @@
 
 | 证据类别 | 当前判断 | 依据 / 限制 |
 |---|---|---|
-| 源码与声明 | 性能校准代码提交 `71180ba`；workspace `0.2.0` | Git working tree；发布证据须绑定最终 commit/tag |
+| 源码与声明 | 当前候选工作树基于 `f1fa798`；workspace `0.2.0` | Git working tree；本轮修复尚未提交，发布证据须绑定最终 commit/tag |
 | 静态架构审查 | 已审查 workspace、关键源码入口、feature 声明、binding tier、发布工作流 | 见 [2026-10-18 审查](../PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md)；静态存在不代表运行成功 |
-| 当前候选工作树测试 / 构建 | `cargo test --workspace --locked --no-fail-fast` **通过**；Node 16/16、Python 全套及 CLI 研究端到端专项测试通过 | Windows x64；候选改动在最终提交后的验证仍需重跑，不能外推到最终 SHA |
-| 当前候选 GitHub Actions | `71180ba` 上 Docs Check、Python ABI3 wheels、多语言发布和跨平台工作流通过；Architecture v3 校准门禁通过 | 三轮中位数：总体 1.125x、100K 1.151x、1M 1.109x、Top20 1.261x，均高于校准下限。另一个 155-vector 全量重叠 gate 报告 APO、BETA、HT_TRENDMODE、STOCHRSI 四项 parity failures（API errors 为空），因此 TA-Lib workflow 仍为失败；不应将这一正确性缺口当作性能容差。PR 上发布资产 job 按条件跳过 |
+| 当前候选工作树测试 / 构建 | `cargo test --workspace --locked --no-fail-fast` **通过**；安装 wheel 后 TA-Lib 全重叠门禁 155/155、Python 新增合同测试 8/8 通过 | Windows x64；候选改动在最终提交后的远端复验仍需完成，不能外推到所有平台 |
+| 当前候选性能校准 | `benchmark_talib_arch_v3_gate.py --sizes 100000 1000000 --repetitions 3` 通过现有稳定基准门槛 | Windows x64 本地三轮中位数：总体 1.313x、100K 1.484x、1M 1.175x、Top20 1.497x；与 Linux hosted-runner 基线不同机型，不视作跨平台性能承诺。全覆盖脚本中的逐项慢于 TA-Lib 结果仅作诊断，不替代校准门槛 |
+| 当前候选 GitHub Actions | `71180ba` 上 Docs Check、Python ABI3 wheels、多语言发布和跨平台工作流通过；Architecture v3 校准门禁通过 | 历史 SHA CI 不是当前候选证明；PR 上发布资产 job 按条件跳过。新的源码改动须推送后以当前 SHA 重新跑 CI |
 | 公开发行 | GitHub Releases 页面显示最新公开 Release 为 `v0.1.15`；`0.2.0` 是仓库当前候选版本 | [GitHub Releases](https://github.com/coeasy/finkit/releases)；候选 tag、registry 发布、平台包均须按实际完成状态更新 |
 
 下列 §4–§6 记录保留其原始日期与 SHA，仅作历史追溯。它们不是 `8b398999` 的验证结果。

@@ -1,7 +1,7 @@
 # Finkit 项目功能、架构与重构审查（2026-10-18）
 
 > 审查起点：`main` HEAD `8b398999`（`fix formula and package release paths`），workspace `0.2.0`。当前执行分支：`codex/release-v0.2.0-convergence`。
-> 本文包含源码审查、Windows x64 候选工作树复验和 PR #30 远端 CI 观察；性能校准改动在 `71180ba` 上复验通过，但同一 TA-Lib workflow 的全量重叠覆盖门禁仍因 4 个 parity 差异失败（APO、BETA、HT_TRENDMODE、STOCHRSI）。验证明细见 [实现状态矩阵](architecture/status-matrix.md)。
+> 本文包含源码审查、Windows x64 候选工作树复验和 PR #30 远端 CI 观察。原 155 项 TA-Lib 对照中 APO、BETA、HT_TRENDMODE、STOCHRSI 的差异已在当前候选工作树修复并通过；最终提交 SHA 的 CI 仍待复验。验证明细见 [实现状态矩阵](architecture/status-matrix.md)。
 > 范围依据仓库已有的产品边界决定：Rust 金融计算引擎、公式/流式/因子计算、因子研究、CLI/可视化及语言绑定；不把回测引擎或选股/组合构建引擎列为本库目标。
 
 ## 结论摘要
@@ -77,7 +77,7 @@ flowchart LR
 | P0 | macOS Python wheel stub 检查受系统 site-packages 污染 | 只固定 setup-python 解释器仍导入旧的 `/Library/Frameworks/.../site-packages/finkit`。在 macOS wheel job 新建 venv 后，最新 arm64 wheel 构建、135 项测试和 stub 对扩展检查均通过。 |
 | P0 | C 数值契约生成器没有输出 JSON 字符串 token | PR #30 `cpp-linux` 的 C numeric contract 因请求生成成 `{"operation":ACCBANDS,...}` 而解析失败。已让生成器对 semantic profile 与 operation 先 JSON 序列化再做 C 字符串转义并重产 C 头文件；生成器 `--check` 通过，最新 Linux C unit、C++ indicator/catalog、C API smoke 与 201-vector numeric contract 全部成功。Windows 本机目标成功编译，但运行未在本轮完成。 |
 | P0 | 安装 wheel 的 Architecture v3 性能发布门禁原始阈值和单轮判定不稳定 | 三个独立 Ubuntu Actions 运行总体几何平均为 1.170/1.170/1.097x，100K 为 1.206/1.207/1.106x，1M 为 1.151/1.154/1.082x；可见跨运行噪声，而原始 1.20x 1M 与 Top-20 最低 1.05x 也不符合现有基线。按用户选择，已新增三轮中位数 gate 与三次 Actions 观测基线，使用 10% 非回归容差，并将单项最低值降为诊断指标；新 gate 需在新 SHA 上复验。 |
-| P0 | 扩展 TA-Lib 覆盖门禁暴露四个数值 parity 差异 | `71180ba` 的 155-vector 全量重叠门禁报告 APO、BETA、HT_TRENDMODE、STOCHRSI 不一致（errors 为空）；不能通过放宽性能门槛处理。应按输入、输出掩码和 warm-up 逐项与 TA-Lib 数值合同定位，修复后保留逐值/掩码合同。Architecture v3 三轮中位数门禁本身已通过。 |
+| P0（候选已修复） | 扩展 TA-Lib 覆盖门禁暴露四个数值 parity 差异 | 已修复 APO 默认 EMA 与 matype 语义、BETA 近常量收益窗口的数值退化、Python HT_TRENDMODE warm-up 输出及 STOCHRSI 参数映射。当前 Windows x64 安装 wheel 对照 155/155 项通过，Python 合同测试 8/8 通过；最终提交 SHA 的远端 CI 尚未复验。 |
 | P1 | 公式双路径行为面复杂，默认与“统一运行时”产品叙述有距离 | Tree 仍是默认；Plan 可选且有 Tree-only 入口。旧审查的特定 workload 性能数据不是当前候选重测。本轮已为 Rust/Python/Node 增加 backend 查询与选择，继续保留 Tree 默认；切换默认仍要基于有代表性的 benchmark 决策。 |
 | P1 | Cargo feature 名称容易被误读为可用裁剪功能 | 分类 feature 在 `core/Cargo.toml` 中明确不可独立使用；多个组合被登记为 KNOWN_BROKEN。对使用者来说 feature 合同可理解性不足，未来拆模块前需先让声明和构建事实一致。 |
 | P1 | 完成度叙述把“源码存在、测试覆盖、CI target、发布”并列但更新节奏不同 | 项目当前有细致矩阵的雏形，不过旧矩阵只记旧 SHA/旧状态。不同成熟度 binding 与 next-release 能力容易被营销或 API 数字误推为已交付。 |

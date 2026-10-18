@@ -154,7 +154,7 @@ def willr(high: ArrayLike, low: ArrayLike, close: ArrayLike, *, timeperiod: int 
     """Williams' %R."""
     ...
 
-def apo(close: ArrayLike, *, fastperiod: int = 12, slowperiod: int = 26, matype: int = 0) -> Array1D:
+def apo(close: ArrayLike, *, fastperiod: int = 12, slowperiod: int = 26, matype: int = 1) -> Array1D:
     """Absolute Price Oscillator."""
     ...
 

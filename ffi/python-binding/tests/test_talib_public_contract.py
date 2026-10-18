@@ -43,6 +43,24 @@ def test_sar_public_contract_matches_talib_shape():
     assert_array(result, close.size)
 
 
+def test_apo_defaults_to_talib_ema_and_keeps_sma_selectable():
+    _, _, _, close, _ = sample()
+    default = ta.apo(close, fastperiod=5, slowperiod=13)
+    ema = ta.apo(close, fastperiod=5, slowperiod=13, matype=1)
+    sma = ta.apo(close, fastperiod=5, slowperiod=13, matype=0)
+    np.testing.assert_array_equal(default, ema)
+    assert np.nanmax(np.abs(ema - sma)) > 1e-4
+    with pytest.raises(ValueError, match="unsupported TA-Lib matype"):
+        ta.apo(close, fastperiod=5, slowperiod=13, matype=9)
+
+
+def test_ht_trendmode_uses_talib_zero_warmup_at_python_boundary():
+    _, _, _, close, _ = sample()
+    result = ta.ht_trendmode(close)
+    assert_array(result, close.size)
+    np.testing.assert_array_equal(result[:63], np.zeros(63, dtype=np.float64))
+
+
 def test_bbands_accepts_talib_matype_zero_and_rejects_unimplemented_types():
     _, _, _, close, _ = sample()
     result = ta.bollinger_bands(

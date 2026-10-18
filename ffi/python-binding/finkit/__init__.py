@@ -597,9 +597,11 @@ if hasattr(_native, "_fast_price_transform"):
 
 if hasattr(_native, "_fast_apo"):
 
-    def apo(close, fastperiod=12, slowperiod=26):
+    def apo(close, fastperiod=12, slowperiod=26, matype=1):
         close = _as_contiguous_float64(close)
-        return _native._fast_apo(close, fastperiod, slowperiod)
+        if matype == 0:
+            return _native._fast_apo(close, fastperiod, slowperiod)
+        return _native.apo(close, fastperiod, slowperiod, matype)
 
     apo = _translate_native_errors("apo", apo)
 
@@ -687,7 +689,9 @@ if hasattr(_native, "_fast_ht_dcperiod"):
 
     def ht_trendmode(close):
         close = _as_contiguous_float64(close)
-        return _native._fast_ht_trendmode(close)
+        values = _native._fast_ht_trendmode(close)
+        values[: _builtins.min(63, len(values))] = 0.0
+        return values
 
     for _fast_name in (
         "ht_dcperiod",

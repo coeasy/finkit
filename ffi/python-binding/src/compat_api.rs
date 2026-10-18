@@ -15,6 +15,55 @@ fn value_error(error: impl std::fmt::Display) -> PyErr {
     PyErr::new::<pyo3::exceptions::PyValueError, _>(error.to_string())
 }
 
+fn talib_ma_type(matype: i32) -> PyResult<indicators::MaType> {
+    match matype {
+        0 => Ok(indicators::MaType::Sma),
+        1 => Ok(indicators::MaType::Ema),
+        2 => Ok(indicators::MaType::Wma),
+        3 => Ok(indicators::MaType::Dema),
+        4 => Ok(indicators::MaType::Tema),
+        5 => Ok(indicators::MaType::Trima),
+        6 => Ok(indicators::MaType::Kama),
+        7 => Ok(indicators::MaType::Mama),
+        8 => Ok(indicators::MaType::T3),
+        _ => Err(value_error(format!("unsupported TA-Lib matype: {matype}"))),
+    }
+}
+
+#[pyfunction(name = "apo")]
+#[pyo3(signature = (real, fastperiod=12, slowperiod=26, matype=1))]
+fn apo_compat<'py>(
+    py: Python<'py>,
+    real: PyReadonlyArray1<'py, f64>,
+    fastperiod: usize,
+    slowperiod: usize,
+    matype: i32,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let real = real.as_slice().map_err(value_error)?;
+    let ma_type = talib_ma_type(matype)?;
+    let values = py
+        .detach(|| indicators::apo_with_ma_type(real, fastperiod, slowperiod, ma_type))
+        .map_err(value_error)?
+        .into_raw_vec();
+    Ok(PyArray1::from_vec(py, values))
+}
+
+#[pyfunction(name = "ht_trendmode")]
+fn ht_trendmode_compat<'py>(
+    py: Python<'py>,
+    real: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let real = real.as_slice().map_err(value_error)?;
+    let mut values = py
+        .detach(|| indicators::ht_trendmode(real))
+        .map_err(value_error)?
+        .into_raw_vec();
+    // TA-Lib represents the undefined discrete warm-up state as cycle mode.
+    let warmup_end = 63.min(values.len());
+    values[..warmup_end].fill(0.0);
+    Ok(PyArray1::from_vec(py, values))
+}
+
 macro_rules! unary_period {
     ($rust_name:ident, $py_name:literal, $kernel:path, $default:literal) => {
         #[pyfunction(name = $py_name)]
@@ -572,39 +621,15 @@ fn stochrsi<'py>(
     fastd_matype: i32,
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     let real = real.as_slice().map_err(value_error)?;
-    let _ = fastd_matype;
-    let len = real.len();
-    let mut raw_k = Vec::<MaybeUninit<f64>>::with_capacity(len);
-    let mut raw_d = Vec::<MaybeUninit<f64>>::with_capacity(len);
-    unsafe {
-        raw_k.set_len(len);
-        raw_d.set_len(len);
-    }
-    let mut out_k =
-        unsafe { std::slice::from_raw_parts_mut(raw_k.as_mut_ptr().cast::<f64>(), len) };
-    let mut out_d =
-        unsafe { std::slice::from_raw_parts_mut(raw_d.as_mut_ptr().cast::<f64>(), len) };
-    py.detach(|| {
-        indicators::stochrsi_into(
-            real,
-            timeperiod,
-            fastk_period,
-            fastk_period,
-            fastd_period,
-            &mut out_k,
-            &mut out_d,
-        )
-    })
-    .map_err(value_error)?;
-    let k_ptr = raw_k.as_mut_ptr().cast::<f64>();
-    let d_ptr = raw_d.as_mut_ptr().cast::<f64>();
-    let k_cap = raw_k.capacity();
-    let d_cap = raw_d.capacity();
-    std::mem::forget(raw_k);
-    std::mem::forget(raw_d);
+    let ma_type = talib_ma_type(fastd_matype)?;
+    let result = py
+        .detach(|| {
+            indicators::stochrsi_with_ma_type(real, timeperiod, fastk_period, fastd_period, ma_type)
+        })
+        .map_err(value_error)?;
     Ok((
-        PyArray1::from_vec(py, unsafe { Vec::from_raw_parts(k_ptr, len, k_cap) }),
-        PyArray1::from_vec(py, unsafe { Vec::from_raw_parts(d_ptr, len, d_cap) }),
+        PyArray1::from_vec(py, result.k.into_raw_vec()),
+        PyArray1::from_vec(py, result.d.into_raw_vec()),
     ))
 }
 
@@ -946,6 +971,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         adxr,
         aroonosc,
         bbands,
+        apo_compat,
+        ht_trendmode_compat,
         ma,
         ppo_compat,
         macdfix,
