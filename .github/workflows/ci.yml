@@ -391,7 +391,7 @@ jobs:
             -p finkit-android \
             -p finkit-ios \
             -p finkit-wasm \
-            --locked --no-fail-fast
+            --locked --no-fail-fast -- --test-threads=1
 
   package-contract:
     name: Rust package contract

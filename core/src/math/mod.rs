@@ -24,6 +24,7 @@
 //! - [`typed_moving_avg`](crate::math::typed_moving_avg) — native f32 SMA/EMA caller-owned kernels (requires `std` feature)
 //! - [`volume_kernels`](crate::math::volume_kernels) — caller-owned OBV/VWAP output kernels (requires `std` feature)
 
+#[cfg(feature = "std")]
 /// Length of the leading non-finite (warm-up) run of a series, i.e. the index
 /// of the first finite value. Returns `input.len()` when every value is
 /// non-finite.
@@ -41,6 +42,7 @@ pub(crate) fn leading_warmup(input: &[f64]) -> usize {
         .unwrap_or(input.len())
 }
 
+#[cfg(feature = "std")]
 /// Safety factor applied to the floating-point noise floor in
 /// [`degenerate_variance`].
 ///
@@ -50,6 +52,7 @@ pub(crate) fn leading_warmup(input: &[f64]) -> usize {
 /// the relative variance of any window carrying real signal.
 pub(crate) const DEGENERATE_VARIANCE_SAFETY: f64 = 64.0;
 
+#[cfg(feature = "std")]
 /// Is a rolling variance indistinguishable from zero?
 ///
 /// Several kernels compute a window's variance in the cheap, incrementally
@@ -89,6 +92,7 @@ pub(crate) fn degenerate_variance(variance: f64, sum_sq: f64, size: f64) -> bool
     variance.abs() <= DEGENERATE_VARIANCE_SAFETY * size * f64::EPSILON * mean_square
 }
 
+#[cfg(feature = "std")]
 /// `SIGN(X)` for a single value: `-1.0`, `0.0` or `1.0`.
 ///
 /// Deliberately not [`f64::signum`], which maps both `0.0` and `-0.0` to `1.0`
@@ -158,6 +162,7 @@ pub(crate) fn floor_remainder(dividend: f64, divisor: f64) -> f64 {
     }
 }
 
+#[cfg(feature = "std")]
 /// The tolerance behind the formula `==` and `!=` operators: `1e-10`.
 ///
 /// The comparison is deliberately not exact. Operands are the result of chained
@@ -167,6 +172,7 @@ pub(crate) fn floor_remainder(dividend: f64, divisor: f64) -> f64 {
 /// kernels cannot drift.
 pub(crate) const EQUALITY_TOLERANCE: f64 = 1e-10;
 
+#[cfg(feature = "std")]
 /// `A == B` for the formula `==` operator: `|A - B| < `[`EQUALITY_TOLERANCE`].
 ///
 /// # `NaN`
@@ -182,6 +188,7 @@ pub(crate) fn nearly_equal(lhs: f64, rhs: f64) -> bool {
     (lhs - rhs).abs() < EQUALITY_TOLERANCE
 }
 
+#[cfg(feature = "std")]
 /// `A != B` for the formula `!=` operator: `|A - B| >= `[`EQUALITY_TOLERANCE`].
 ///
 /// Not `!`[`nearly_equal`] — see the `NaN` note there.
@@ -190,6 +197,7 @@ pub(crate) fn nearly_not_equal(lhs: f64, rhs: f64) -> bool {
     (lhs - rhs).abs() >= EQUALITY_TOLERANCE
 }
 
+#[cfg(feature = "std")]
 /// Centred second moments of two equal-length series: the sum of squared
 /// deviations of each series and the sum of their cross-products.
 ///
