@@ -1,7 +1,7 @@
 # 实现现状矩阵
 
-- 基线：`codex/release-v0.2.0-convergence`，基于 HEAD `8b398999` 的未提交候选工作树（workspace `0.2.0`）
-- 状态更新日期：2026-10-18（Windows x64；本地候选工作树验证，不代表远端 CI 或发布）
+- 基线：`codex/release-v0.2.0-convergence`，远端 PR 最近验证提交 `15429b5`（workspace `0.2.0`）；工具链/C numeric contract 修复仍是未提交候选
+- 状态更新日期：2026-10-18（Windows x64 本地验证 + PR #30 GitHub Actions；不代表公开发布）
 - 依据：[项目功能、架构与重构审查（2026-10-18）](../PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md)
 - 上一版基线：`496763b7`（2026-10-10），记录见 §5
 
@@ -9,10 +9,10 @@
 
 | 证据类别 | 当前判断 | 依据 / 限制 |
 |---|---|---|
-| 源码与声明 | `8b398999` 加本文档/代码候选改动；workspace `0.2.0` | Git working tree；发布证据须绑定最终 commit/tag |
+| 源码与声明 | `15429b5` 加本文档/代码候选改动；workspace `0.2.0` | Git working tree；发布证据须绑定最终 commit/tag |
 | 静态架构审查 | 已审查 workspace、关键源码入口、feature 声明、binding tier、发布工作流 | 见 [2026-10-18 审查](../PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md)；静态存在不代表运行成功 |
 | 当前候选工作树测试 / 构建 | `cargo test --workspace --locked --no-fail-fast` **通过**；Node 16/16、Python 全套及 CLI 研究端到端专项测试通过 | Windows x64；候选改动在最终提交后的验证仍需重跑，不能外推到最终 SHA |
-| 当前候选 GitHub Actions | **unknown** | 本地未读取 Actions 运行详情；需要按最终提交 SHA 核验 |
+| 当前候选 GitHub Actions | 部分通过，整体仍失败/进行中 | Docs Check 成功；PR #30 Linux ABI3 wheel 准备、构建、安装与测试成功；installed-wheel parity 成功但 Architecture v3 阈值失败（1M geomean 1.151x/1.2x，Top-20 最低 0.482x/1.05x）；多语言 C、WASM、Android、iOS 和 AArch64 job 暴露问题，候选修复见审查文档，需新 SHA 复验 |
 | 公开发行 | GitHub Releases 页面显示最新公开 Release 为 `v0.1.15`；`0.2.0` 是仓库当前候选版本 | [GitHub Releases](https://github.com/coeasy/finkit/releases)；候选 tag、registry 发布、平台包均须按实际完成状态更新 |
 
 下列 §4–§6 记录保留其原始日期与 SHA，仅作历史追溯。它们不是 `8b398999` 的验证结果。

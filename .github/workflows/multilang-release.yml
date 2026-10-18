@@ -309,6 +309,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: "1.98"
           targets: wasm32-unknown-unknown
       # `console_error_panic_hook` must be requested explicitly: its dependency
       # is declared only for `cfg(target_arch = "wasm32")`, so it cannot be a
@@ -337,6 +338,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: "1.98"
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
       - uses: actions/setup-java@v6
         with:
@@ -402,6 +404,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: "1.98"
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
       - name: Build XCFramework
         run: bash ffi/ios-binding/build-xcframework.sh

@@ -28,6 +28,14 @@ reused.
 - Updated the Python wheel binding-spec paths after the indicator and FFI
   source files were split into modules; the full wheel-preparation step now
   verifies against the current source layout.
+- Corrected the generated C numeric-contract fixture to emit valid JSON string
+  tokens for operation and semantic-profile fields.
+- Pinned wasm, Android, iOS and AArch64 target installation to the repository's
+  Rust 1.98 toolchain so rustup does not install components into an unrelated
+  stable toolchain.
+- Recorded the currently failing installed-wheel Architecture v3 performance
+  gate in the release status matrix; numeric parity passes, but the measured
+  thresholds still require optimization or an explicit product decision.
 
 
 ### Changed - 2026-10-10 (thirtieth pass — the architecture review plan, landed as contracts, docs and gates)

@@ -271,7 +271,7 @@ def render_c_contract(payload: dict[str, Any]) -> str:
         "    double rtol;",
         "} FinkitNumericContractVector;",
         "",
-        f"static const char finkit_test_contract_semantic_profile_json[] = {c_string(payload['semantic_profile'])};",
+        f"static const char finkit_test_contract_semantic_profile_json[] = {c_string(json.dumps(payload['semantic_profile'], ensure_ascii=True))};",
         f"static const char finkit_test_contract_inputs_json[] = {c_string(inputs)};",
         "",
         "static const FinkitNumericContractVector finkit_test_contract_vectors[] = {",
@@ -282,7 +282,7 @@ def render_c_contract(payload: dict[str, Any]) -> str:
         expected = json.dumps(vector["expected"], separators=(",", ":"), allow_nan=False)
         lines.append(
             "    {"
-            f"{c_string(vector['operation'])}, "
+            f"{c_string(json.dumps(vector['operation'], ensure_ascii=True))}, "
             f"{c_string(input_order)}, "
             f"{c_string(params)}, "
             f"{c_string(expected)}, "

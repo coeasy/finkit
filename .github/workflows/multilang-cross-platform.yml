@@ -79,6 +79,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: "1.98"
           targets: aarch64-unknown-linux-gnu
       - name: Check AArch64 core without compiler warnings
         run: cargo check -p finkit --target aarch64-unknown-linux-gnu --locked
