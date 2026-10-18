@@ -38,9 +38,10 @@ reused.
 - Recalibrated the installed-wheel performance gate from three independent
   Actions runs, adding three-round medians and a 10% aggregate regression band;
   parity and API failures remain hard release blockers.
-- Recorded the currently failing installed-wheel Architecture v3 performance
-  gate in the release status matrix; numeric parity passes, but the measured
-  thresholds still require optimization or an explicit product decision.
+- Fixed TA-Lib parity for APO defaults and MA types, BETA's near-constant return
+  windows, HT_TRENDMODE warm-up values, and STOCHRSI smoothing parameters.
+- Revalidated the recalibrated Architecture v3 gate locally on Windows x64;
+  current-commit Linux and macOS CI remains the release check for those runners.
 
 
 ### Changed - 2026-10-10 (thirtieth pass — the architecture review plan, landed as contracts, docs and gates)
