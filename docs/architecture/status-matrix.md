@@ -111,6 +111,7 @@
 | Workspace 编译 | `PYO3_PYTHON=<有效 Python> cargo check --workspace --all-targets --locked` | 通过（14 个 crate；Windows incremental lock cleanup 有权限警告，不影响退出码 0） |
 | Clippy | `PYO3_PYTHON=<有效 Python> cargo clippy --workspace --all-targets --locked` | 通过，退出码 0；pedantic 配置产生数千条既有 warning，应作为后续质量治理项 |
 | 核心 rustdoc | `RUSTDOCFLAGS=-D warnings cargo doc -p finkit --no-deps --locked` | 通过；Windows incremental lock cleanup 有权限警告，不影响退出码 0 |
+| docs.rs feature configuration | `RUSTFLAGS=-D warnings RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc -p finkit --no-deps --no-default-features --features "std formula serde tracing metrics formula-jit formula-simd indicators-all" --locked` | 通过；修复了原 `all-features` 与互斥 `std` / `no_std` 配置冲突 |
 | crates.io package 验证 | `cargo package -p finkit --locked --allow-dirty` | 通过；541 files / 8.1 MiB，包含重新编译验证 |
 | 公式执行 mode | `cargo test -p finkit --test formula_execution_mode --locked` | **14/14 通过** |
 | Feature matrix | `python scripts/check_feature_matrix.py` | 通过；具体受支持/known-broken 组合数以脚本当前清单为准 |

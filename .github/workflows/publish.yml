@@ -83,12 +83,13 @@ jobs:
             exit 1
           fi
       - name: Build the exact docs.rs configuration
-        # docs.rs builds with `all-features = true` and `--cfg docsrs` (see
-        # `[package.metadata.docs.rs]` in core/Cargo.toml). Building only the
-        # default features here would let a feature-gated doc break ship.
+        # `no_std` is an intentionally supported standalone feature and cannot
+        # be combined with `std`, so `--all-features` is not a valid build for
+        # this crate. Match the supported default surface listed in the
+        # `[package.metadata.docs.rs]` feature allowlist.
         env:
-          RUSTDOCFLAGS: "--cfg docsrs"
-        run: cargo doc -p finkit --no-deps --all-features --locked
+          RUSTDOCFLAGS: "--cfg docsrs -D warnings"
+        run: cargo doc -p finkit --no-deps --no-default-features --features "std formula serde tracing metrics formula-jit formula-simd indicators-all" --locked
       - name: Dry run
         # Packages, verifies the packaged crate compiles, and validates the
         # publish-specific metadata that `cargo package` does not check.

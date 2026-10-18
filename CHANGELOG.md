@@ -2,7 +2,7 @@
 
 ## [0.2.0] - 2026-10-18
 
-Release candidate. This cycle closes the gap between "the engine can compute it"
+This release closes the gap between "the engine can compute it"
 and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and  
 reused.
@@ -22,6 +22,9 @@ reused.
   the `EM_REF` / block-data Plan kernels are implemented.
 - Aligned Python's unsupported-backend exception and Node's error status with
   explicit argument/backend capability errors.
+- Fixed the tag workflow's docs.rs build configuration: `--all-features` enabled
+  mutually exclusive `std` and `no_std` features; metadata and CI now use the
+  same supported feature allowlist.
 
 
 ### Changed - 2026-10-10 (thirtieth pass — the architecture review plan, landed as contracts, docs and gates)

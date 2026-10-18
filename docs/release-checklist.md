@@ -126,6 +126,10 @@ claim registry installation commands before a clean consumer test exists.
 - [ ] Confirm the release notes cover the 31 TA-Lib functions, dialect coverage
       contract, Alpha158/WorldQuant101 libraries, Pine mapping repair, explicit
       Tree/Plan selection in active bindings, and both CLI binaries.
+- [ ] Validate the docs.rs feature allowlist. `std` and `no_std` are mutually
+      exclusive, so `--all-features` cannot represent the supported public API;
+      metadata and the publish workflow must use the same explicit default
+      feature set recorded in `core/Cargo.toml`.
 
 ## Tag and crates.io publication
 
