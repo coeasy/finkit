@@ -1,6 +1,6 @@
 # 实现现状矩阵
 
-- 基线：`codex/release-v0.2.0-convergence`，最近已推送 PR head `270e02b`（性能门槛校准改动待提交）（workspace `0.2.0`）
+- 基线：`codex/release-v0.2.0-convergence`，性能门槛复验代码提交 `71180ba`（workspace `0.2.0`；之后仅有文档状态更新）
 - 状态更新日期：2026-10-18（Windows x64 本地验证 + PR #30 GitHub Actions；不代表公开发布）
 - 依据：[项目功能、架构与重构审查（2026-10-18）](../PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md)
 - 上一版基线：`496763b7`（2026-10-10），记录见 §5
@@ -9,10 +9,10 @@
 
 | 证据类别 | 当前判断 | 依据 / 限制 |
 |---|---|---|
-| 源码与声明 | 校准 gate 的代码提交 `d3661ca`；workspace `0.2.0` | Git working tree；发布证据须绑定最终 commit/tag |
+| 源码与声明 | 性能校准代码提交 `71180ba`；workspace `0.2.0` | Git working tree；发布证据须绑定最终 commit/tag |
 | 静态架构审查 | 已审查 workspace、关键源码入口、feature 声明、binding tier、发布工作流 | 见 [2026-10-18 审查](../PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md)；静态存在不代表运行成功 |
 | 当前候选工作树测试 / 构建 | `cargo test --workspace --locked --no-fail-fast` **通过**；Node 16/16、Python 全套及 CLI 研究端到端专项测试通过 | Windows x64；候选改动在最终提交后的验证仍需重跑，不能外推到最终 SHA |
-| 当前候选 GitHub Actions | `d3661ca` 上 Docs Check 已通过；Python wheels、TA-Lib gate 与多语言工作流运行中 | Docs Check、Linux/Windows/macOS ABI3 wheels 与 Python 3.8–3.14 兼容性成功；AArch64 warning contract、WASM、iOS XCFramework/Swift typecheck、Android AAR、Rust package、Java/.NET/Go/Node 多平台及 C/C++ numeric contract 全部通过。PR 上发布资产 job 按条件跳过。基于三次独立 Actions 测量新增稳定基线和三轮中位数非回归 gate；该 gate 已在 `d3661ca` 启动，结果以本 SHA 的 Actions 为准 |
+| 当前候选 GitHub Actions | `71180ba` 上 Docs Check、Python ABI3 wheels、多语言发布和跨平台工作流通过；Architecture v3 校准门禁通过 | 三轮中位数：总体 1.125x、100K 1.151x、1M 1.109x、Top20 1.261x，均高于校准下限。另一个 155-vector 全量重叠 gate 报告 APO、BETA、HT_TRENDMODE、STOCHRSI 四项 parity failures（API errors 为空），因此 TA-Lib workflow 仍为失败；不应将这一正确性缺口当作性能容差。PR 上发布资产 job 按条件跳过 |
 | 公开发行 | GitHub Releases 页面显示最新公开 Release 为 `v0.1.15`；`0.2.0` 是仓库当前候选版本 | [GitHub Releases](https://github.com/coeasy/finkit/releases)；候选 tag、registry 发布、平台包均须按实际完成状态更新 |
 
 下列 §4–§6 记录保留其原始日期与 SHA，仅作历史追溯。它们不是 `8b398999` 的验证结果。
