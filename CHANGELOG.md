@@ -33,6 +33,8 @@ reused.
 - Pinned wasm, Android, iOS and AArch64 target installation to the repository's
   Rust 1.98 toolchain so rustup does not install components into an unrelated
   stable toolchain.
+- Made macOS wheel install, test and stub validation use the interpreter selected
+  by setup-python even when the build action changes PATH.
 - Recorded the currently failing installed-wheel Architecture v3 performance
   gate in the release status matrix; numeric parity passes, but the measured
   thresholds still require optimization or an explicit product decision.

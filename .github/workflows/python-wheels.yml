@@ -113,7 +113,14 @@ jobs:
         env:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
-          python - <<'PY'
+          # maturin-action can leave macOS PATH pointing at the runner's
+          # system Python. Use setup-python's interpreter for install and test.
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            PYTHON="$pythonLocation/bin/python"
+          else
+            PYTHON=python
+          fi
+          "$PYTHON" - <<'PY'
           import os
           import subprocess
           import sys
@@ -135,7 +142,7 @@ jobs:
           ])
           PY
           cd "$RUNNER_TEMP"
-          python -m pytest "$GITHUB_WORKSPACE/ffi/python-binding/tests" -q
+          "$PYTHON" -m pytest "$GITHUB_WORKSPACE/ffi/python-binding/tests" -q
 
       # The wheel is installed and we are outside the source tree, so
       # `import finkit` resolves to the artifact under test. This is the only
@@ -146,7 +153,12 @@ jobs:
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE"
-          python scripts/check_python_stub.py \
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            PYTHON="$pythonLocation/bin/python"
+          else
+            PYTHON=python
+          fi
+          "$PYTHON" scripts/check_python_stub.py \
             --require-extension --expect-prefix "${{ env.pythonLocation }}"
 
       - name: Upload wheel artifact
