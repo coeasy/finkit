@@ -117,6 +117,7 @@
 | Feature matrix | `python scripts/check_feature_matrix.py` | 通过；具体受支持/known-broken 组合数以脚本当前清单为准 |
 | 依赖、绑定、文档与版本合同 | `check_dependency_direction.py`、`audit_binding_parity.py --check`、`check_binding_feature_contract.py`、`check_docs_links.py`、`check_versions.py`、`gen_ssot_docs.py --check`、`check_formula_engine_contract.py`、`check_python_stub.py`、`check_changelog.py` | 均通过 |
 | Python / Node / Factor Study CLI 消费测试 | `pytest` binding suites、`npm test`、`cargo test -p finkit-cli --test factor_study_cli --locked` | Python 全套通过；Node **16/16**；CLI **1/1** |
+| Python wheel preparation | `python scripts/verify_python_bindings.py` + `python scripts/prepare_python_hot_bindings.py` | 本机候选工作树通过；PR 首轮四平台 job 暴露过期源路径，现已修正并等待远端复验 |
 
 完整命令和提交 SHA 需在最终候选提交完成后再次固定；该本地验证不代替 GitHub Actions、多平台 runner 或公开 registry 安装验证。
 

@@ -72,6 +72,7 @@ flowchart LR
 |---|---|---|
 | P0 | 多份“架构/状态/产品”文档基线过期或互相冲突 | 原状态矩阵以历史 SHA 为当前基线，README 的版本用语和目录索引也过期。本轮已加入候选验证状态、修正架构 crate 图、整理 10/18 文档索引；最终提交后仍需固定 SHA 与 CI/发布状态。 |
 | P0 | crates.io 发布 job 的 docs.rs 配置启用互斥 feature | `all-features=true` 同时启用 `std` 和 `no_std`，编译期必然失败。本轮将 docs.rs 元数据和 tag 工作流改为相同的显式默认 feature allowlist，并用对应命令在本机验证通过。 |
+| P0 | Python wheel 准备脚本仍指向旧版扁平源码路径 | PR #30 首轮四个平台都在 wheel 编译前失败：`binding_spec.py` 读取已拆分移位的 `core/src/indicators/momentum.rs`，且 batch contract 仍检查旧 `lib.rs`。已改为实际的 `momentum/mfi_impl.rs`、`momentum/willr_impl.rs` 与 `talib_compat.rs`，增强末尾函数边界支持；`verify_python_bindings.py` 和完整 `prepare_python_hot_bindings.py` 本机复跑通过，等待 GitHub job 复验。 |
 | P1 | 公式双路径行为面复杂，默认与“统一运行时”产品叙述有距离 | Tree 仍是默认；Plan 可选且有 Tree-only 入口。旧审查的特定 workload 性能数据不是当前候选重测。本轮已为 Rust/Python/Node 增加 backend 查询与选择，继续保留 Tree 默认；切换默认仍要基于有代表性的 benchmark 决策。 |
 | P1 | Cargo feature 名称容易被误读为可用裁剪功能 | 分类 feature 在 `core/Cargo.toml` 中明确不可独立使用；多个组合被登记为 KNOWN_BROKEN。对使用者来说 feature 合同可理解性不足，未来拆模块前需先让声明和构建事实一致。 |
 | P1 | 完成度叙述把“源码存在、测试覆盖、CI target、发布”并列但更新节奏不同 | 项目当前有细致矩阵的雏形，不过旧矩阵只记旧 SHA/旧状态。不同成熟度 binding 与 next-release 能力容易被营销或 API 数字误推为已交付。 |

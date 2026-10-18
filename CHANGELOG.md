@@ -25,6 +25,9 @@ reused.
 - Fixed the tag workflow's docs.rs build configuration: `--all-features` enabled
   mutually exclusive `std` and `no_std` features; metadata and CI now use the
   same supported feature allowlist.
+- Updated the Python wheel binding-spec paths after the indicator and FFI
+  source files were split into modules; the full wheel-preparation step now
+  verifies against the current source layout.
 
 
 ### Changed - 2026-10-10 (thirtieth pass — the architecture review plan, landed as contracts, docs and gates)
