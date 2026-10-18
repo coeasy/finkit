@@ -94,10 +94,15 @@ SKIP_NAMES = {"package-lock.json", "Cargo.lock"}
 # (a run-time helper), or a plan document lists it as work still to do. The
 # reason is required so the exception stays reviewable. Checked in both
 # directions, like `MANUAL_TOOLS` in `check_orphan_scripts.py`.
-# Empty by design: every literal `scripts/` reference currently resolves. The
-# list is checked in both directions, so adding an entry here is a reviewable
-# decision and an entry that stops being needed fails the gate.
-RECORDED_MISSING: dict[str, str] = {}
+# The list is checked in both directions, so adding an entry here is a
+# reviewable decision and an entry that stops being needed fails the gate.
+RECORDED_MISSING: dict[str, str] = {
+    "scripts/archive/rebuild_splits.sh": (
+        "Historical migration helper referenced by the V5 plan; the archive "
+        "directory is intentionally gitignored and the script was never part "
+        "of the repository or release package."
+    ),
+}
 
 SELF_DESCRIBING = {"scripts/check_script_references.py"}
 
@@ -148,20 +153,25 @@ def expand_braces(text: str) -> str:
     )
 
 
-def resolve(token: str) -> bool:
-    """True if the token names a file in the tree.
+def resolve(token: str, tracked: set[str]) -> bool:
+    """True if the token names a tracked file in the tree.
 
     Trailing sentence punctuation is stripped, because prose writes
     "`scripts/foo.py`." and the full stop is not part of the path.
+
+    The tracked-file check is deliberate: a developer's ignored local copy of
+    an archived helper must not make a reference pass when CI and release
+    source archives do not contain that helper.
     """
     for candidate in (token, token.rstrip(".,;:")):
-        if (ROOT / candidate).is_file():
+        if candidate in tracked and (ROOT / candidate).is_file():
             return True
     return False
 
 
 def references(files: list[str]) -> dict[str, set[str]]:
     missing: dict[str, set[str]] = {}
+    tracked = set(files)
     for rel in files:
         if rel in SELF_DESCRIBING:
             continue
@@ -181,7 +191,7 @@ def references(files: list[str]) -> dict[str, set[str]]:
             if any(ch in token for ch in UNRESOLVABLE):
                 continue
             token = token.rstrip(".,;:")
-            if not resolve(token):
+            if not resolve(token, tracked):
                 missing.setdefault(token, set()).add(rel)
     return missing
 

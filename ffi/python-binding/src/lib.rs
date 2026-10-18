@@ -78,6 +78,7 @@ mod transforms;
 #[cfg(feature = "formula")]
 use ::finkit::formula::{
     parse_formula, FormulaContext, FormulaDialect, FormulaEngine, FormulaError,
+    FormulaExecutionMode,
 };
 
 #[cfg(feature = "formula")]
@@ -1348,6 +1349,7 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_class::<PyFormulaRegistry>()?;
         m.add_function(wrap_pyfunction!(formula_eval, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_dialect, m)?)?;
+        m.add_function(wrap_pyfunction!(formula_backend, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_contract_json, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_temporal_contract_json, m)?)?;
         m.add_function(wrap_pyfunction!(formula_eval_panel_contract_json, m)?)?;

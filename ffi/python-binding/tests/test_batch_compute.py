@@ -159,6 +159,7 @@ def test_compute_indicators_talib_compatibility_extended_lookbacks():
         close=close,
         secondary=alternate,
         requests=[
+            ("apo", [5, 13, 1]),
             ("stochrsi", [14, 5, 3, 0]),
             ("macdfix", [9]),
             ("beta", [5]),
@@ -166,6 +167,13 @@ def test_compute_indicators_talib_compatibility_extended_lookbacks():
         talib_compat=True,
     )
 
+    np.testing.assert_allclose(
+        results["apo_5_13_1"],
+        ta.apo(close, fastperiod=5, slowperiod=13, matype=1),
+        rtol=1e-12,
+        atol=1e-12,
+        equal_nan=True,
+    )
     assert np.isnan(results["stochrsi_14_5_3_0_0"][:20]).all()
     assert np.isfinite(results["stochrsi_14_5_3_0_0"][20:]).any()
     assert np.isnan(results["macdfix_9_0"][:33]).all()

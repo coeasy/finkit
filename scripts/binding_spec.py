@@ -51,8 +51,9 @@ NATIVE = ROOT / "ffi" / "python-binding" / "src" / "native_fast_path.rs"
 INIT = ROOT / "ffi" / "python-binding" / "finkit" / "__init__.py"
 LIB = ROOT / "ffi" / "python-binding" / "src" / "lib.rs"
 GENERATED = ROOT / "ffi" / "python-binding" / "src" / "generated.rs"
-MOMENTUM = ROOT / "core" / "src" / "indicators" / "momentum.rs"
+MFI_IMPL = ROOT / "core" / "src" / "indicators" / "momentum" / "mfi_impl.rs"
 VOLUME = ROOT / "core" / "src" / "indicators" / "volume.rs"
+TALIB_COMPAT = ROOT / "ffi" / "python-binding" / "src" / "talib_compat.rs"
 FORMULA_PLAN = ROOT / "ffi" / "python-binding" / "src" / "formula_plan.rs"
 SYNC_BINDINGS = ROOT / "scripts" / "sync_bindings.py"
 INDICATOR_REGISTRY = ROOT / "docs" / "indicator_registry.json"
@@ -65,8 +66,9 @@ HANDWRITTEN_SOURCES: tuple[Path, ...] = (
     NATIVE,
     INIT,
     LIB,
-    MOMENTUM,
+    MFI_IMPL,
     VOLUME,
+    TALIB_COMPAT,
     FORMULA_PLAN,
     SYNC_BINDINGS,
     INDICATOR_REGISTRY,
@@ -312,7 +314,7 @@ class CanonicalFunction:
     label: str
     path: Path
     start_token: str
-    next_doc: str
+    next_doc: str | None
     canonical: str
     forbidden: tuple[str, ...] = ()
 
@@ -320,7 +322,11 @@ class CanonicalFunction:
         start = text.find(self.start_token)
         if start < 0:
             return None
-        end = text.find(self.next_doc, start + len(self.start_token))
+        end = (
+            len(text)
+            if self.next_doc is None
+            else text.find(self.next_doc, start + len(self.start_token))
+        )
         if end < 0:
             return None
         return text[start:end].rstrip()
@@ -426,10 +432,10 @@ OBV_CANONICAL = '''pub fn obv(close: &[f64], volume: &[f64]) -> Result<Array1<f6
 
 CANONICAL_FUNCTIONS: tuple[CanonicalFunction, ...] = (
     CanonicalFunction(
-        label="momentum.rs public MFI",
-        path=MOMENTUM,
+        label="momentum/mfi_impl.rs public MFI",
+        path=MFI_IMPL,
         start_token="pub fn mfi(\n",
-        next_doc="/// Minus Directional Indicator",
+        next_doc=None,
         canonical=MFI_CANONICAL,
         forbidden=("simd_typical_price", "pos_ring", "neg_ring"),
     ),
@@ -597,7 +603,7 @@ SINGLE_WRITE_RULESET = RuleSet(
 
 BATCH_CONTRACT_RULESET = RuleSet(
     label="Python batch borrowed-input / ndarray-output contract",
-    path=LIB,
+    path=TALIB_COMPAT,
     rules=(
         Rule(
             '''    let open_vec: Option<Vec<f64>> = open.as_ref().map(|arr| arr.as_array().to_vec());
@@ -696,7 +702,7 @@ BATCH_CONTRACT_RULESET = RuleSet(
         "dict.set_item(key, PyArray1::from_vec(py, arr))?;",
     ),
     forbidden=(".as_array().to_vec()",),
-    forbidden_scope=("fn compute_indicators", "/// Result type for indicator computation."),
+    forbidden_scope=("pub fn compute_indicators", "pub enum IndicatorResult"),
 )
 
 # --------------------------------------------------------------------------- #
@@ -939,7 +945,7 @@ EXTREMA_CONSUMERS = (
         "pub fn midprice_into(high: &[f64], low: &[f64], period: usize, output: &mut [f64]) -> Result<()>",
     ),
     (
-        ROOT / "core" / "src" / "indicators" / "momentum.rs",
+        ROOT / "core" / "src" / "indicators" / "momentum" / "willr_impl.rs",
         "pub fn willr_into(",
     ),
 )

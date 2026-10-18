@@ -1,11 +1,47 @@
 # Changelog
 
-## [0.2.0] - 2026-09-23
+## [0.2.0] - 2026-10-18
 
-Trial release. This cycle closes the gap between "the engine can compute it"  
-and "a user can find out that it can": the formula surface is now described by  
+This release closes the gap between "the engine can compute it"
+and "a user can find out that it can": the formula surface is now described by
 a machine-checkable contract, and the factor libraries are defined once and  
 reused.
+
+### Added - 2026-10-18 (backend selection and delivery closure)
+
+- Added stable `tree` / `plan` backend names to the Rust formula API.
+- Exposed backend query and opt-in selection in Python and Node formula
+  evaluation while preserving Tree as the default.
+- Added the core workflow matrix and updated the current implementation status
+  snapshot to distinguish source, test, CI and published-release evidence.
+- Added the `finkit-factor-study` binary to the v0.2.0 GitHub Release assets.
+
+### Fixed - 2026-10-18
+
+- Corrected the Rust formula backend documentation: string literal support and
+  the `EM_REF` / block-data Plan kernels are implemented.
+- Aligned Python's unsupported-backend exception and Node's error status with
+  explicit argument/backend capability errors.
+- Fixed the tag workflow's docs.rs build configuration: `--all-features` enabled
+  mutually exclusive `std` and `no_std` features; metadata and CI now use the
+  same supported feature allowlist.
+- Updated the Python wheel binding-spec paths after the indicator and FFI
+  source files were split into modules; the full wheel-preparation step now
+  verifies against the current source layout.
+- Corrected the generated C numeric-contract fixture to emit valid JSON string
+  tokens for operation and semantic-profile fields.
+- Pinned wasm, Android, iOS and AArch64 target installation to the repository's
+  Rust 1.98 toolchain so rustup does not install components into an unrelated
+  stable toolchain.
+- Isolated macOS wheel installation, tests and stub validation in a fresh venv
+  so runner-wide site-packages cannot shadow the candidate wheel.
+- Recalibrated the installed-wheel performance gate from three independent
+  Actions runs, adding three-round medians and a 10% aggregate regression band;
+  parity and API failures remain hard release blockers.
+- Fixed TA-Lib parity for APO defaults and MA types, BETA's near-constant return
+  windows, HT_TRENDMODE warm-up values, and STOCHRSI smoothing parameters.
+- Revalidated the recalibrated Architecture v3 gate locally on Windows x64;
+  current-commit Linux and macOS CI remains the release check for those runners.
 
 
 ### Changed - 2026-10-10 (thirtieth pass — the architecture review plan, landed as contracts, docs and gates)

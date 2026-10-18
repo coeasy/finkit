@@ -132,7 +132,9 @@ pub fn compute_all_indicators(
                 .collect::<Vec<_>>()
                 .join("_")
         );
-        let result = if talib_compat && req.name.eq_ignore_ascii_case("ppo") {
+        let result = if talib_compat && req.name.eq_ignore_ascii_case("apo") {
+            talib_apo(close, &req.params)
+        } else if talib_compat && req.name.eq_ignore_ascii_case("ppo") {
             talib_percentage_oscillator(close, &req.params)
         } else if talib_compat && req.name.eq_ignore_ascii_case("macdfix") {
             talib_macdfix(close, &req.params)
@@ -298,6 +300,27 @@ pub fn talib_macdfix(input: &[f64], params: &[f64]) -> IndicatorResult {
         index += 1;
     }
     IndicatorResult::Triple(macd, signal, hist)
+}
+
+pub fn talib_apo(input: &[f64], params: &[f64]) -> IndicatorResult {
+    let fast = params.first().copied().unwrap_or(12.0).max(1.0) as usize;
+    let slow = params.get(1).copied().unwrap_or(26.0).max(1.0) as usize;
+    let matype = params.get(2).copied().unwrap_or(1.0) as i32;
+    let ma_type = match matype {
+        0 => indicators::MaType::Sma,
+        1 => indicators::MaType::Ema,
+        2 => indicators::MaType::Wma,
+        3 => indicators::MaType::Dema,
+        4 => indicators::MaType::Tema,
+        5 => indicators::MaType::Trima,
+        6 => indicators::MaType::Kama,
+        7 => indicators::MaType::Mama,
+        8 => indicators::MaType::T3,
+        _ => return IndicatorResult::Error(format!("unsupported TA-Lib matype: {matype}")),
+    };
+    indicators::apo_with_ma_type(input, fast, slow, ma_type)
+        .map(|values| IndicatorResult::Single(values.into_raw_vec()))
+        .unwrap_or_else(|error| IndicatorResult::Error(error.to_string()))
 }
 
 pub fn talib_beta(market: &[f64], security: &[f64], params: &[f64]) -> IndicatorResult {

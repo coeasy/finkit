@@ -61,6 +61,23 @@ def test_shared_engine_contract_v1_is_executed_by_python_binding():
         assert composite_multi_result["values"][name] == expected
 
 
+def test_versioned_factor_study_request_runs_through_python():
+    request = {
+        "schema_version": 2,
+        "timestamps": [1, 1, 1, 2, 2, 2, 3, 3, 3],
+        "assets": [1, 2, 3, 1, 2, 3, 1, 2, 3],
+        "factor": [1, 2, 3, 1, 2, 3, 1, 2, 3],
+        "prices": [10, 10, 10, 11, 12, 13, 12, 14, 16],
+        "periods": [1],
+        "quantiles": 3,
+    }
+    response = json.loads(ta.factor_study_json(json.dumps(request)))
+    assert response["ok"] is True
+    assert response["report"]["periods"] == [1]
+    assert len(response["report"]["returns"]["factor_returns"]["1"]) == 3
+    assert "1" in response["report"]["performance"]["by_holding_period"]
+
+
 def test_publishes_current_talib_catalog_contract():
     matrix = json.loads(
         (Path(__file__).resolve().parents[3] / "tests/contracts/talib_coverage_matrix_v1.json").read_text(

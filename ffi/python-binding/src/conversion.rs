@@ -106,7 +106,7 @@ pub fn formula_error_to_pyerr(e: FormulaError) -> PyErr {
             ))
         }
         FormulaError::BackendUnsupported { backend, entry } => {
-            PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(format!(
+            PyErr::new::<pyo3::exceptions::PyNotImplementedError, _>(format!(
                 "`{}` is not available on the {} backend",
                 entry, backend
             ))

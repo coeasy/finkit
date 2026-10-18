@@ -2,7 +2,7 @@
 
 This directory is the canonical documentation set for Finkit.
 
-Finkit is a Rust-powered quantitative finance engine for technical analysis, reusable formulas, factor graphs, streaming computation, feature engineering, and research workflows. The documentation deliberately separates **published v0.1.15 distribution facts** from **next-release runtime/research work** so CI candidates are never presented as already released packages.
+Finkit is a Rust-powered quantitative finance engine for technical analysis, reusable formulas, factor graphs, streaming computation, feature engineering, and research workflows. The documentation deliberately separates **published v0.1.15 distribution facts** from **v0.2.0 release-candidate source and CI candidates** so unreleased work is never presented as already published.
 
 ## Start here
 
@@ -14,6 +14,7 @@ Choose the path that matches your goal:
 | 中文产品介绍 | [中文产品说明](product-overview-zh.md) |
 | 宣传/项目介绍素材 | [中文宣传文稿](promotion-zh.md) |
 | 评估竞品与性能优势 | [竞品对比与超越路线](competitive-positioning-zh.md) |
+| 查看性能发布门槛与校准数据 | [Architecture v3 基准](benchmark-baselines/architecture-v3-installed-wheel.json) |
 | Install and calculate something | [Getting started](getting-started.md) |
 | Verify install/release assets | [Installation](installation.md) |
 | Prepare or audit a release | [Release checklist](release-checklist.md) |
@@ -25,8 +26,10 @@ Choose the path that matches your goal:
 | Understand research architecture | [Factor research architecture](factor-research-architecture.md) |
 | Diagnose failures | [Troubleshooting](troubleshooting.md) |
 | 查看当前架构与重构总纲 | [架构、开发细节与分层重构总纲 V5](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) |
-| 查看最新全链路审查与执行记录 | [架构审查与发布整改（2026-10-13）](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) |
+| 查看历史全链路审查记录（2026-10-13） | [架构审查与发布整改](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) |
+| 查看当前项目功能、架构与重构建议 | [项目功能、架构与重构审查（2026-10-18）](PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md) |
 | 查看 Tree / Plan 入口边界 | [公式入口矩阵](architecture/formula-entry-matrix.md) |
+| 查看核心工作流与端到端覆盖 | [核心工作流矩阵](architecture/workflow-matrix.md) |
 | 查看当前实现状态（可信矩阵） | [架构现状矩阵](architecture/status-matrix.md) |
 
 ## Product model
@@ -184,7 +187,9 @@ moved out of the working tree (see below); nothing here is a second baseline.
 | Document | Purpose |
 | --- | --- |
 | [FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) | 架构与实现背景总纲 —— 分层架构地图、开发细节、V4 遗留项基线核验 |
-| [ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) | **当前审查与发布整改记录** —— 三轮逻辑/贯通核查、整改进展、发布验证及剩余限制 |
+| [PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md](PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md) | **当前项目范围审查与重构总纲** —— 功能闭环、实现缺口、结构问题与阶段计划 |
+| [benchmark-baselines/architecture-v3-installed-wheel.json](benchmark-baselines/architecture-v3-installed-wheel.json) | Architecture v3 安装 wheel 性能门槛的三次独立 Actions 基准与 10% 非回归容差 |
+| [ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) | 历史审查记录 —— 三轮逻辑/贯通核查、整改进展、发布验证及当时限制 |
 
 ## Deleted from the working tree — recoverable from git history
 
@@ -277,4 +282,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last product/documentation review: 2026-10-14. Workspace target: v0.2.0. Published distribution baseline: v0.1.15._
+_Last product/documentation review: 2026-10-18. Workspace target: v0.2.0 candidate. Latest published distribution baseline: v0.1.15._

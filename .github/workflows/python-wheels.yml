@@ -113,7 +113,15 @@ jobs:
         env:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
-          python - <<'PY'
+          # Isolate macOS from the runner's framework-wide site-packages, which
+          # can shadow a just-installed wheel even with setup-python selected.
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            "$pythonLocation/bin/python" -m venv "$RUNNER_TEMP/finkit-wheel-venv"
+            PYTHON="$RUNNER_TEMP/finkit-wheel-venv/bin/python"
+          else
+            PYTHON=python
+          fi
+          "$PYTHON" - <<'PY'
           import os
           import subprocess
           import sys
@@ -135,7 +143,7 @@ jobs:
           ])
           PY
           cd "$RUNNER_TEMP"
-          python -m pytest "$GITHUB_WORKSPACE/ffi/python-binding/tests" -q
+          "$PYTHON" -m pytest "$GITHUB_WORKSPACE/ffi/python-binding/tests" -q
 
       # The wheel is installed and we are outside the source tree, so
       # `import finkit` resolves to the artifact under test. This is the only
@@ -146,8 +154,15 @@ jobs:
         shell: bash
         run: |
           cd "$GITHUB_WORKSPACE"
-          python scripts/check_python_stub.py \
-            --require-extension --expect-prefix "${{ env.pythonLocation }}"
+          if [[ "$RUNNER_OS" == "macOS" ]]; then
+            PYTHON="$RUNNER_TEMP/finkit-wheel-venv/bin/python"
+            EXPECT_PREFIX="$RUNNER_TEMP/finkit-wheel-venv"
+          else
+            PYTHON=python
+            EXPECT_PREFIX="${{ env.pythonLocation }}"
+          fi
+          "$PYTHON" scripts/check_python_stub.py \
+            --require-extension --expect-prefix "$EXPECT_PREFIX"
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v7
@@ -309,6 +324,7 @@ jobs:
           cp target/package/finkit-*.crate dist/
           cargo build -p finkit-cli --release --locked
           cp target/release/finkit-cli dist/finkit-cli-linux-x86_64
+          cp target/release/finkit-factor-study dist/finkit-factor-study-linux-x86_64
           sha256sum dist/* > dist/SHA256SUMS
       - name: Create or update GitHub Release
         env:

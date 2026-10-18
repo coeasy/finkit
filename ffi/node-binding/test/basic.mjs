@@ -15,8 +15,22 @@ test('loads the native binding and computes SMA', () => {
   assert.ok(Math.abs(result[4] - 4) < 1e-12)
 })
 
+test('formula backend is observable and explicitly selectable', () => {
+  const open = [1, 2, 3, 4, 5]
+  const high = [1, 2, 3, 4, 5]
+  const low = [1, 2, 3, 4, 5]
+  const close = [1, 2, 3, 4, 5]
+  const volume = [10, 20, 30, 40, 50]
+  assert.equal(finkit.formulaBackend(), 'tree')
+  assert.equal(finkit.formulaBackend('PLAN'), 'plan')
+  const tree = finkit.formulaEval('MA(CLOSE, 3)', open, high, low, close, volume)
+  const plan = finkit.formulaEval('MA(CLOSE, 3)', open, high, low, close, volume, 'plan')
+  assert.deepEqual(plan.__result__, tree.__result__)
+  assert.throws(() => finkit.formulaBackend('jit'), /tree.*plan/)
+})
+
 test('exports the complete public runtime contract', () => {
-  for (const name of ['sma', 'ema', 'rsi', 'macd', 'formulaEval', 'formulaEvalContractJson', 'formulaEvalTemporalContractJson', 'formulaEvalPanelContractJson', 'formulaEvalCrossSectionalContractJson', 'formulaStreamExecuteJson', 'operationCatalogJson', 'factorCatalogJson', 'compositeExecuteJson', 'compositeStreamExecuteJson', 'factorExecuteJson', 'factorCrossSectionalExecuteJson', 'factorStreamExecuteJson', 'operationExecuteJson', 'factorStudyJson', 'quantEvaluationJson', 'formulaValidate', 'formulaAnalyze', 'formulaMetadata', 'formulaCompatibilityReport']) {
+  for (const name of ['sma', 'ema', 'rsi', 'macd', 'formulaEval', 'formulaBackend', 'formulaEvalContractJson', 'formulaEvalTemporalContractJson', 'formulaEvalPanelContractJson', 'formulaEvalCrossSectionalContractJson', 'formulaStreamExecuteJson', 'operationCatalogJson', 'factorCatalogJson', 'compositeExecuteJson', 'compositeStreamExecuteJson', 'factorExecuteJson', 'factorCrossSectionalExecuteJson', 'factorStreamExecuteJson', 'operationExecuteJson', 'factorStudyJson', 'quantEvaluationJson', 'formulaValidate', 'formulaAnalyze', 'formulaMetadata', 'formulaCompatibilityReport']) {
     assert.equal(typeof finkit[name], 'function', `${name} must be exported`)
   }
   assert.equal(typeof finkit.computeComposite, 'function')
@@ -66,6 +80,22 @@ test('executes the shared engine contract vector', () => {
   for (const [name, expected] of Object.entries(compositeMultiInput.expected)) {
     assert.deepEqual(compositeMultiResult.values[name], expected)
   }
+})
+
+test('runs the versioned factor-study request through Node', () => {
+  const response = JSON.parse(finkit.factorStudyJson(JSON.stringify({
+    schema_version: 2,
+    timestamps: [1, 1, 1, 2, 2, 2, 3, 3, 3],
+    assets: [1, 2, 3, 1, 2, 3, 1, 2, 3],
+    factor: [1, 2, 3, 1, 2, 3, 1, 2, 3],
+    prices: [10, 10, 10, 11, 12, 13, 12, 14, 16],
+    periods: [1],
+    quantiles: 3,
+  })))
+  assert.equal(response.ok, true)
+  assert.deepEqual(response.report.periods, [1])
+  assert.equal(response.report.returns.factor_returns['1'].length, 3)
+  assert.ok(response.report.performance.by_holding_period['1'])
 })
 
 test('publishes the current TA-Lib catalog contract', () => {

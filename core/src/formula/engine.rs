@@ -436,12 +436,11 @@ pub enum FormulaExecutionMode {
     /// into `ctx.output_modifiers` — so a caller cannot tell from the context
     /// which one ran.
     ///
-    /// The remaining blocker is structural, not a missing kernel: a formula
-    /// containing a **string literal** cannot run under [`Self::Plan`] at all.
-    /// The tree path's semantics are "append the literal to
-    /// `FormulaContext::string_table`, evaluate to its index", and the plan
-    /// executor receives only `&[&[f64]]` with no context to append to. Until
-    /// that has a plan-side home, [`Self::Plan`] stays opt-in.
+    /// Formula string literals are part of the plan path: they are interned in
+    /// the plan's string table, and the registered `EM_REF`, `BLOCKDATA`,
+    /// `BLOCKINDEX`, and `BLOCKAVG` kernels consume their indices. This closed
+    /// the earlier string-literal coverage gap; remaining backend differences
+    /// are recorded in the formula entry-point matrix.
     ///
     /// The loud failure is deliberate: a silent fallback would make "the fast
     /// path" mean "usually the fast path" — a formula whose operation has no
@@ -450,6 +449,27 @@ pub enum FormulaExecutionMode {
     Tree,
     /// Compiled compute plan driven by `UnifiedExecutor`.
     Plan,
+}
+
+impl FormulaExecutionMode {
+    /// Return the stable lowercase spelling used by language bindings.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Tree => "tree",
+            Self::Plan => "plan",
+        }
+    }
+
+    /// Parse a backend name accepted by language-neutral APIs.
+    pub fn from_name(value: &str) -> Option<Self> {
+        if value.eq_ignore_ascii_case("tree") {
+            Some(Self::Tree)
+        } else if value.eq_ignore_ascii_case("plan") {
+            Some(Self::Plan)
+        } else {
+            None
+        }
+    }
 }
 
 /// 公式引擎主入口

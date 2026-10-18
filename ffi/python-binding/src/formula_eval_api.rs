@@ -2,8 +2,31 @@
 
 use super::*;
 
+fn parse_formula_backend(backend: &str) -> PyResult<FormulaExecutionMode> {
+    FormulaExecutionMode::from_name(backend).ok_or_else(|| {
+        pyo3::exceptions::PyValueError::new_err(format!(
+            "unknown formula backend {backend:?}; expected 'tree' or 'plan'"
+        ))
+    })
+}
+
+/// Return the default formula backend or normalize a requested backend name.
+///
+/// Formula evaluation functions use `tree` by default for backward
+/// compatibility; pass `backend="plan"` to select the compiled-plan path.
 #[pyfunction]
-#[pyo3(signature = (source, open, high, low, close, volume, amount=None))]
+#[pyo3(signature = (backend=None))]
+#[cfg(feature = "formula")]
+pub fn formula_backend(backend: Option<&str>) -> PyResult<String> {
+    let mode = match backend {
+        Some(name) => parse_formula_backend(name)?,
+        None => FormulaExecutionMode::default(),
+    };
+    Ok(mode.as_str().to_string())
+}
+
+#[pyfunction]
+#[pyo3(signature = (source, open, high, low, close, volume, amount=None, backend="tree"))]
 #[cfg(feature = "formula")]
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn formula_eval(
@@ -15,7 +38,9 @@ pub fn formula_eval(
     close: &Bound<'_, PyAny>,
     volume: &Bound<'_, PyAny>,
     amount: Option<&Bound<'_, PyAny>>,
+    backend: &str,
 ) -> PyResult<Py<PyAny>> {
+    let mode = parse_formula_backend(backend)?;
     let open_vec = extract_array_bound(open)?;
     let high_vec = extract_array_bound(high)?;
     let low_vec = extract_array_bound(low)?;
@@ -38,7 +63,7 @@ pub fn formula_eval(
         volume_array,
         amount_array,
     );
-    let mut engine = FormulaEngine::new();
+    let mut engine = FormulaEngine::new().with_execution_mode(mode);
 
     let result = py.detach(|| {
         engine
@@ -59,7 +84,7 @@ pub fn formula_eval(
 }
 
 #[pyfunction]
-#[pyo3(signature = (source, open, high, low, close, volume, dialect = "alpha_ta", amount=None))]
+#[pyo3(signature = (source, open, high, low, close, volume, dialect = "alpha_ta", amount=None, backend="tree"))]
 #[cfg(feature = "formula")]
 #[allow(clippy::type_complexity, clippy::too_many_arguments)]
 pub fn formula_eval_dialect(
@@ -72,7 +97,9 @@ pub fn formula_eval_dialect(
     volume: &Bound<'_, PyAny>,
     dialect: &str,
     amount: Option<&Bound<'_, PyAny>>,
+    backend: &str,
 ) -> PyResult<Py<PyAny>> {
+    let mode = parse_formula_backend(backend)?;
     let open_vec = extract_array_bound(open)?;
     let high_vec = extract_array_bound(high)?;
     let low_vec = extract_array_bound(low)?;
@@ -95,7 +122,7 @@ pub fn formula_eval_dialect(
         volume_array,
         amount_array,
     );
-    let mut engine = FormulaEngine::new();
+    let mut engine = FormulaEngine::new().with_execution_mode(mode);
 
     let dialect = FormulaDialect::from_str(dialect).unwrap_or(FormulaDialect::AlphaTA);
     let result = py.detach(|| -> PyResult<Array1<f64>> {

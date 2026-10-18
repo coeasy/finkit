@@ -126,6 +126,34 @@ def test_legacy_formula_api_also_returns_numpy_arrays():
     assert result["__result__"].shape == close.shape
 
 
+def test_formula_api_reports_and_selects_backend_without_changing_default():
+    open_, high, low, close, volume = _ohlcv()
+    assert finkit.formula_backend() == "tree"
+    assert finkit.formula_backend("PLAN") == "plan"
+
+    tree = finkit.formula_eval("MA(CLOSE, 5)", open_, high, low, close, volume)
+    plan = finkit.formula_eval(
+        "MA(CLOSE, 5)", open_, high, low, close, volume, backend="plan"
+    )
+    np.testing.assert_allclose(
+        plan["__result__"], tree["__result__"], equal_nan=True
+    )
+
+    with pytest.raises(ValueError, match="tree.*plan"):
+        finkit.formula_backend("jit")
+
+
+def test_formula_dialect_api_accepts_explicit_backend():
+    open_, high, low, close, volume = _ohlcv()
+    result = finkit.formula_eval_dialect(
+        "MA(CLOSE, 5)", open_, high, low, close, volume,
+        dialect="alpha_ta", backend="plan"
+    )
+    np.testing.assert_allclose(
+        result["__result__"], finkit.sma(close, 5), equal_nan=True
+    )
+
+
 def test_compiled_formula_zero_copy_rejects_non_contiguous_inputs():
     open_, high, low, close, volume = _ohlcv(32)
     plan = finkit.CompiledFormula("MA(CLOSE, 3)")

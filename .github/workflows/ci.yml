@@ -293,7 +293,7 @@ jobs:
       # serial/parallel numeric equivalence — had no CI coverage at all, which
       # is the worst possible place to have none.
       - name: Run the parallel batch tests
-        run: cargo test -p finkit --features rayon --locked --lib -- batch::
+        run: "cargo test -p finkit --features rayon --locked --lib -- batch::"
 
   research-test:
     name: Factor research correctness and SSOT
@@ -391,7 +391,7 @@ jobs:
             -p finkit-android \
             -p finkit-ios \
             -p finkit-wasm \
-            --locked --no-fail-fast
+            --locked --no-fail-fast -- --test-threads=1
 
   package-contract:
     name: Rust package contract

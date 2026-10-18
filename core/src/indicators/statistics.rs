@@ -456,9 +456,58 @@ pub fn beta(asset: &[f64], benchmark: &[f64], timeperiod: usize) -> Result<Array
         sum_x += x;
         sum_y += y;
 
-        let denominator = n * sum_xx - sum_x * sum_x;
-        output[i] = if denominator.abs() > 1e-14 {
-            (n * sum_xy - sum_x * sum_y) / denominator
+        let mut denominator = n * sum_xx - sum_x * sum_x;
+        let mut numerator = n * sum_xy - sum_x * sum_y;
+        let mut denominator_scale = n * sum_xx;
+
+        // Returns in a drifting price series are almost constant. The raw
+        // moment formula then subtracts nearly equal values and can lose the
+        // entire variance to rounding. Rebuild only unstable windows after
+        // centering the returns; ordinary windows keep the O(1) rolling path.
+        if denominator <= 1e-4 * denominator_scale {
+            let first = i + 1 - timeperiod;
+            let mut prev_x = asset[first - 1];
+            let mut prev_y = benchmark[first - 1];
+            let mut shift_x = 0.0;
+            let mut shift_y = 0.0;
+            for j in first..=i {
+                if prev_x != 0.0 {
+                    shift_x += (asset[j] - prev_x) / prev_x;
+                }
+                if prev_y != 0.0 {
+                    shift_y += (benchmark[j] - prev_y) / prev_y;
+                }
+                prev_x = asset[j];
+                prev_y = benchmark[j];
+            }
+            shift_x /= n;
+            shift_y /= n;
+            prev_x = asset[first - 1];
+            prev_y = benchmark[first - 1];
+            let mut centered_xx = 0.0;
+            let mut centered_xy = 0.0;
+            for j in first..=i {
+                let x = if prev_x != 0.0 {
+                    (asset[j] - prev_x) / prev_x - shift_x
+                } else {
+                    -shift_x
+                };
+                let y = if prev_y != 0.0 {
+                    (benchmark[j] - prev_y) / prev_y - shift_y
+                } else {
+                    -shift_y
+                };
+                prev_x = asset[j];
+                prev_y = benchmark[j];
+                centered_xx += x * x;
+                centered_xy += x * y;
+            }
+            denominator_scale = centered_xx;
+            denominator = centered_xx;
+            numerator = centered_xy;
+        }
+        output[i] = if denominator > 1e-14 * denominator_scale {
+            numerator / denominator
         } else {
             0.0
         };

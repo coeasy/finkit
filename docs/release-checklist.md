@@ -124,7 +124,12 @@ claim registry installation commands before a clean consumer test exists.
 - [ ] Confirm the GitHub Actions secret `CARGO_REGISTRY_TOKEN` is available to
       the repository and has permission to publish `finkit`.
 - [ ] Confirm the release notes cover the 31 TA-Lib functions, dialect coverage
-      contract, Alpha158/WorldQuant101 libraries, and Pine mapping repair.
+      contract, Alpha158/WorldQuant101 libraries, Pine mapping repair, explicit
+      Tree/Plan selection in active bindings, and both CLI binaries.
+- [ ] Validate the docs.rs feature allowlist. `std` and `no_std` are mutually
+      exclusive, so `--all-features` cannot represent the supported public API;
+      metadata and the publish workflow must use the same explicit default
+      feature set recorded in `core/Cargo.toml`.
 
 ## Tag and crates.io publication
 
@@ -146,7 +151,8 @@ claim registry installation commands before a clean consumer test exists.
       `finkit = "0.2.0"` and a minimal indicator call.
 - [ ] Confirm docs.rs generated documentation for `finkit 0.2.0`.
 - [ ] Confirm the GitHub Release contains the four Python ABI3 wheels, the Rust
-      crate asset, the Linux x86_64 CLI, and `SHA256SUMS`.
+      crate asset, the Linux x86_64 main CLI and `finkit-factor-study` CLI, and
+      `SHA256SUMS`.
 - [ ] Verify each downloaded asset against `SHA256SUMS`.
 - [ ] Only after the registry smoke test passes, add `cargo add finkit` to user
       installation docs and move `PUBLISHED_VERSION` in

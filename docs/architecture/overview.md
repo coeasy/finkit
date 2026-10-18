@@ -10,24 +10,48 @@ GitHub / GitLab / VS Code).
 graph TD
   user[User code] --> core[finkit]
   user --> cli[finkit-cli]
+  user --> factor[finkit-factor-analysis]
+  user --> viz[finkit-visualization]
   user --> wasm[finkit-wasm]
-  user --> py[Finkit-python]
-  user --> node[Finkit-node]
-  user --> go[Finkit-go]
-  user --> java[Finkit-java]
-  user --> dotnet[Finkit-dotnet]
-  user --> c[Finkit-c]
+  user --> py[finkit-python]
+  user --> node[finkit-node]
+  user --> go[finkit-go]
+  user --> java[finkit-java]
+  user --> dotnet[finkit-dotnet]
+  user --> c[finkit-ffi]
+  user --> ios[finkit-ios]
+  user --> android[finkit-android]
 
-  py --> core
-  node --> core
-  go --> core
-  java --> core
-  dotnet --> core
-  c --> core
-  wasm --> core
-  cli --> core
-  cli --> viz[finkit-visualization]
+  factor --> core
   viz --> core
+  cli --> factor
+  cli --> viz
+  cli --> core
+  wasm --> ffi_common[finkit-ffi-common]
+  wasm --> viz
+  wasm --> core
+  c --> ffi_common
+  c --> core
+  go --> ffi_common
+  go --> core
+  java --> ffi_common
+  java --> viz
+  java --> core
+  dotnet --> ffi_common
+  dotnet --> core
+  ios --> ffi_common
+  ios --> core
+  android --> ffi_common
+  android --> core
+  py --> factor
+  py --> viz
+  py --> ffi_common
+  py --> core
+  node --> viz
+  node --> ffi_common
+  node --> core
+  ffi_common --> factor
+  ffi_common --> core
 ```
 
 ## Crate roles
@@ -35,15 +59,19 @@ graph TD
 | Crate | Role | Output |
 |-------|------|--------|
 | `finkit` | Indicators, math, formula engine, traits | `rlib` (consumed by all others) |
-| `finkit-cli` | Command-line interface | `bin` + reusable lib |
-| `finkit-wasm` | Browser / Node.js WASM bindings | `wasm-bindgen` output |
-| `Finkit-python` | PyO3 bindings | `.whl` / sdist |
-| `Finkit-node` | `napi-rs` bindings | `node-addon-api` binary |
-| `Finkit-go` | `cgo` bindings | C-shim + Go package |
-| `Finkit-java` | JNI bindings | `.so` / `.dll` + `.jar` |
-| `Finkit-dotnet` | P/Invoke bindings | NuGet package |
-| `Finkit-c` | Pure-C ABI | `.a` / `.so` / `.dll` |
+| `finkit-factor-analysis` | Factor study, metrics, risk and cross-sectional analysis | `rlib` |
 | `finkit-visualization` | Chart rendering (SVG/PNG/HTML) | `rlib` |
+| `finkit-cli` | Formula/indicator/runtime and factor-study command-line workflows | CLI binaries |
+| `finkit-wasm` | Browser / Node.js WASM bindings | `wasm-bindgen` output |
+| `finkit-ffi-common` | Shared serialization, request types and language-neutral FFI helpers | `rlib` |
+| `finkit-python` | PyO3 bindings | `.whl` / sdist |
+| `finkit-node` | `napi-rs` bindings | Node native addon |
+| `finkit-go` | `cgo` bindings | C-shim + Go package |
+| `finkit-java` | JNI bindings | `.so` / `.dll` + `.jar` |
+| `finkit-dotnet` | P/Invoke bindings | NuGet package candidate |
+| `finkit-ffi` | C ABI | `.a` / `.so` / `.dll` |
+| `finkit-ios` | Swift/iOS wrapper over C ABI | Swift package / XCFramework candidate |
+| `finkit-android` | Kotlin/JNI wrapper over C ABI | AAR candidate |
 
 ## Layering
 
@@ -53,18 +81,14 @@ graph TD
 └──────────────────────────────────────────────────────┘
                        ▲
 ┌──────────────────────────────────────────────────────┐
-│ FFI bindings (per-language)                          │
+│ CLI / WASM / Python / Node / C ABI / mobile wrappers │
 └──────────────────────────────────────────────────────┘
                        ▲
 ┌──────────────────────────────────────────────────────┐
-│ Public Rust API (finkit)                        │
-│  ├─ traits      (Ohlcv, StreamingIndicator, Batch…)  │
-│  ├─ indicators  (overlap, momentum, volume, …)      │
-│  ├─ formula     (parser, AST, bytecode, JIT, SIMD)   │
-│  ├─ streaming   (O(1) per-bar updates)               │
-│  ├─ features    (ML pipelines, transformations)     │
-│  ├─ math        (moving_avg, simd_kernels, stats)    │
-│  └─ patterns    (candlestick, chart)                 │
+│ Core (finkit) + Factor Analysis + Visualization     │
+│  ├─ core: indicators / formula / streaming / math   │
+│  ├─ factor-analysis: studies / risk / cross-section │
+│  └─ visualization: renderers and chart models       │
 └──────────────────────────────────────────────────────┘
                        ▲
 ┌──────────────────────────────────────────────────────┐
@@ -77,6 +101,7 @@ graph TD
 ## Cross-references
 
 - [Data flow](dataflow.md) — request lifecycle.
+- [Core workflow matrix](workflow-matrix.md) — end-to-end capability and validation coverage.
 - [Formula engine](formula-engine.md) — internal stages of formula eval.
 - [api-reference.md](../api-reference.md) — public API surface (English).
 - [Benchmark results](../benchmark-results.md) — current performance summary.

@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "name": "architecture-v3-installed-wheel",
+  "description": "Median of three independent installed-wheel GitHub Actions measurements for the same Rust/Python implementation source. The three runs straddled workflow-only validation fixes; Python/Linux benchmark code and product sources were unchanged.",
+  "environment": {
+    "runner": "ubuntu-22.04",
+    "python": "3.12",
+    "numpy": "2.3.3",
+    "ta_lib_python": "0.8.0",
+    "date": "2026-10-18"
+  },
+  "observations": [
+    {
+      "workflow_run_id": 39100546344,
+      "source_commit": "15429b518ac6d448e560a46683c6ce78e4813fc2",
+      "metrics": {
+        "indicator_geomean_finkit_speedup_x": 1.1702624822162464,
+        "indicator_100k_geomean_finkit_speedup_x": 1.206292550401948,
+        "indicator_1m_geomean_finkit_speedup_x": 1.1514413822240341,
+        "top20_geomean_finkit_speedup_x": 1.3120868290381011
+      }
+    },
+    {
+      "workflow_run_id": 39101522700,
+      "source_commit": "1337cc27a1d71e93ce09d2c383ba2fab6ecfde3b",
+      "metrics": {
+        "indicator_geomean_finkit_speedup_x": 1.1701632251799556,
+        "indicator_100k_geomean_finkit_speedup_x": 1.207059130236533,
+        "indicator_1m_geomean_finkit_speedup_x": 1.154029195546823,
+        "top20_geomean_finkit_speedup_x": 1.313154093136883
+      }
+    },
+    {
+      "workflow_run_id": 39101811005,
+      "source_commit": "270e02b03c9fd6f36f6962d880fe602afbae66e8",
+      "metrics": {
+        "indicator_geomean_finkit_speedup_x": 1.0968542960504595,
+        "indicator_100k_geomean_finkit_speedup_x": 1.106153479939717,
+        "indicator_1m_geomean_finkit_speedup_x": 1.0821135895977423,
+        "top20_geomean_finkit_speedup_x": 1.2319058678435737
+      }
+    }
+  ],
+  "median_metrics": {
+    "indicator_geomean_finkit_speedup_x": 1.1701632251799556,
+    "indicator_100k_geomean_finkit_speedup_x": 1.206292550401948,
+    "indicator_1m_geomean_finkit_speedup_x": 1.1514413822240341,
+    "top20_geomean_finkit_speedup_x": 1.3120868290381011
+  },
+  "max_regression_fraction": 0.1,
+  "calibration_rationale": "The slower independent run was 6.3% below the median overall and 8.3% below the median at 100K. A 10% regression margin covers the observed hosted-runner spread while retaining a calibrated aggregate non-regression gate. Top-20 uses its geometric mean; the single slowest indicator is reported diagnostically because a minimum is dominated by one outlier and had failed at 0.47x even in the two near-identical runs."
+}

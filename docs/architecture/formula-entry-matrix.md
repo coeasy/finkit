@@ -227,42 +227,41 @@ TongDaXin / TongHuaShun / EastMoney 下属于 §1.1（plan 可用），只有 Pi
 | 三面（registry / formula / plan 内核）尺寸与记录一致 | `formula_function_ssot.rs`（`the_three_surfaces_have_the_expected_sizes`） |
 | 跨路径数值一致 | `formula_plan_differential.rs`、`runtime_convergence.rs` |
 
-## 5. 绑定后端能力矩阵（阶段 1 第 3 条：绑定能否选择/报告 backend）
+## 5. 绑定后端能力矩阵（2026-10-18 更新）
 
-方案阶段 1 第 3 条要求检查活跃绑定**能否选择或报告 backend**。逐仓核查结果：
-**没有任何绑定能选择或报告后端**。全部绑定都调用 `FormulaEngine::new()`，即
-**静默使用默认（Tree）**；唯一与后端有关的代码是 `BackendUnsupported` 的**错误文案**。
+Rust、Python、Node 均提供 backend 选择和报告：Rust `FormulaEngine` 有
+`execution_mode()` / `with_execution_mode()`；Python 提供 `formula_backend()` 和
+`formula_eval(..., backend=...)`；Node 提供 `formulaBackend()` 和
+`formulaEval(..., backend?)`。Python/Node 省略 backend 时仍使用 `tree`，保持兼容默认。
 
 | 绑定 | 能选择 backend？ | 能报告 backend？ | `BackendUnsupported` 映射 |
 |---|---|---|---|
-| c-binding | ❌ | ❌ | 错误码 `11` |
-| python-binding | ❌ | ❌ | `RuntimeError`（消息含 entry + backend） |
-| node-binding | ❌ | ❌ | `napi::Status::GenericFailure` |
-| dotnet-binding | ❌ | ❌ | 字符串（无类型化分支） |
-| go-binding | ❌ | ❌ | 字符串（无类型化分支） |
-| java-binding | ❌ | ❌ | 字符串（无类型化分支） |
-| ios-binding | ❌ | ❌ | 字符串（无类型化分支） |
-| android-binding | ❌ | ❌ | 字符串（无类型化分支） |
+| Rust `FormulaEngine` | ✅（builder/setter） | ✅ (`execution_mode`) | `FormulaError::BackendUnsupported` |
+| python-binding | ✅ (`backend="tree"/"plan"`) | ✅ (`formula_backend`) | `NotImplementedError` |
+| node-binding | ✅ (`backend?: "tree"/"plan"`) | ✅ (`formulaBackend`) | `napi::Status::InvalidArg` |
+| c-binding | ❌（固定默认路径/JSON contract） | ❌ | 错误码 `11` |
+| dotnet-binding | ❌（固定默认路径/JSON contract） | ❌ | 字符串（无类型化分支） |
+| go-binding | ❌（固定默认路径/JSON contract） | ❌ | 字符串（无类型化分支） |
+| java-binding | ❌（固定默认路径/JSON contract） | ❌ | 字符串（无类型化分支） |
+| ios-binding | ❌（固定默认路径/JSON contract） | ❌ | 字符串（无类型化分支） |
+| android-binding | ❌（固定默认路径/JSON contract） | ❌ | 字符串（无类型化分支） |
 
-### 5.1 这是默认化的**第二个阻断项**（第一个是阶段 1.4 的性能退化）
+### 5.1 默认切换条件
 
-若把默认切到 Plan，**每个绑定的行为都会静默改变**：绑定使用者既无法**显式钉住 Tree**
-以规避回归，也无法**查询自己当前在哪个后端**。方案退出条件要求"所有绑定默认/显式
-backend 行为一致且有迁移说明"——在补齐选择/报告面之前，该条件**不满足**。
+默认仍为 Tree。Python 与 Node 的 Plan 选择是 opt-in；若所选入口不受 Plan 支持，必须
+显式失败，不允许静默退回 Tree。默认是否切换仍未决定：需要在最终候选 SHA 重测代表性
+workload 与内存分配，并评估所有公开语言面的迁移策略。旧提交测量只用作调查线索。
 
-### 5.2 附带发现：`BackendUnsupported` 的跨语言映射不一致
+### 5.2 错误映射仍需跨 deferred bindings 收敛
 
-同一错误在 8 个绑定里有 4 种表现：错误码 `11`（C）、`RuntimeError`（Python）、
-`GenericFailure`（Node）、以及**完全无类型化分支**（其余 5 个，退化为字符串）。
-绑定使用者无法用同一套逻辑跨语言识别"后端不支持"，这本身也是"行为一致"要求的缺口。
-
-> 修复顺序建议：先给每个绑定加**只读**的 backend 报告（`engine.backend()`，成本极低、
-> 无行为风险），再加可选的显式选择；最后统一 `BackendUnsupported` 的映射并写迁移说明。
-> 在默认值切换**之前**完成，否则使用者没有退路。
+后端不支持在 active tier 以 Python `NotImplementedError` / Node `InvalidArg` 暴露，Rust
+保留 `FormulaError` 类型。C 与 deferred bindings 仍有不同的错误编码/字符串路径，后续应
+纳入语言中立错误 envelope；它们目前不暴露 backend 选择。
 
 ## 6. 相关文档
 
 - [公式引擎内部](formula-engine.md)
 - [公式运行时合同](../formula-runtime-contract.md)
 - [实现现状矩阵](status-matrix.md)
+- [核心工作流矩阵](workflow-matrix.md)
 - [架构审查与重构方案（2026-10-13）](../ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md)

@@ -309,6 +309,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: "1.98"
           targets: wasm32-unknown-unknown
       # `console_error_panic_hook` must be requested explicitly: its dependency
       # is declared only for `cfg(target_arch = "wasm32")`, so it cannot be a
@@ -337,6 +338,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: "1.98"
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android,i686-linux-android
       - uses: actions/setup-java@v6
         with:
@@ -402,6 +404,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: "1.98"
           targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
       - name: Build XCFramework
         run: bash ffi/ios-binding/build-xcframework.sh
@@ -436,7 +439,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo package -p finkit --locked --no-verify
       - run: cargo build -p finkit-cli --release --locked
-      - run: mkdir -p dist/rust && cp target/package/finkit-*.crate dist/rust/ && cp target/release/finkit-cli dist/rust/finkit-cli-linux-x86_64
+      - run: mkdir -p dist/rust && cp target/package/finkit-*.crate dist/rust/ && cp target/release/finkit-cli dist/rust/finkit-cli-linux-x86_64 && cp target/release/finkit-factor-study dist/rust/finkit-factor-study-linux-x86_64
         shell: bash
       - uses: actions/upload-artifact@v7
         with:
@@ -474,7 +477,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          rm -f release-assets/finkit-*.crate release-assets/finkit-cli-*
+          rm -f release-assets/finkit-*.crate release-assets/finkit-cli-* release-assets/finkit-factor-study-*
           find release-assets -maxdepth 1 -type f -print | sort
           test -n "$(find release-assets -maxdepth 1 -type f -print -quit)"
           (cd release-assets && sha256sum * > SHA256SUMS.multilang)

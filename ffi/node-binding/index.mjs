@@ -163,6 +163,7 @@ export const volumeRoc = binding.volumeRoc
 export const chandeForecastOscillator = binding.chandeForecastOscillator
 export const twiggsMoneyFlow = binding.twiggsMoneyFlow
 export const formulaEval = binding.formulaEval
+export const formulaBackend = binding.formulaBackend
 export const formulaEvalContractJson = binding.formulaEvalContractJson
 export const formulaEvalTemporalContractJson = binding.formulaEvalTemporalContractJson
 export const formulaEvalPanelContractJson = binding.formulaEvalPanelContractJson
