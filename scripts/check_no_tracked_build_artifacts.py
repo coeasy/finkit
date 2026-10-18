@@ -68,15 +68,23 @@ def example_output_names() -> set[str]:
     stopped matching them: 7.3 MB of regenerable output stayed tracked while
     the gate kept printing "none look like build output".
 
-    Deriving the names from the example sources keeps the rule honest — a new
-    `save_as_*("something.html")` is caught without touching this file, and a
-    renamed example target stops matching instead of flagging a stale name.
+    Deriving the names from explicit output calls keeps the rule honest — a
+    new `save_as_*` or `fs::write` renderable output is caught without touching
+    this file. Arbitrary input paths such as the Pine corpus manifest must not
+    be mistaken for generated output.
     """
     names: set[str] = set()
-    literal = re.compile(r'"([A-Za-z0-9_.\-]+\.(?:html|htm|svg|json|csv|png))"')
+    output_calls = (
+        re.compile(r'\.save_as_[A-Za-z0-9_]+\s*\(\s*"([^"]+)"'),
+        re.compile(r'\bfs::write\s*\(\s*"([^"]+)"'),
+    )
+    renderable = re.compile(r"[A-Za-z0-9_.\-]+\.(?:html|htm|svg|json|csv|png)$")
     for source in ROOT.glob("*/examples/*.rs"):
         text = source.read_text(encoding="utf-8", errors="ignore")
-        names.update(literal.findall(text))
+        for pattern in output_calls:
+            names.update(
+                name for name in pattern.findall(text) if renderable.fullmatch(name)
+            )
     return names
 
 
