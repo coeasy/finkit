@@ -113,10 +113,11 @@ jobs:
         env:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
-          # maturin-action can leave macOS PATH pointing at the runner's
-          # system Python. Use setup-python's interpreter for install and test.
+          # Isolate macOS from the runner's framework-wide site-packages, which
+          # can shadow a just-installed wheel even with setup-python selected.
           if [[ "$RUNNER_OS" == "macOS" ]]; then
-            PYTHON="$pythonLocation/bin/python"
+            "$pythonLocation/bin/python" -m venv "$RUNNER_TEMP/finkit-wheel-venv"
+            PYTHON="$RUNNER_TEMP/finkit-wheel-venv/bin/python"
           else
             PYTHON=python
           fi
@@ -154,12 +155,14 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE"
           if [[ "$RUNNER_OS" == "macOS" ]]; then
-            PYTHON="$pythonLocation/bin/python"
+            PYTHON="$RUNNER_TEMP/finkit-wheel-venv/bin/python"
+            EXPECT_PREFIX="$RUNNER_TEMP/finkit-wheel-venv"
           else
             PYTHON=python
+            EXPECT_PREFIX="${{ env.pythonLocation }}"
           fi
           "$PYTHON" scripts/check_python_stub.py \
-            --require-extension --expect-prefix "${{ env.pythonLocation }}"
+            --require-extension --expect-prefix "$EXPECT_PREFIX"
 
       - name: Upload wheel artifact
         uses: actions/upload-artifact@v7
