@@ -100,6 +100,7 @@ graph TD
 
 ## Cross-references
 
+- [Core 模块边界与变更影响](core-module-boundaries.md) —职责、验证合同和拆 crate 决策门槛。
 - [Data flow](dataflow.md) — request lifecycle.
 - [Core workflow matrix](workflow-matrix.md) — end-to-end capability and validation coverage.
 - [Formula engine](formula-engine.md) — internal stages of formula eval.

@@ -1,7 +1,7 @@
 # 核心工作流与端到端覆盖矩阵
 
-> 审查起点：`8b398999`（2026-10-18）；本地候选工作树验证见 [status-matrix.md](status-matrix.md)，不代表最终提交、远端 CI 或公开发行已验证。
-> 产品边界：不含回测引擎、横截面选股或组合构建引擎。
+> 当前方案实施审查基线：仓库提交 `5252c15b`（2026-10-23）；本地未提交的重构实施与验证结果见 [status-matrix.md](status-matrix.md)。这不是最终提交 SHA、远端 CI 或公开发行证明。
+> 产品边界：不实现回测引擎。因子研究仅分析调用方传入的因子、价格/收益及面板数据；不含模拟成交、交易策略运行、横截面选股或投资组合构建引擎。
 
 本表按用户能够完成的任务拆分。源码存在、专项测试存在、跨层/安装后闭环、当前提交 CI、公开发行是不同证据，不能互相替代。
 
@@ -17,13 +17,13 @@
 | Factor Study CLI | `cli/src/bin/finkit-factor-study.rs` | JSON 请求或 CSV → JSON 研究响应 | schema/API fixtures、CSV→报告 consumer test | 独立二进制直连研究 crate；与主 CLI 是两个入口。release workflows 已纳入两个二进制，最终 runner 仍需验证 |
 | Python / Node 绑定 | `ffi/python-binding`、`ffi/node-binding`；indicator API 与公式/Factor Research JSON 契约 | ndarray/JS arrays 或版本化 JSON 请求 → Python dict/JS object/JSON 响应 | binding parity、engine contract、factor-study request tests、安装包 consumer workflows | 两个 active binding 都暴露 Factor Study JSON API，指标 parity 比率只覆盖 78 项 indicator。Formula backend 查询/选择现已暴露；其余研究/流式操作仍按各自接口合同判断 |
 | 其他绑定 / 移动端 / WASM | `ffi/{c,go,java,dotnet,ios,android}`、`wasm/` | 各语言数值数组/契约 → 本地结果 | binding-specific CI 与 candidate package jobs | surface 和发行层级不同；当前主接口/研究工作流不统一，不应将 CI candidate 表述为公开分发 |
-| 发布安装闭环 | Cargo/GitHub Release、Python wheels、language packages、CLI binaries | tag + 精确 SHA → crate/wheels/CLI/native & binding artifacts → clean consumer | release workflows、package validators、release checklist | 当前公开 latest 为 `v0.1.15`，workspace 目标 `0.2.0`。只有 tag 对应的全部 required jobs 完成、资产和 clean consumer 验证后才算发布闭环 |
+| 发布安装闭环 | Cargo/GitHub Release、Python wheels、language packages、CLI binaries | tag + 精确 SHA → crate/wheels/CLI/native & binding artifacts → clean consumer | release workflows、package validators、release checklist | 截至 2026-10-23，GitHub Releases 最新公开版本为 `v0.1.15`；仓库基线存在 `v0.2.0` tag 但不等价于公开发行。其他公共 registry 仍须逐项核验。只有 tag 对应 required jobs 完成、资产和 clean consumer 验证后才算发布闭环 |
 
 ## 首要闭环缺口
 
 1. **绑定消费验证扩面**：Python/Node backend 与 Factor Study JSON consumer tests 已补齐；剩余各 tier 的公式/streaming/研究能力须明确声明，active-tier clean install 工作流需在最终提交 SHA 上验证。
 2. **两个 CLI binary 的发行验证**：release workflows 与 docs 覆盖主 CLI 和 `finkit-factor-study`；当前分支已补 Linux Release assets 和 CSV→报告测试，需在最终 release runner 确认产物。
-3. **当前 SHA 证据闭环**：候选本地 workspace 与关键 binding 测试已通过；最终候选提交仍需重跑发布门禁、package/clean-consumer 验证，并按 tag 核对远程 CI 和发行资产。
+3. **当前 SHA 证据闭环**：仓库基线的 workspace 与 Python/Node 共享 contract consumer 以前已有通过记录；本轮覆盖扫描回归测试与专项门禁已本机通过。最终提交仍需重跑 workspace、package/clean-consumer 验证，并按 tag 核对远程 CI 和发行资产。
 4. **feature 合同**：类别 feature 当前不能独立 build。保留公开 Cargo feature 名称但明确标成未支持 scaffold；只将 `check_feature_matrix.py` 的 `SUPPORTED` 组合列为用户合同，直到真正修复并测试类别裁剪。
 
 ## 入口选择建议

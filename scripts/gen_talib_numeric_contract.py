@@ -4,7 +4,7 @@
 The golden JSON files remain the only reference source.  This generator merely
 projects one deterministic slice of the synthetic fixture into the shared JSON
 operation contract so every binding can execute the same requests and compare
-the same TA-Lib 0.8.0 values.
+the same TA-Lib 0.8.1 values.
 """
 
 from __future__ import annotations
@@ -134,8 +134,8 @@ def build_payload() -> dict[str, Any]:
         path = GOLDEN_DIR / f"{indicator.lower()}.json"
         raw = json.loads(path.read_text(encoding="utf-8"))
         metadata = raw["metadata"]
-        if metadata["indicator"] != indicator or metadata["talib_version"] != "0.8.0":
-            raise ValueError(f"{indicator}: golden metadata is not pinned to TA-Lib 0.8.0")
+        if metadata["indicator"] != indicator or metadata["talib_version"] != "0.8.1":
+            raise ValueError(f"{indicator}: golden metadata is not pinned to TA-Lib 0.8.1")
         golden_names.add(indicator)
         input_order = [name.upper() for name in metadata["inputs"]]
         missing = [name for name in metadata["inputs"] if name not in inputs]

@@ -15,6 +15,7 @@ import json
 import math
 import platform
 import statistics
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Callable
@@ -30,6 +31,12 @@ from benchmark_talib_full_current_gate import (
     parity,
     talib_aroon_order,
 )
+from benchmark_gate_contract import evaluate_performance_rows
+
+
+def talib_donchian_outputs(value: Any) -> tuple[Any, Any, Any]:
+    """Drop Finkit's extra width output; the first three match TA-Lib order."""
+    return value[0], value[1], value[2]
 
 
 def extra_cases(o, h, l, c, v):
@@ -39,6 +46,52 @@ def extra_cases(o, h, l, c, v):
     # error unrelated to the implementation under test.
     math_input = np.linspace(-0.9, 0.9, c.size, dtype=np.float64)
     cases = [
+        ("SUM", lambda: finkit.sum(c, timeperiod=30), lambda: talib.SUM(c, timeperiod=30)),
+        ("VORTEX", lambda: finkit.vortex(h, l, c, timeperiod=14), lambda: talib.VORTEX(h, l, c, timeperiod=14)),
+        ("VWAP", lambda: finkit.vwap(h, l, c, v), lambda: talib.VWAP(h, l, c, v)),
+        ("DONCHIAN", lambda: talib_donchian_outputs(finkit.donchian(h, l, period=20)), lambda: talib.DONCHIAN(h, l, timeperiod=20)),
+        ("SUPERTREND", lambda: finkit.supertrend_talib(h, l, c, timeperiod=10, multiplier=3.0), lambda: talib.SUPERTREND(h, l, c, timeperiod=10, multiplier=3.0)),
+        ("AVGDEV", lambda: finkit.avgdev(c, timeperiod=14), lambda: talib.AVGDEV(c, timeperiod=14)),
+        ("DPO", lambda: finkit.dpo(c, timeperiod=20), lambda: talib.DPO(c, timeperiod=20)),
+        ("ER", lambda: finkit.er(c, timeperiod=10), lambda: talib.ER(c, timeperiod=10)),
+        ("FOSC", lambda: finkit.fosc(c, timeperiod=5), lambda: talib.FOSC(c, timeperiod=5)),
+        ("PERCENTRANK", lambda: finkit.percentrank(c, timeperiod=100), lambda: talib.PERCENTRANK(c, timeperiod=100)),
+        ("RMA", lambda: finkit.rma(c, timeperiod=30), lambda: talib.RMA(c, timeperiod=30)),
+        ("VHF", lambda: finkit.vhf(c, timeperiod=28), lambda: talib.VHF(c, timeperiod=28)),
+        ("HMA", lambda: finkit.hma(c, timeperiod=20), lambda: talib.HMA(c, timeperiod=20)),
+        ("ZLEMA", lambda: finkit.zlema(c, timeperiod=30), lambda: talib.ZLEMA(c, timeperiod=30)),
+        ("RVI", lambda: finkit.rvi(c, timeperiod=14, stddevperiod=10), lambda: talib.RVI(c, timeperiod=14, stddevperiod=10)),
+        ("ADR", lambda: finkit.adr(h, l, timeperiod=14), lambda: talib.ADR(h, l, timeperiod=14)),
+        ("AO", lambda: finkit.ao(h, l, fastperiod=5, slowperiod=34), lambda: talib.AO(h, l, fastperiod=5, slowperiod=34)),
+        ("CMOU", lambda: finkit.cmou(c, timeperiod=14), lambda: talib.CMOU(c, timeperiod=14)),
+        ("CVI", lambda: finkit.cvi(h, l, timeperiod=10, rocperiod=10), lambda: talib.CVI(h, l, timeperiod=10, rocperiod=10)),
+        ("EFI", lambda: finkit.efi(c, v, timeperiod=13), lambda: talib.EFI(c, v, timeperiod=13)),
+        ("MARKETFI", lambda: finkit.marketfi(h, l, v), lambda: talib.MARKETFI(h, l, v)),
+        ("MASSI", lambda: finkit.massi(h, l, fastperiod=9, slowperiod=25), lambda: talib.MASSI(h, l, fastperiod=9, slowperiod=25)),
+        ("MINUS_DM", lambda: finkit.minus_dm(h, l, timeperiod=14), lambda: talib.MINUS_DM(h, l, timeperiod=14)),
+        ("NVI", lambda: finkit.nvi(c, v), lambda: talib.NVI(c, v)),
+        ("PLUS_DM", lambda: finkit.plus_dm(h, l, timeperiod=14), lambda: talib.PLUS_DM(h, l, timeperiod=14)),
+        ("PVI", lambda: finkit.pvi(c, v), lambda: talib.PVI(c, v)),
+        ("PVT", lambda: finkit.pvt(c, v), lambda: talib.PVT(c, v)),
+        ("QSTICK", lambda: finkit.qstick(o, c, timeperiod=10), lambda: talib.QSTICK(o, c, timeperiod=10)),
+        ("RVOL", lambda: finkit.rvol(v, timeperiod=20), lambda: talib.RVOL(v, timeperiod=20)),
+        ("TSI", lambda: finkit.tsi(c, firstperiod=25, secondperiod=13), lambda: talib.TSI(c, firstperiod=25, secondperiod=13)),
+        ("VWMA", lambda: finkit.vwma(c, v, timeperiod=30), lambda: talib.VWMA(c, v, timeperiod=30)),
+        ("WAD", lambda: finkit.wad(h, l, c), lambda: talib.WAD(h, l, c)),
+        ("AC", lambda: finkit.ac(h, l, fastperiod=5, slowperiod=34, signalperiod=5), lambda: talib.AC(h, l, fastperiod=5, slowperiod=34, signalperiod=5)),
+        ("ACCBANDS", lambda: finkit.accbands(h, l, c, timeperiod=20), lambda: talib.ACCBANDS(h, l, c, timeperiod=20)),
+        ("CMF", lambda: finkit.cmf(h, l, c, v, timeperiod=20), lambda: talib.CMF(h, l, c, v, timeperiod=20)),
+        ("COPPOCK", lambda: finkit.coppock(c, wmaperiod=10, roc1period=11, roc2period=14), lambda: talib.COPPOCK(c, wmaperiod=10, roc1period=11, roc2period=14)),
+        ("CUMSUM", lambda: finkit.cumsum(c), lambda: talib.CUMSUM(c)),
+        ("ERI", lambda: finkit.eri(h, l, c, timeperiod=13), lambda: talib.ERI(h, l, c, timeperiod=13)),
+        ("FRACTAL", lambda: finkit.fractal(h, l, leftbars=2, rightbars=2), lambda: talib.FRACTAL(h, l, leftbars=2, rightbars=2)),
+        ("HA", lambda: finkit.ha(o, h, l, c), lambda: talib.HA(o, h, l, c)),
+        ("IMI", lambda: finkit.imi(o, c, timeperiod=14), lambda: talib.IMI(o, c, timeperiod=14)),
+        ("KC", lambda: finkit.kc(h, l, c, timeperiod=20, atrperiod=10, nbdev=2.0), lambda: talib.KC(h, l, c, timeperiod=20, atrperiod=10, nbdev=2.0)),
+        ("KDJ", lambda: finkit.kdj(h, l, c, fastk_period=9, slowk_period=3, slowk_matype=13, slowd_period=3, slowd_matype=13), lambda: talib.KDJ(h, l, c, fastk_period=9, slowk_period=3, slowk_matype=13, slowd_period=3, slowd_matype=13)),
+        ("PERCENTILE", lambda: finkit.percentile(c, timeperiod=30, percentile=50.0), lambda: talib.PERCENTILE(c, timeperiod=30, percentile=50.0)),
+        ("PVO", lambda: finkit.pvo(v, fastperiod=12, slowperiod=26, matype=1), lambda: talib.PVO(v, fastperiod=12, slowperiod=26, matype=1)),
+        ("SMI", lambda: finkit.smi(h, l, c, timeperiod=13, fastperiod=2, slowperiod=25, signalperiod=9), lambda: talib.SMI(h, l, c, timeperiod=13, fastperiod=2, slowperiod=25, signalperiod=9)),
         ("ADXR", lambda: finkit.adxr(h, l, c, timeperiod=14), lambda: talib.ADXR(h, l, c, timeperiod=14)),
         ("AROONOSC", lambda: finkit.aroonosc(h, l, timeperiod=14), lambda: talib.AROONOSC(h, l, timeperiod=14)),
         ("BBANDS", lambda: finkit.bbands(c, timeperiod=5, nbdevup=2.0, nbdevdn=2.0, matype=0), lambda: talib.BBANDS(c, timeperiod=5, nbdevup=2.0, nbdevdn=2.0, matype=0)),
@@ -89,12 +142,38 @@ def extra_cases(o, h, l, c, v):
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    repo_root = Path(__file__).resolve().parents[1]
+    try:
+        git_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        git_sha = None
+    try:
+        rustc_version = subprocess.run(
+            ["rustc", "--version"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        rustc_version = None
     env = {
         "python": sys.version,
         "platform": platform.platform(),
+        "cpu": platform.processor(),
         "numpy": np.__version__,
         "finkit": importlib.metadata.version("finkit"),
+        "finkit_module": str(Path(finkit.__file__).resolve()),
+        "finkit_source_git_sha": git_sha,
+        "rustc": rustc_version,
         "talib_python": importlib.metadata.version("TA-Lib"),
+        "talib_core": getattr(talib, "__ta_version__", b"").decode("ascii", errors="replace"),
     }
     rows = []
     errors = []
@@ -124,27 +203,44 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     for row in rows:
         by_name.setdefault(row["name"], []).append(row["finkit_speedup_x"])
     geomean = math.exp(statistics.mean(math.log(row["finkit_speedup_x"]) for row in rows)) if rows else 0.0
-    summary = {"environment": env, "sizes": args.sizes, "case_count": len(by_name), "observation_count": len(rows), "errors": errors, "parity_failures": parity_failures, "all_observations_faster": bool(rows) and all(row["finkit_speedup_x"] > 1.0 for row in rows), "all_cases_faster_at_every_size": bool(by_name) and all(all(value > 1.0 for value in values) for values in by_name.values()), "geomean_finkit_speedup": geomean, "rows": rows}
+    upstream_names = sorted(name.upper() for name in talib.get_functions())
+    performance = evaluate_performance_rows(
+        rows, upstream_names, minimum_speedup=1.0, expected_sizes=args.sizes
+    )
+    performance["observation_count"] = len(rows)
+    performance["expected_observation_count"] = len(upstream_names) * len(args.sizes)
+    summary = {
+        "environment": env,
+        "sizes": args.sizes,
+        "case_count": len(by_name),
+        "observation_count": len(rows),
+        "errors": errors,
+        "parity_failures": parity_failures,
+        "performance_gate": performance,
+        "all_observations_meet_speed_floor": performance["speed_pass"] and performance["coverage_pass"],
+        "geomean_finkit_speedup": geomean,
+        "rows": rows,
+    }
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(json.dumps({key: summary[key] for key in ("case_count", "observation_count", "errors", "parity_failures", "all_observations_faster", "all_cases_faster_at_every_size", "geomean_finkit_speedup")}, indent=2, ensure_ascii=False))
+    print(json.dumps({key: summary[key] for key in ("case_count", "observation_count", "errors", "parity_failures", "performance_gate", "all_observations_meet_speed_floor", "geomean_finkit_speedup")}, indent=2, ensure_ascii=False))
     return summary
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--sizes", nargs="+", type=int, default=[100_000])
+    parser.add_argument("--sizes", nargs="+", type=int, default=[1_000, 100_000, 1_000_000])
     parser.add_argument("--output", default="dist/bench/talib-all-current-gate.json")
     args = parser.parse_args()
     summary = run(args)
-    # A gate that cannot fail is not a gate. `run` collects `errors` and
-    # `parity_failures` and prints them, but the previous entry point called
-    # `run(...)` and discarded the summary, so this script always exited 0 —
-    # including on the 61 candlestick functions it is the only gate covering.
-    # Exit 2 matches `benchmark_talib_full_current_gate.py`, whose surface this
-    # script extends.
-    return 0 if not summary["errors"] and not summary["parity_failures"] else 2
+    return (
+        0
+        if not summary["errors"]
+        and not summary["parity_failures"]
+        and summary["all_observations_meet_speed_floor"]
+        else 2
+    )
 
 
 if __name__ == "__main__":

@@ -12,12 +12,12 @@
 ///
 /// Keep this in one module so the dispatcher, operation catalog and bindings
 /// cannot silently drift to different version strings.
-pub const TALIB_SEMANTIC_PROFILE: &str = "talib_0_8_0";
+pub const TALIB_SEMANTIC_PROFILE: &str = "talib_0_8_1";
 
 /// Upstream TA-Lib core version represented by [`TALIB_SEMANTIC_PROFILE`].
 pub const TALIB_CORE_VERSION: &str = "0.8.1";
 
-/// TA-Lib 0.8.0 profile-only names exposed by the versioned dispatcher.
+/// TA-Lib 0.8.1 profile-only names exposed by the versioned dispatcher.
 pub const TALIB_PROFILE_CATALOG_NAMES: &[&str] = &[
     "AC",
     "ACCBANDS",

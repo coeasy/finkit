@@ -110,21 +110,65 @@ pub fn ao(
     validate_input(high.len(), max_period)?;
 
     let len = high.len();
+    let start = max_period - 1;
+    let mut fast_sum = 0.0;
+    let mut slow_sum = 0.0;
+    for i in 0..max_period {
+        let median = (high[i] + low[i]) / 2.0;
+        // Preserve the SMA validation contract for leading warm-up and invalid
+        // values without paying to materialize a median-price array on normal
+        // finite market data.
+        if !median.is_finite() {
+            return ao_materialized(high, low, fast_period, slow_period);
+        }
+        if i >= max_period - fast_period {
+            fast_sum += median;
+        }
+        if i >= max_period - slow_period {
+            slow_sum += median;
+        }
+    }
+
+    let mut output = Vec::with_capacity(len);
+    output.resize(start, f64::NAN);
+    let out_spare = output.spare_capacity_mut();
+    let fast_inv = 1.0 / fast_period as f64;
+    let slow_inv = 1.0 / slow_period as f64;
+    for i in start..len {
+        if i > start {
+            let median = (high[i] + low[i]) / 2.0;
+            if !median.is_finite() {
+                return ao_materialized(high, low, fast_period, slow_period);
+            }
+            fast_sum += median - (high[i - fast_period] + low[i - fast_period]) / 2.0;
+            slow_sum += median - (high[i - slow_period] + low[i - slow_period]) / 2.0;
+        }
+        let fast = fast_sum * fast_inv;
+        let slow = slow_sum * slow_inv;
+        out_spare[i - start].write(fast - slow);
+    }
+    // The warm-up prefix and every valid output slot have been initialized.
+    unsafe { output.set_len(len) };
+    Ok(Array1::from_vec(output))
+}
+
+fn ao_materialized(
+    high: &[f64],
+    low: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+) -> Result<Array1<f64>> {
     let median: Vec<f64> = high
         .iter()
         .zip(low.iter())
         .map(|(&h, &l)| (h + l) / 2.0)
         .collect();
-
     let fast_sma = sma(&median, fast_period)?;
     let slow_sma = sma(&median, slow_period)?;
-
-    let mut output = init_output(len);
-    let start = max_period - 1;
-    for i in start..len {
+    let mut output = init_output(high.len());
+    for i in fast_period.max(slow_period) - 1..high.len() {
         output[i] = fast_sma[i] - slow_sma[i];
     }
-
     Ok(output)
 }
 
@@ -1454,6 +1498,45 @@ mod tests {
         let fast = sma(&median, 5).unwrap();
         let slow = sma(&median, 34).unwrap();
         assert_relative_eq!(result[33], fast[33] - slow[33], epsilon = 1e-10);
+    }
+
+    #[test]
+    fn ao_fused_kernel_matches_materialized_sma_for_period_pairs() {
+        let high: Vec<f64> = (0..4096)
+            .map(|i| 100.0 + (i as f64 * 0.017).sin() * 13.0 + i as f64 * 0.002)
+            .collect();
+        let low: Vec<f64> = high
+            .iter()
+            .enumerate()
+            .map(|(i, value)| value - 0.5 - (i as f64 * 0.031).cos().abs())
+            .collect();
+
+        for (fast, slow) in [(5, 34), (2, 5), (40, 10), (127, 128)] {
+            let actual = ao(&high, &low, fast, slow).unwrap();
+            let expected = ao_materialized(&high, &low, fast, slow).unwrap();
+            for (actual, expected) in actual.iter().zip(expected.iter()) {
+                if expected.is_nan() {
+                    assert!(actual.is_nan());
+                } else {
+                    assert_relative_eq!(actual, expected, epsilon = 2e-12, max_relative = 2e-12);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ao_non_finite_median_uses_materialized_sma_contract() {
+        let high = [2.0, 3.0, f64::NAN, 5.0, 6.0, 7.0];
+        let low = [1.0, 2.0, 1.0, 4.0, 5.0, 6.0];
+        assert!(ao(&high, &low, 2, 3).is_err());
+
+        let high = [f64::NAN, 3.0, 4.0, 5.0, 6.0];
+        let low = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let actual = ao(&high, &low, 2, 3).unwrap();
+        let expected = ao_materialized(&high, &low, 2, 3).unwrap();
+        for (actual, expected) in actual.iter().zip(expected.iter()) {
+            assert!(actual.is_nan() && expected.is_nan() || actual == expected);
+        }
     }
 
     #[test]

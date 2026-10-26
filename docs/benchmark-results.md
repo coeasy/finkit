@@ -63,6 +63,8 @@ cargo test -p finkit --test performance_regression --release --locked -- --test-
 
 ## 定期竞争基准
 
+Python installed-wheel 全量对照脚本 `scripts/benchmark_talib_all_current_gate.py` 逐项要求：上游 201 个函数在每个输入规模都有配对行、数值 parity 通过，且每一行 `TA-Lib elapsed / Finkit elapsed >= 1.0x`。几何平均只作诊断，不能掩盖慢项。默认输入规模为 1K、100K、1M。只有 release 构建在此门禁全过后，才能宣称达成逐指标速度底线。
+
 `.github/workflows/competitive-benchmark.yml` 每周在固定 GitHub Linux runner 上：
 
 - 安装契约钉住的 TA-Lib C 版本（`tests/contracts/talib_coverage_matrix_v1.json` 的 `talib_core_version`，当前 `0.8.1`），并在记录环境时校验实际安装版本一致；

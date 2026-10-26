@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "semantic_profile": "talib_0_8_0",
+  "semantic_profile": "talib_0_8_1",
   "talib_core_version": "0.8.1",
-  "python_reference_version": "0.8.0",
+  "python_reference_version": "0.8.1",
   "surfaces": {
     "profile_catalog": {
       "status": "registered",

@@ -70,7 +70,7 @@ fixed corpus.
 
 | File | Purpose |
 |------|---------|
-| `profile_matype_variants.json` | TA-Lib 0.8.0 `APO`, `BBANDS`, `MAVP`, `STOCH`, `STOCHF`, and `STOCHRSI` non-default MA-type warm-up/output references |
+| `profile_matype_variants.json` | TA-Lib 0.8.1 `APO`, `BBANDS`, `MAVP`, `STOCH`, `STOCHF`, and `STOCHRSI` non-default MA-type warm-up/output references |
 
 Generated indicator files:
 

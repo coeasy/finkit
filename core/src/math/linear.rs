@@ -210,8 +210,9 @@ pub fn linreg_slope(input: &[f64], period: usize) -> Result<Array1<f64>> {
         .zip(new_vals.iter())
         .zip(old_vals.iter())
     {
-        sum_xy += sum_y - p * old_val;
-        sum_y += new_val - old_val;
+        let weighted_trailing = p * old_val;
+        sum_xy = sum_xy + sum_y - weighted_trailing;
+        sum_y = sum_y - old_val + new_val;
         *out = (p * sum_xy - sum_x * sum_y) * inv_divisor;
         since_reseed += 1;
         if since_reseed == reseed_interval {
@@ -310,15 +311,34 @@ pub fn linreg_intercept(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let new_vals = &input[start..];
     let old_vals = &input[warm_start..len - period];
     let out_tail = &mut output[start..];
-    for ((out, &new_val), &old_val) in out_tail
+    let reseed_interval = period.saturating_mul(32).max(1);
+    let mut since_reseed = 0usize;
+    for (offset, ((out, &new_val), &old_val)) in out_tail
         .iter_mut()
         .zip(new_vals.iter())
         .zip(old_vals.iter())
+        .enumerate()
     {
         sum_xy += sum_y - p * old_val;
         sum_y += new_val - old_val;
         let slope = (p * sum_xy - sum_x * sum_y) * inv_divisor;
         *out = (sum_y - slope * sum_x) * inv_p;
+        since_reseed += 1;
+        if since_reseed == reseed_interval {
+            let index = start + offset;
+            if index + 1 < len {
+                let first = index + 1 - period;
+                sum_y = 0.0;
+                sum_xy = 0.0;
+                let mut weight = p1;
+                for &value in &input[first..=index] {
+                    sum_y += value;
+                    sum_xy += weight * value;
+                    weight -= 1.0;
+                }
+            }
+            since_reseed = 0;
+        }
     }
 
     Ok(Array1::from(output))
@@ -412,12 +432,34 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
     // `linreg`'s output is an `Array1`, which has no `IndexMut<RangeFrom>`;
     // skipping its iterator gets the same bound-free cursor.
     let out_tail = output.iter_mut().skip(start);
-    for ((out, &new_val), &old_val) in out_tail.zip(new_vals.iter()).zip(old_vals.iter()) {
+    let reseed_interval = period.saturating_mul(32).max(1);
+    let mut since_reseed = 0usize;
+    for (offset, ((out, &new_val), &old_val)) in out_tail
+        .zip(new_vals.iter())
+        .zip(old_vals.iter())
+        .enumerate()
+    {
         sum_xy += sum_y - p * old_val;
         sum_y += new_val - old_val;
         let slope = (p * sum_xy - sum_x * sum_y) * inv_divisor;
         let intercept = (sum_y - slope * sum_x) * inv_p;
         *out = slope * last_x + intercept;
+        since_reseed += 1;
+        if since_reseed == reseed_interval {
+            let index = start + offset;
+            if index + 1 < len {
+                let first = index + 1 - period;
+                sum_y = 0.0;
+                sum_xy = 0.0;
+                let mut weight = last_x;
+                for &value in &input[first..=index] {
+                    sum_y += value;
+                    sum_xy += weight * value;
+                    weight -= 1.0;
+                }
+            }
+            since_reseed = 0;
+        }
     }
 
     Ok(output.into())
@@ -442,80 +484,11 @@ pub fn linreg(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// assert_eq!(result.len(), 10);
 /// ```
 pub fn linreg_angle(input: &[f64], period: usize) -> Result<Array1<f64>> {
-    if period < 2 {
-        return Err(TaError::InvalidParameter {
-            name: "period".to_string(),
-            constraint: "at least 2".to_string(),
-        });
+    let mut output = linreg_slope(input, period)?;
+    for slope in &mut output {
+        *slope = slope.atan() * (180.0 / std::f64::consts::PI);
     }
-    validate_input(input.len(), period)?;
-
-    let len = input.len();
-    // As in [`linreg`]: only the warm-up prefix stays NaN, since every slot from
-    // `warm_start + period - 1` on is written below.
-    let mut output = crate::utils::uninit_output(len);
-
-    // A leading NaN run is an upstream rolling indicator's warm-up prefix, not
-    // bad data: start the rolling window after it. `warm_start == 0` leaves
-    // every index below unchanged. Without this the incremental accumulators
-    // below are seeded from a NaN-bearing window and `NaN - NaN` keeps them NaN
-    // for the whole series.
-    let warm_start = crate::math::leading_warmup(input);
-    output[..(warm_start + period - 1).min(len)].fill(f64::NAN);
-    if warm_start + period > len {
-        return Ok(output.into());
-    }
-    let p = period as f64;
-    let sum_x = p * (p - 1.0) * 0.5;
-    let sum_x_sq = p * (p - 1.0) * (2.0 * p - 1.0) / 6.0;
-    // Keep TA-Lib's sign and operation order for numerical parity.
-    let divisor = sum_x * sum_x - p * sum_x_sq;
-    let mut sum_y = 0.0;
-    let mut sum_xy = 0.0;
-    let mut sum_abs = 0.0;
-    for i in (0..period).rev() {
-        let value = input[warm_start + period - 1 - i];
-        sum_y += value;
-        sum_xy += i as f64 * value;
-        sum_abs += value.abs();
-    }
-
-    let mut trailing_idx = warm_start + 1;
-    let mut trailing_value = input[warm_start];
-    let mut bars_since_reseed = 8 * period;
-    let angle = |sxy: f64, sy: f64| {
-        ((p * sxy - sum_x * sy) / divisor).atan() * (180.0 / std::f64::consts::PI)
-    };
-    output[warm_start + period - 1] = angle(sum_xy, sum_y);
-
-    for today in warm_start + period..len {
-        let weighted_trailing = p * trailing_value;
-        sum_xy += sum_y - weighted_trailing;
-        sum_y += input[today] - trailing_value;
-        sum_abs += input[today].abs() - trailing_value.abs();
-        bars_since_reseed -= 1;
-
-        if bars_since_reseed == 0 || weighted_trailing.abs() > 100.0 * sum_abs {
-            bars_since_reseed = 8 * period;
-            let window_start = today + 1 - period;
-            sum_y = 0.0;
-            sum_xy = 0.0;
-            sum_abs = 0.0;
-            let mut weight = (period - 1) as f64;
-            for &value in &input[window_start..=today] {
-                sum_y += value;
-                sum_xy += weight * value;
-                sum_abs += value.abs();
-                weight -= 1.0;
-            }
-        }
-
-        trailing_value = input[trailing_idx];
-        trailing_idx += 1;
-        output[today] = angle(sum_xy, sum_y);
-    }
-
-    Ok(output.into())
+    Ok(output)
 }
 
 /// Quantile Regression Result
@@ -859,6 +832,44 @@ mod tests {
                 (simd_value - warm_value).abs() <= 1e-12,
                 "linreg_slope paths disagree at clean index {index}: \
                  simd {simd_value} vs warm-started {warm_value}"
+            );
+        }
+    }
+
+    #[test]
+    fn long_series_linreg_slope_reseeds_against_direct_windows() {
+        let len = 100_000usize;
+        let period = 14usize;
+        let input: Vec<f64> = (0..len)
+            .map(|i| {
+                let x = i as f64;
+                100.0 + 0.006 * x + (x * 0.017).sin() * 2.1
+            })
+            .collect();
+        let slopes = linreg_slope(&input, period).unwrap();
+        let angles = linreg_angle(&input, period).unwrap();
+        let x_mean = (period - 1) as f64 / 2.0;
+        let x_variance: f64 = (0..period).map(|x| (x as f64 - x_mean).powi(2)).sum();
+
+        for end in (period - 1..len).step_by(997) {
+            let window = &input[end + 1 - period..=end];
+            let y_mean = window.iter().sum::<f64>() / period as f64;
+            let covariance: f64 = window
+                .iter()
+                .enumerate()
+                .map(|(x, &y)| (x as f64 - x_mean) * (y - y_mean))
+                .sum();
+            let expected = covariance / x_variance;
+            assert!(
+                (slopes[end] - expected).abs() <= 2e-10,
+                "slope drift at {end}: {} vs {expected}",
+                slopes[end]
+            );
+            let expected_angle = expected.atan() * 180.0 / std::f64::consts::PI;
+            assert!(
+                (angles[end] - expected_angle).abs() <= 2e-8,
+                "angle drift at {end}: {} vs {expected_angle}",
+                angles[end]
             );
         }
     }

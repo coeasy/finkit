@@ -13,7 +13,7 @@ cross-language parity tests.
 ```json
 {
   "operation": "SMA",
-  "semantic_profile": "talib_0_8_0",
+  "semantic_profile": "talib_0_8_1",
   "input_order": ["CLOSE"],
   "inputs": {"CLOSE": [1, 2, 3]},
   "params": [2]
@@ -23,7 +23,7 @@ cross-language parity tests.
 The result is a versioned envelope with `operation`, `operation_id`,
 `semantic_profile`, `primary`, `shape` and named `values`. Non-finite numeric
 values are JSON `null`. `core_registry` uses the canonical Formula/Core
-semantics; `talib_0_8_0` is explicit and only succeeds for operations listed by
+semantics; `talib_0_8_1` is explicit and only succeeds for operations listed by
 the catalog's `semantic_profiles` field. Unsupported profile/function pairs
 return a structured error instead of silently falling back.
 

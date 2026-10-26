@@ -106,7 +106,7 @@ test('publishes the current TA-Lib catalog contract', () => {
     .map((operation) => operation.name)
     .sort()
 
-  assert.equal(matrix.semantic_profile, 'talib_0_8_0')
+  assert.equal(matrix.semantic_profile, 'talib_0_8_1')
   assert.equal(talibNames.length, matrix.surfaces.dispatcher_smoke.expected_count)
   assert.deepEqual(talibNames, [...matrix.surfaces.numeric_reference.indicators].sort())
   assert.equal(catalog.operations.find((operation) => operation.name === 'SMA').semantic_profiles.includes('talib_0_7_1'), false)

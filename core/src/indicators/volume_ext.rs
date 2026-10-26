@@ -7,6 +7,41 @@ use ndarray::Array1;
 const EOM_DIVISOR: f64 = 100_000_000.0;
 const NVI_PVI_INITIAL: f64 = 1000.0;
 
+fn volume_index_nan_path(close: &[f64], volume: &[f64], decrease: bool) -> Array1<f64> {
+    let len = close.len();
+    let mut output = vec![NVI_PVI_INITIAL; len];
+    let mut previous = NVI_PVI_INITIAL;
+    for index in 1..len {
+        let current_close = close[index];
+        let previous_close = close[index - 1];
+        let volume_changed = if decrease {
+            volume[index] < volume[index - 1]
+        } else {
+            volume[index] > volume[index - 1]
+        };
+        if volume_changed
+            && !crate::utils::is_zero(previous_close)
+            && !current_close.is_nan()
+            && !previous_close.is_nan()
+            && !volume[index].is_nan()
+            && !volume[index - 1].is_nan()
+        {
+            previous += previous * (current_close - previous_close) / previous_close;
+            output[index] = previous;
+        } else if current_close.is_nan()
+            || previous_close.is_nan()
+            || volume[index].is_nan()
+            || volume[index - 1].is_nan()
+        {
+            output[index] = f64::NAN;
+            previous = f64::NAN;
+        } else {
+            output[index] = previous;
+        }
+    }
+    Array1::from_vec(output)
+}
+
 fn validate_same_length(name: &str, lengths: &[usize]) -> Result<()> {
     if lengths.is_empty() {
         return Ok(());
@@ -53,69 +88,75 @@ pub fn cmf(
     validate_input(high.len(), period)?;
 
     let len = high.len();
-    let mut output = init_output(len);
+    let mut output = Vec::<f64>::with_capacity(len);
+    // SAFETY: the warm-up prefix is initialized below, and every complete
+    // window writes its corresponding output slot.
+    unsafe { output.set_len(len) };
+    output[..period - 1].fill(f64::NAN);
 
-    if len < period {
-        return Ok(output);
-    }
-
-    #[inline(always)]
-    fn compute_mfv(h: f64, l: f64, c: f64, v: f64) -> (f64, f64, bool) {
-        let range = h - l;
-        if !crate::utils::is_zero(range) && !h.is_nan() && !l.is_nan() && !c.is_nan() && !v.is_nan()
-        {
-            let mfv = ((c - l) - (h - c)) / range * v;
-            (mfv, v, true)
-        } else {
-            (0.0, 0.0, false)
-        }
-    }
-
-    let mut mfv_ring = vec![0.0f64; period];
-    let mut vol_ring = vec![0.0f64; period];
-    let mut valid_ring = vec![false; period];
+    // Each outgoing bar contributes both values together; a paired ring avoids
+    // three allocations and a validity branch on every update.
+    let mut ring = vec![(0.0f64, 0.0f64); period];
     let mut sum_mfv = 0.0;
     let mut sum_vol = 0.0;
-    let mut valid_count = 0usize;
+    let mut null_run = 0usize;
 
     for i in 0..period {
-        let (mfv, vol, ok) = compute_mfv(high[i], low[i], close[i], volume[i]);
-        mfv_ring[i] = mfv;
-        vol_ring[i] = vol;
-        valid_ring[i] = ok;
-        if ok {
-            sum_mfv += mfv;
-            sum_vol += vol;
-            valid_count += 1;
-        }
+        let range = high[i] - low[i];
+        let mfv = if range > 0.0 {
+            (((close[i] - low[i]) - (high[i] - close[i])) / range) * volume[i]
+        } else {
+            0.0
+        };
+        ring[i] = (mfv, volume[i]);
+        sum_mfv += mfv;
+        sum_vol += volume[i];
+        let zero_volume = usize::from(volume[i] == 0.0);
+        null_run = (null_run + zero_volume) * zero_volume;
     }
 
-    if valid_count == period && !crate::utils::is_zero(sum_vol) {
-        output[period - 1] = sum_mfv / sum_vol;
-    }
+    output[period - 1] = if sum_vol > 0.0 {
+        sum_mfv / sum_vol
+    } else {
+        0.0
+    };
 
+    let mut ring_index = 0usize;
     for i in period..len {
-        let slot = i % period;
-        if valid_ring[slot] {
-            sum_mfv -= mfv_ring[slot];
-            sum_vol -= vol_ring[slot];
-            valid_count -= 1;
-        }
-        let (mfv, vol, ok) = compute_mfv(high[i], low[i], close[i], volume[i]);
-        mfv_ring[slot] = mfv;
-        vol_ring[slot] = vol;
-        valid_ring[slot] = ok;
-        if ok {
-            sum_mfv += mfv;
-            sum_vol += vol;
-            valid_count += 1;
-        }
-        if valid_count == period && !crate::utils::is_zero(sum_vol) {
+        let (leaving_mfv, leaving_volume) = ring[ring_index];
+        sum_mfv -= leaving_mfv;
+        sum_vol -= leaving_volume;
+
+        let range = high[i] - low[i];
+        let mfv = if range > 0.0 {
+            (((close[i] - low[i]) - (high[i] - close[i])) / range) * volume[i]
+        } else {
+            0.0
+        };
+        ring[ring_index] = (mfv, volume[i]);
+        sum_mfv += mfv;
+        sum_vol += volume[i];
+        let zero_volume = usize::from(volume[i] == 0.0);
+        null_run = (null_run + zero_volume) * zero_volume;
+
+        if null_run >= period {
+            null_run = period;
+            sum_mfv = 0.0;
+            sum_vol = 0.0;
+            output[i] = 0.0;
+        } else if sum_vol > 0.0 {
             output[i] = sum_mfv / sum_vol;
+        } else {
+            output[i] = 0.0;
+        }
+
+        ring_index += 1;
+        if ring_index == period {
+            ring_index = 0;
         }
     }
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// Force Index
@@ -380,43 +421,23 @@ pub fn nvi(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     validate_input(close.len(), 1)?;
 
     let len = close.len();
-    let has_any_nan = close.iter().any(|v| v.is_nan()) || volume.iter().any(|v| v.is_nan());
-
-    if !has_any_nan {
-        let mut output = vec![NVI_PVI_INITIAL; len];
-        let mut prev = NVI_PVI_INITIAL;
-        for i in 1..len {
-            if volume[i] < volume[i - 1] {
-                let inv_cp = 1.0 / close[i - 1];
-                prev *= 1.0 + (close[i] - close[i - 1]) * inv_cp;
-            }
-            output[i] = prev;
-        }
-        Ok(Array1::from_vec(output))
-    } else {
-        let mut output = vec![NVI_PVI_INITIAL; len];
-        let mut prev = NVI_PVI_INITIAL;
-        for i in 1..len {
-            let c = close[i];
-            let cp = close[i - 1];
-            if volume[i] < volume[i - 1]
-                && !crate::utils::is_zero(cp)
-                && !c.is_nan()
-                && !cp.is_nan()
-                && !volume[i].is_nan()
-                && !volume[i - 1].is_nan()
-            {
-                prev += prev * (c - cp) / cp;
-                output[i] = prev;
-            } else if c.is_nan() || cp.is_nan() || volume[i].is_nan() || volume[i - 1].is_nan() {
-                output[i] = f64::NAN;
-                prev = f64::NAN;
-            } else {
-                output[i] = prev;
-            }
-        }
-        Ok(Array1::from_vec(output))
+    if close[0].is_nan() || volume[0].is_nan() {
+        return Ok(volume_index_nan_path(close, volume, true));
     }
+    let mut output = Vec::with_capacity(len);
+    output.push(NVI_PVI_INITIAL);
+    let mut prev = NVI_PVI_INITIAL;
+    for i in 1..len {
+        if close[i].is_nan() || volume[i].is_nan() {
+            return Ok(volume_index_nan_path(close, volume, true));
+        }
+        if volume[i] < volume[i - 1] {
+            let inv_cp = 1.0 / close[i - 1];
+            prev *= 1.0 + (close[i] - close[i - 1]) * inv_cp;
+        }
+        output.push(prev);
+    }
+    Ok(Array1::from_vec(output))
 }
 
 /// Positive Volume Index (PVI)
@@ -433,43 +454,23 @@ pub fn pvi(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     validate_input(close.len(), 1)?;
 
     let len = close.len();
-    let has_any_nan = close.iter().any(|v| v.is_nan()) || volume.iter().any(|v| v.is_nan());
-
-    if !has_any_nan {
-        let mut output = vec![NVI_PVI_INITIAL; len];
-        let mut prev = NVI_PVI_INITIAL;
-        for i in 1..len {
-            if volume[i] > volume[i - 1] {
-                let inv_cp = 1.0 / close[i - 1];
-                prev *= 1.0 + (close[i] - close[i - 1]) * inv_cp;
-            }
-            output[i] = prev;
-        }
-        Ok(Array1::from_vec(output))
-    } else {
-        let mut output = vec![NVI_PVI_INITIAL; len];
-        let mut prev = NVI_PVI_INITIAL;
-        for i in 1..len {
-            let c = close[i];
-            let cp = close[i - 1];
-            if volume[i] > volume[i - 1]
-                && !crate::utils::is_zero(cp)
-                && !c.is_nan()
-                && !cp.is_nan()
-                && !volume[i].is_nan()
-                && !volume[i - 1].is_nan()
-            {
-                prev += prev * (c - cp) / cp;
-                output[i] = prev;
-            } else if c.is_nan() || cp.is_nan() || volume[i].is_nan() || volume[i - 1].is_nan() {
-                output[i] = f64::NAN;
-                prev = f64::NAN;
-            } else {
-                output[i] = prev;
-            }
-        }
-        Ok(Array1::from_vec(output))
+    if close[0].is_nan() || volume[0].is_nan() {
+        return Ok(volume_index_nan_path(close, volume, false));
     }
+    let mut output = Vec::with_capacity(len);
+    output.push(NVI_PVI_INITIAL);
+    let mut prev = NVI_PVI_INITIAL;
+    for i in 1..len {
+        if close[i].is_nan() || volume[i].is_nan() {
+            return Ok(volume_index_nan_path(close, volume, false));
+        }
+        if volume[i] > volume[i - 1] {
+            let inv_cp = 1.0 / close[i - 1];
+            prev *= 1.0 + (close[i] - close[i - 1]) * inv_cp;
+        }
+        output.push(prev);
+    }
+    Ok(Array1::from_vec(output))
 }
 
 /// Volume Weighted MACD (VWMACD)
@@ -553,41 +554,47 @@ pub fn vwmacd(
 ///
 /// # Formula
 /// PVT = PVT_prev + Volume × (Close - Close_prev) / Close_prev
+fn pvt_nan_path(close: &[f64], volume: &[f64]) -> Array1<f64> {
+    let len = close.len();
+    let mut output = vec![0.0; len];
+    let mut acc = 0.0;
+    for index in 1..len {
+        let current = close[index];
+        let previous = close[index - 1];
+        if current.is_nan() || previous.is_nan() || volume[index].is_nan() {
+            output[index] = f64::NAN;
+            acc = f64::NAN;
+        } else if crate::utils::is_zero(previous) {
+            output[index] = acc;
+        } else {
+            acc += volume[index] * (current - previous) / previous;
+            output[index] = acc;
+        }
+    }
+    Array1::from_vec(output)
+}
+
 #[inline]
 pub fn pvt(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     validate_same_length("close, volume", &[close.len(), volume.len()])?;
     validate_input(close.len(), 1)?;
 
     let len = close.len();
-    let has_any_nan = close.iter().any(|v| v.is_nan()) || volume.iter().any(|v| v.is_nan());
-
-    if !has_any_nan {
-        let mut output = vec![0.0; len];
-        let mut acc = 0.0;
-        for i in 1..len {
-            let inv_cp = 1.0 / close[i - 1];
-            acc += volume[i] * (close[i] - close[i - 1]) * inv_cp;
-            output[i] = acc;
-        }
-        Ok(Array1::from_vec(output))
-    } else {
-        let mut output = vec![0.0; len];
-        let mut acc = 0.0;
-        for i in 1..len {
-            let c = close[i];
-            let cp = close[i - 1];
-            if c.is_nan() || cp.is_nan() || volume[i].is_nan() {
-                output[i] = f64::NAN;
-                acc = f64::NAN;
-            } else if crate::utils::is_zero(cp) {
-                output[i] = acc;
-            } else {
-                acc += volume[i] * (c - cp) / cp;
-                output[i] = acc;
-            }
-        }
-        Ok(Array1::from_vec(output))
+    if close[0].is_nan() || volume[0].is_nan() {
+        return Ok(pvt_nan_path(close, volume));
     }
+    let mut output = Vec::with_capacity(len);
+    output.push(0.0);
+    let mut acc = 0.0;
+    for i in 1..len {
+        if close[i].is_nan() || volume[i].is_nan() {
+            return Ok(pvt_nan_path(close, volume));
+        }
+        let inv_cp = 1.0 / close[i - 1];
+        acc += volume[i] * (close[i] - close[i - 1]) * inv_cp;
+        output.push(acc);
+    }
+    Ok(Array1::from_vec(output))
 }
 
 /// Money Flow Index (MFI) - Extended version with divergence detection
@@ -772,7 +779,24 @@ mod tests {
         let close = vec![10.0, 10.0, 10.0];
         let volume = vec![100.0, 200.0, 300.0];
         let result = cmf(&high, &low, &close, &volume, 2).unwrap();
-        assert!(result[1].is_nan() || result[1].is_finite());
+        assert_eq!(result[1], 0.0);
+    }
+
+    #[test]
+    fn test_cmf_talib_zero_volume_and_missing_price_semantics() {
+        let high = vec![12.0, 13.0, 14.0, 15.0, 16.0, 17.0, 18.0];
+        let low = vec![10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0];
+        let close = vec![11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0];
+        let zero_volume = vec![0.0; high.len()];
+        let zero_result = cmf(&high, &low, &close, &zero_volume, 3).unwrap();
+        assert!(zero_result.iter().skip(2).all(|value| *value == 0.0));
+
+        let mut missing_high = high.clone();
+        missing_high[3] = f64::NAN;
+        let missing_result = cmf(&missing_high, &low, &close, &vec![100.0; high.len()], 3).unwrap();
+        assert!(missing_result[3].is_finite());
+        assert!(missing_result[4].is_finite());
+        assert!(missing_result[5].is_finite());
     }
 
     #[test]
@@ -912,6 +936,23 @@ mod tests {
 
         let pvt_result = pvt(&close, &volume).unwrap();
         assert!(pvt_result[1].is_nan());
+
+        let zero_close = [0.0, 1.0];
+        let first_volume_nan = [f64::NAN, 100.0];
+        let zero_guard = pvt(&zero_close, &first_volume_nan).unwrap();
+        assert_eq!(zero_guard[0], 0.0);
+        assert_eq!(zero_guard[1], 0.0);
+
+        let finite_close = [10.0, 11.0, 12.0];
+        let initial_nan_volume = [f64::NAN, 90.0, 80.0];
+        for result in [
+            nvi(&finite_close, &initial_nan_volume).unwrap(),
+            pvi(&finite_close, &initial_nan_volume).unwrap(),
+        ] {
+            assert_eq!(result[0], NVI_PVI_INITIAL);
+            assert!(result[1].is_nan());
+            assert!(result[2].is_nan());
+        }
     }
 
     #[test]

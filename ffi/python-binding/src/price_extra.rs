@@ -93,7 +93,12 @@ pub fn supertrend(
     close: PyReadonlyArray1<'_, f64>,
     period: usize,
     multiplier: f64,
-) -> PyResult<(Vec<i32>, Vec<f64>, Vec<f64>, Vec<f64>)> {
+) -> PyResult<(
+    Py<PyArray1<i32>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+    Py<PyArray1<f64>>,
+)> {
     let high = high
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
@@ -103,18 +108,50 @@ pub fn supertrend(
     let close = close
         .as_slice()
         .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
-    py.detach(|| {
+    let result = py.detach(|| {
         indicators::supertrend(high, low, close, period, multiplier)
-            .map(|res| {
-                (
-                    res.direction.into_raw_vec(),
-                    res.trend_line.into_raw_vec(),
-                    res.upper_band.into_raw_vec(),
-                    res.lower_band.into_raw_vec(),
-                )
-            })
             .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
-    })
+    })?;
+
+    // Return NumPy arrays directly. Returning Vecs here makes PyO3 first build
+    // four Python lists; package-level normalization then copies each list
+    // into an ndarray, which dominates this O(n) indicator for typical inputs.
+    Ok((
+        PyArray1::from_vec(py, result.direction.into_raw_vec()).unbind(),
+        PyArray1::from_vec(py, result.trend_line.into_raw_vec()).unbind(),
+        PyArray1::from_vec(py, result.upper_band.into_raw_vec()).unbind(),
+        PyArray1::from_vec(py, result.lower_band.into_raw_vec()).unbind(),
+    ))
+}
+
+/// TA-Lib-output-compatible SuperTrend (trend line, direction only).
+#[pyfunction(name = "supertrend_talib")]
+#[pyo3(signature = (high, low, close, timeperiod=10, multiplier=3.0))]
+pub fn supertrend_talib_compat(
+    py: Python<'_>,
+    high: PyReadonlyArray1<'_, f64>,
+    low: PyReadonlyArray1<'_, f64>,
+    close: PyReadonlyArray1<'_, f64>,
+    timeperiod: usize,
+    multiplier: f64,
+) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)> {
+    let high = high
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let low = low
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let close = close
+        .as_slice()
+        .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))?;
+    let (trend, direction) = py.detach(|| {
+        indicators::supertrend_talib_compat(high, low, close, timeperiod, multiplier)
+            .map_err(|e| PyErr::new::<pyo3::exceptions::PyValueError, _>(format!("{}", e)))
+    })?;
+    Ok((
+        PyArray1::from_vec(py, trend.into_raw_vec()).unbind(),
+        PyArray1::from_vec(py, direction.into_raw_vec()).unbind(),
+    ))
 }
 
 #[pyfunction]

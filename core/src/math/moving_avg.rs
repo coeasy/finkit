@@ -1711,6 +1711,75 @@ pub fn mavp(
 /// let result = moving_avg::hma(&data, 4).unwrap();
 /// assert_eq!(result.len(), 10);
 /// ```
+struct HmaInputWmaState {
+    period: usize,
+    sum: f64,
+    weighted_sum: f64,
+    inv_weight_sum: f64,
+    reseed_countdown: usize,
+}
+
+impl HmaInputWmaState {
+    fn new(period: usize) -> Self {
+        Self {
+            period,
+            sum: 0.0,
+            weighted_sum: 0.0,
+            inv_weight_sum: 1.0 / (period * (period + 1) / 2) as f64,
+            reseed_countdown: 8 * period,
+        }
+    }
+
+    #[inline(always)]
+    fn seed(&mut self, input: &[f64]) {
+        for (weight, &value) in input[..self.period - 1].iter().enumerate() {
+            self.sum += value;
+            self.weighted_sum += value * (weight + 1) as f64;
+        }
+    }
+
+    #[inline(always)]
+    fn finish_first(&mut self, input: &[f64], index: usize) -> f64 {
+        let value = input[index];
+        self.sum += value;
+        self.weighted_sum += self.period as f64 * value;
+        self.reseed_countdown -= 1;
+        if self.reseed_countdown == 0 {
+            self.reseed(input, index);
+        }
+        let result = self.weighted_sum * self.inv_weight_sum;
+        self.weighted_sum -= self.sum;
+        result
+    }
+
+    #[inline(always)]
+    fn advance(&mut self, input: &[f64], index: usize) -> f64 {
+        let value = input[index];
+        self.sum += value;
+        self.sum -= input[index - self.period];
+        self.weighted_sum += self.period as f64 * value;
+        self.reseed_countdown -= 1;
+        if self.reseed_countdown == 0 {
+            self.reseed(input, index);
+        }
+        let result = self.weighted_sum * self.inv_weight_sum;
+        self.weighted_sum -= self.sum;
+        result
+    }
+
+    #[inline(always)]
+    fn reseed(&mut self, input: &[f64], index: usize) {
+        self.reseed_countdown = 8 * self.period;
+        self.sum = 0.0;
+        self.weighted_sum = 0.0;
+        let start = index + 1 - self.period;
+        for (weight, &window_value) in input[start..=index].iter().enumerate() {
+            self.sum += window_value;
+            self.weighted_sum += window_value * (weight + 1) as f64;
+        }
+    }
+}
+
 #[inline]
 pub fn hma(input: &[f64], period: usize) -> Result<Array1<f64>> {
     if period == 0 {
@@ -1719,16 +1788,114 @@ pub fn hma(input: &[f64], period: usize) -> Result<Array1<f64>> {
             constraint: "greater than 0".to_string(),
         });
     }
-    if period < 2 {
-        return Err(TaError::InvalidParameter {
-            name: "period".to_string(),
-            constraint: "at least 2 for HMA".to_string(),
-        });
+    if period == 1 {
+        validate_input(input.len(), 1)?;
+        return Ok(Array1::from_vec(input.to_vec()));
     }
     validate_input(input.len(), period)?;
 
+    // HMA is a composition of three linear-time weighted windows. Keep only
+    // each window's rolling state instead of materializing two full-length
+    // intermediate arrays. Preserve the established path for non-finite input
+    // and for overflow/NaN intermediates, whose recovery semantics are more
+    // involved than the finite fast path.
+    if input.iter().all(|value| value.is_finite()) {
+        if let Some(result) = hma_fused_finite(input, period) {
+            return Ok(result);
+        }
+    }
+    hma_materialized(input, period)
+}
+
+fn hma_fused_finite(input: &[f64], period: usize) -> Option<Array1<f64>> {
     let half_period = period / 2;
-    let sqrt_period = (period as f64).sqrt().round() as usize;
+    let sqrt_period = (period as f64).sqrt() as usize;
+    let len = input.len();
+    let first_hma = period - 1 + sqrt_period - 1;
+    if first_hma >= len {
+        return Some(Array1::from_vec(vec![f64::NAN; len]));
+    }
+
+    let mut half_wma = HmaInputWmaState::new(half_period);
+    let mut full_wma = HmaInputWmaState::new(period);
+    half_wma.seed(input);
+    full_wma.seed(input);
+    let first_half_index = half_period - 1;
+    let _ = half_wma.finish_first(input, first_half_index);
+    for index in first_half_index + 1..period - 1 {
+        let _ = half_wma.advance(input, index);
+    }
+
+    let mut final_values = vec![0.0; sqrt_period];
+    let inv_final_weight_sum = 1.0 / (sqrt_period * (sqrt_period + 1) / 2) as f64;
+    let mut final_count = 1;
+    let mut final_oldest = 0;
+    let mut final_sum;
+    let mut final_weighted_sum;
+    let first_index = period - 1;
+    let mut half_value = half_wma.advance(input, first_index);
+    let full_value = full_wma.finish_first(input, first_index);
+    let first_difference = 2.0 * half_value - full_value;
+    if !half_value.is_finite() || !full_value.is_finite() || !first_difference.is_finite() {
+        return None;
+    }
+    final_values[0] = first_difference;
+    final_sum = first_difference;
+    final_weighted_sum = first_difference;
+
+    let mut output = Vec::with_capacity(len);
+    output.resize(first_index, f64::NAN);
+    if sqrt_period == 1 {
+        output.push(final_weighted_sum * inv_final_weight_sum);
+    } else {
+        output.push(f64::NAN);
+    }
+
+    for index in first_index + 1..=first_hma {
+        half_value = half_wma.advance(input, index);
+        let full_value = full_wma.advance(input, index);
+        let difference = 2.0 * half_value - full_value;
+        if !half_value.is_finite() || !full_value.is_finite() || !difference.is_finite() {
+            return None;
+        }
+        final_values[final_count] = difference;
+        final_sum += difference;
+        final_weighted_sum += difference * (final_count + 1) as f64;
+        final_count += 1;
+        output.push(if index == first_hma {
+            final_weighted_sum * inv_final_weight_sum
+        } else {
+            f64::NAN
+        });
+    }
+
+    for index in first_hma + 1..len {
+        half_value = half_wma.advance(input, index);
+        let full_value = full_wma.advance(input, index);
+        let difference = 2.0 * half_value - full_value;
+        if !half_value.is_finite() || !full_value.is_finite() || !difference.is_finite() {
+            return None;
+        }
+        let old = final_values[final_oldest];
+        final_weighted_sum += sqrt_period as f64 * difference - final_sum;
+        final_sum += difference - old;
+        final_values[final_oldest] = difference;
+        final_oldest += 1;
+        if final_oldest == sqrt_period {
+            final_oldest = 0;
+        }
+        let result = final_weighted_sum * inv_final_weight_sum;
+        if !result.is_finite() {
+            return None;
+        }
+        output.push(result);
+    }
+    Some(Array1::from_vec(output))
+}
+
+fn hma_materialized(input: &[f64], period: usize) -> Result<Array1<f64>> {
+    let half_period = period / 2;
+    let sqrt_period = (period as f64).sqrt() as usize;
     let len = input.len();
     let diff_start = period - 1;
     let first_hma = diff_start + sqrt_period - 1;
@@ -2611,9 +2778,40 @@ mod tests {
     }
 
     #[test]
+    fn test_hma_fused_matches_materialized_bit_for_bit() {
+        let input = (0..4096)
+            .map(|index| {
+                let x = index as f64;
+                (x * 0.013).sin() * 17.0 + (x * 0.0031).cos() * 4.0 + x * 0.0007
+            })
+            .collect::<Vec<_>>();
+        for period in [2, 3, 4, 5, 9, 20, 31, 64, 257] {
+            let fused = hma(&input, period).unwrap();
+            let materialized = hma_materialized(&input, period).unwrap();
+            assert_eq!(fused.len(), materialized.len());
+            for (index, (actual, expected)) in fused.iter().zip(materialized.iter()).enumerate() {
+                assert_eq!(
+                    actual.to_bits(),
+                    expected.to_bits(),
+                    "period={period}, index={index}, fused={actual}, reference={expected}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn test_hma_invalid_period() {
-        assert!(hma(&[1.0, 2.0], 1).is_err());
+        assert!(hma(&[1.0, 2.0], 0).is_err());
         assert!(hma(&[], 4).is_err());
+    }
+
+    #[test]
+    fn test_hma_period_one_is_identity() {
+        let input = [1.0, f64::NAN, -3.0];
+        let result = hma(&input, 1).unwrap();
+        assert_eq!(result[0], input[0]);
+        assert!(result[1].is_nan());
+        assert_eq!(result[2], input[2]);
     }
 
     #[test]

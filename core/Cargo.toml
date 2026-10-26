@@ -151,9 +151,6 @@ ta = "0.5"
 # `HeapStats::get()` access without file output, and with `dhat::Alloc` as
 # the global allocator when the `memory-profile` feature is enabled.
 dhat = "0.3"
-# Golden reference vectors shared with every FFI binding's test suite.
-finkit-ffi-common = { path = "../ffi/ffi-common" }
-
 [package.metadata.docs.rs]
 no-default-features = true
 features = ["std", "formula", "serde", "tracing", "metrics", "formula-jit", "formula-simd", "indicators-all"]

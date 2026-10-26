@@ -1081,7 +1081,7 @@ mod tests {
         assert!(json.contains("\"operation_id\":"));
         assert!(json.contains("\"multi_symbol\":false"));
         assert!(json.contains("\"value_shape\":\"series\""));
-        assert!(json.contains("\"semantic_profiles\":[\"core_registry\",\"talib_0_8_0\"]"));
+        assert!(json.contains("\"semantic_profiles\":[\"core_registry\",\"talib_0_8_1\"]"));
         assert!(json.contains("\"profile_output_contracts\""));
     }
 
@@ -1208,7 +1208,7 @@ mod tests {
             assert!(operation
                 .semantic_profiles
                 .iter()
-                .any(|profile| profile == "talib_0_8_0"));
+                .any(|profile| profile == "talib_0_8_1"));
         }
     }
 
@@ -1225,10 +1225,10 @@ mod tests {
             if registry.get(name).is_some() {
                 assert_eq!(
                     operation.semantic_profiles,
-                    vec!["core_registry", "talib_0_8_0"]
+                    vec!["core_registry", "talib_0_8_1"]
                 );
             } else {
-                assert_eq!(operation.semantic_profiles, vec!["talib_0_8_0"]);
+                assert_eq!(operation.semantic_profiles, vec!["talib_0_8_1"]);
             }
             assert!(talib_profile_supported(name));
         }
@@ -1237,7 +1237,7 @@ mod tests {
     /// Both halves of the parameter contract must be published, and each must
     /// describe the profile it belongs to.
     ///
-    /// `profile_output_contracts["talib_0_8_0"].params` is the executable
+    /// `profile_output_contracts["talib_0_8_1"].params` is the executable
     /// contract for the versioned TA-Lib dispatcher, so it must equal the
     /// declared [`TALIB_PROFILE_PARAMETER_SPECS`] table.
     ///

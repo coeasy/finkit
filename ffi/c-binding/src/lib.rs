@@ -759,7 +759,7 @@ mod tests {
         // `core_registry` callers parameters the core kernel silently ignores.
         let talib_params = |name: &str| {
             let operation = find(name);
-            let profile = operation["profile_output_contracts"]["talib_0_8_0"].clone();
+            let profile = operation["profile_output_contracts"]["talib_0_8_1"].clone();
             assert!(
                 !profile.is_null(),
                 "{name} must publish a TA-Lib profile output contract"
@@ -771,7 +771,7 @@ mod tests {
             .as_array()
             .unwrap()
             .iter()
-            .any(|profile| profile == "talib_0_8_0"));
+            .any(|profile| profile == "talib_0_8_1"));
         let stoch_params = talib_params("STOCH");
         assert_eq!(stoch_params.len(), 5);
         assert_eq!(stoch_params[2]["name"], "slowk_matype");

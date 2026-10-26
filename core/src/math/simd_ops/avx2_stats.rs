@@ -371,6 +371,7 @@ pub(crate) unsafe fn linreg_slope_avx2(data: &[f64], period: usize, result: &mut
 
     let mut sum_y: f64 = 0.0;
     let mut sum_xy: f64 = 0.0;
+    let mut sum_abs: f64 = 0.0;
 
     let chunks = period / 4;
     let indices: [f64; 4] = [0.0, 1.0, 2.0, 3.0];
@@ -385,19 +386,46 @@ pub(crate) unsafe fn linreg_slope_avx2(data: &[f64], period: usize, result: &mut
         );
         sum_y += horizontal_sum_avx2(v_data);
         sum_xy += horizontal_sum_avx2(_mm256_mul_pd(v_data, v_w));
+        for &value in &data[off..off + 4] {
+            sum_abs += value.abs();
+        }
     }
     for (i, &val) in data.iter().enumerate().take(period).skip(chunks * 4) {
         sum_y += val;
         sum_xy += (p1 - i as f64) * val;
+        sum_abs += val.abs();
     }
 
     result[period - 1] = (p * sum_xy - sum_x * sum_y) * inv_divisor;
 
+    // Re-anchor the rolling sums periodically. Without this, low-order error
+    // accumulates across long series even though each window only changes by
+    // one bar; at million-bar inputs the slope can drift outside the TA-Lib
+    // numeric contract. The seed cost is amortized over many output bars.
+    let reseed_interval = period.saturating_mul(32).max(1);
+    let mut bars_since_reseed = reseed_interval;
     for i in period..len {
         let old_val = data[i - period];
         let new_val = data[i];
-        sum_xy += sum_y - p * old_val;
-        sum_y += new_val - old_val;
+        let weighted_trailing = p * old_val;
+        sum_xy = sum_xy + sum_y - weighted_trailing;
+        sum_y = sum_y - old_val + new_val;
+        sum_abs = sum_abs - old_val.abs() + new_val.abs();
+        bars_since_reseed -= 1;
+        if bars_since_reseed == 0 || weighted_trailing.abs() > 100.0 * sum_abs {
+            bars_since_reseed = reseed_interval;
+            let first = i + 1 - period;
+            sum_y = 0.0;
+            sum_xy = 0.0;
+            sum_abs = 0.0;
+            let mut weight = p1;
+            for &value in &data[first..=i] {
+                sum_y += value;
+                sum_xy += weight * value;
+                sum_abs += value.abs();
+                weight -= 1.0;
+            }
+        }
         result[i] = (p * sum_xy - sum_x * sum_y) * inv_divisor;
     }
 
@@ -459,6 +487,8 @@ pub(crate) unsafe fn linreg_avx2(data: &[f64], period: usize, result: &mut [f64]
     let intercept = (sum_y - slope * sum_x) * inv_p;
     result[period - 1] = slope * last_x + intercept;
 
+    let reseed_interval = period.saturating_mul(32).max(1);
+    let mut since_reseed = 0usize;
     for i in period..len {
         let old_val = data[i - period];
         let new_val = data[i];
@@ -467,6 +497,21 @@ pub(crate) unsafe fn linreg_avx2(data: &[f64], period: usize, result: &mut [f64]
         let slope = (p * sum_xy - sum_x * sum_y) * inv_divisor;
         let intercept = (sum_y - slope * sum_x) * inv_p;
         result[i] = slope * last_x + intercept;
+        since_reseed += 1;
+        if since_reseed == reseed_interval {
+            if i + 1 < len {
+                let first = i + 1 - period;
+                sum_y = 0.0;
+                sum_xy = 0.0;
+                let mut weight = last_x;
+                for &value in &data[first..=i] {
+                    sum_y += value;
+                    sum_xy += weight * value;
+                    weight -= 1.0;
+                }
+            }
+            since_reseed = 0;
+        }
     }
 
     for r in result.iter_mut().take(period - 1) {

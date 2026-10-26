@@ -2,8 +2,8 @@
   "metadata": {
     "generator": "gen_talib_golden.py",
     "generator_version": "1.0.0",
-    "generation_date": "2026-09-18",
-    "talib_version": "0.8.0",
+    "generation_date": "2026-10-23",
+    "talib_version": "0.8.1",
     "indicator": "WMA",
     "talib_function": "WMA",
     "parameters": {

@@ -2080,9 +2080,8 @@ pub fn hma(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let len = input.len();
     let diff_start = period - 1;
-    let mut output = init_output(len);
     if diff_start >= len {
-        return Ok(output);
+        return Ok(init_output(len));
     }
 
     let diff: Vec<f64> = (diff_start..len)
@@ -2096,17 +2095,18 @@ pub fn hma(input: &[f64], period: usize) -> Result<Array1<f64>> {
         .collect();
 
     if diff.len() < sqrt_period {
-        return Ok(output);
+        return Ok(init_output(len));
     }
 
     let hma_inner = moving_avg::wma(&diff, sqrt_period)?;
-    for (j, &v) in hma_inner.iter().enumerate() {
-        if j >= sqrt_period - 1 {
-            output[diff_start + j] = v;
-        }
+    let hma_start = diff_start + sqrt_period - 1;
+    if hma_start >= len {
+        return Ok(init_output(len));
     }
-
-    Ok(output)
+    let mut output = Vec::with_capacity(len);
+    output.resize(hma_start, f64::NAN);
+    output.extend_from_slice(&hma_inner.as_slice().unwrap()[sqrt_period - 1..]);
+    Ok(Array1::from_vec(output))
 }
 
 /// Arnaud Legoux Moving Average (ALMA)
@@ -2718,6 +2718,36 @@ mod tests {
         assert!(result[3].is_nan());
         assert!(!result[4].is_nan());
         assert!(result[4] > 0.0);
+    }
+
+    #[test]
+    fn hma_compact_output_matches_materialized_composition() {
+        let input = (0..512)
+            .map(|i| 100.0 + (i as f64 * 0.017).sin() * 5.0 + i as f64 * 0.001)
+            .collect::<Vec<_>>();
+        for period in [2, 3, 4, 5, 10, 20, 64] {
+            let actual = hma(&input, period).unwrap();
+            let half = moving_avg::wma(&input, period / 2).unwrap();
+            let full = moving_avg::wma(&input, period).unwrap();
+            let difference = (period - 1..input.len())
+                .map(|i| 2.0 * half[i] - full[i])
+                .collect::<Vec<_>>();
+            let inner =
+                moving_avg::wma(&difference, (period as f64).sqrt().round() as usize).unwrap();
+            let start = period - 1 + (period as f64).sqrt().round() as usize - 1;
+            for i in 0..input.len() {
+                if i < start {
+                    assert!(actual[i].is_nan(), "period={period}, i={i}");
+                } else {
+                    assert!(
+                        (actual[i] - inner[i - (period - 1)]).abs() <= 1e-10,
+                        "period={period}, i={i}, actual={}, expected={}",
+                        actual[i],
+                        inner[i - (period - 1)]
+                    );
+                }
+            }
+        }
     }
 
     #[test]

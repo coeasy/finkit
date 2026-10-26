@@ -225,7 +225,7 @@ func TestCurrentTalibCatalogContract(t *testing.T) {
 		t.Fatalf("decode operation catalog: %v", err)
 	}
 	profile := matrix["semantic_profile"].(string)
-	if profile != "talib_0_8_0" {
+	if profile != "talib_0_8_1" {
 		t.Fatalf("unexpected TA-Lib profile: %s", profile)
 	}
 	expected := make(map[string]bool)
@@ -254,7 +254,7 @@ func TestCurrentTalibCatalogContract(t *testing.T) {
 func TestTalibNumericContractV1(t *testing.T) {
 	fixture := loadTalibNumericContract(t)
 	profile := fixture["semantic_profile"].(string)
-	if profile != "talib_0_8_0" {
+	if profile != "talib_0_8_1" {
 		t.Fatalf("unexpected TA-Lib profile: %s", profile)
 	}
 	vectors := fixture["vectors"].([]interface{})

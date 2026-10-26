@@ -10,7 +10,6 @@
 // would report the other binaries' helpers as unused.
 #![allow(dead_code)]
 
-use finkit_ffi_common::{TALIB_PROFILE_CATALOG_NAMES, TALIB_SEMANTIC_PROFILE};
 use serde::Deserialize;
 use std::collections::BTreeSet;
 use std::fs;
@@ -103,7 +102,7 @@ pub fn golden_indicator_names() -> BTreeSet<String> {
                 "golden metadata indicator must match its filename"
             );
             assert_eq!(
-                golden.metadata.talib_version, "0.8.0",
+                golden.metadata.talib_version, "0.8.1",
                 "TA-Lib golden reference version drifted"
             );
             Some(golden.metadata.indicator)
@@ -111,30 +110,16 @@ pub fn golden_indicator_names() -> BTreeSet<String> {
         .collect()
 }
 
-pub fn assert_catalog_matches_matrix(matrix: &TalibCoverageMatrix) {
+pub fn assert_matrix_metadata(matrix: &TalibCoverageMatrix) {
     assert_eq!(matrix.schema_version, 1);
-    assert_eq!(matrix.semantic_profile, TALIB_SEMANTIC_PROFILE);
+    assert_eq!(matrix.semantic_profile, "talib_0_8_1");
     assert_eq!(matrix.talib_core_version, "0.8.1");
-    assert_eq!(matrix.python_reference_version, "0.8.0");
-    assert_eq!(
-        matrix.surfaces.profile_catalog.status, "registered",
-        "catalog status must describe registration only"
-    );
-    assert_eq!(
-        matrix.surfaces.dispatcher_smoke.status, "executable_smoke",
-        "dispatcher status must describe smoke execution only"
-    );
+    assert_eq!(matrix.python_reference_version, "0.8.1");
+    assert_eq!(matrix.surfaces.profile_catalog.status, "registered");
+    assert_eq!(matrix.surfaces.dispatcher_smoke.status, "executable_smoke");
     assert_eq!(
         matrix.surfaces.numeric_reference.status, "fixed_golden",
         "numeric status must describe fixed references only"
-    );
-    assert_eq!(
-        TALIB_PROFILE_CATALOG_NAMES.len(),
-        matrix.surfaces.profile_catalog.expected_count
-    );
-    assert_eq!(
-        dispatcher_names().len(),
-        matrix.surfaces.dispatcher_smoke.expected_count
     );
     assert_eq!(
         matrix.surfaces.numeric_reference.indicators.len(),
@@ -147,20 +132,6 @@ pub fn assert_catalog_matches_matrix(matrix: &TalibCoverageMatrix) {
     assert_eq!(
         matrix.surfaces.formula_surface.indicators.len(),
         matrix.surfaces.formula_surface.expected_count
-    );
-    let catalog = TALIB_PROFILE_CATALOG_NAMES
-        .iter()
-        .copied()
-        .collect::<Vec<_>>();
-    let unique = catalog.iter().copied().collect::<BTreeSet<_>>();
-    assert_eq!(
-        unique.len(),
-        catalog.len(),
-        "TA-Lib catalog contains duplicates"
-    );
-    assert!(
-        catalog.windows(2).all(|pair| pair[0] < pair[1]),
-        "TA-Lib catalog must remain sorted"
     );
 }
 
@@ -184,17 +155,4 @@ pub fn assert_formula_surface_is_callable(matrix: &TalibCoverageMatrix) {
         missing.is_empty(),
         "formula surface entries are not registered in the formula function table: {missing:?}"
     );
-}
-
-pub fn dispatcher_names() -> BTreeSet<String> {
-    let mut names = TALIB_PROFILE_CATALOG_NAMES
-        .iter()
-        .map(|name| (*name).to_string())
-        .collect::<BTreeSet<_>>();
-    for spec in finkit::operation::builtin_operation_registry().iter() {
-        if finkit_ffi_common::talib_profile_supported(&spec.name) {
-            names.insert(spec.name.clone());
-        }
-    }
-    names
 }

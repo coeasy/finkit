@@ -61,7 +61,7 @@ public final class ContractConformance {
         } catch (IOException error) {
             throw new AssertionError("read TA-Lib numeric contract", error);
         }
-        requireEquals("talib_0_8_0", fixture.get("semantic_profile"), "numeric profile");
+        requireEquals("talib_0_8_1", fixture.get("semantic_profile"), "numeric profile");
         List<Object> vectors = (List<Object>) fixture.get("vectors");
         requireEquals(201, vectors.size(), "numeric vector count");
 
@@ -174,9 +174,9 @@ public final class ContractConformance {
         String catalog = Indicators.operationCatalogJson();
         requireContains(catalog, "\"schema_version\":1");
         requireContains(catalog, "\"name\":\"SMA\"");
-        requireContains(catalog, "talib_0_8_0");
+        requireContains(catalog, "talib_0_8_1");
         int currentProfileCount = countOccurrences(
-                catalog, "\"profile_output_contracts\":{\"talib_0_8_0\"");
+                catalog, "\"profile_output_contracts\":{\"talib_0_8_1\"");
         if (catalog.contains("talib_0_7_1") || currentProfileCount != 201) {
             throw new AssertionError("TA-Lib catalog must expose exactly 201 current-profile operations");
         }

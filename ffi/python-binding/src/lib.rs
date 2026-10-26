@@ -1168,6 +1168,12 @@ fn compute_single_indicator(
 
 #[pymodule]
 fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    let numpy_direct_names = PY_NUMPY_DIRECT_NAMES
+        .iter()
+        .chain(compat_api::NUMPY_DIRECT_NAMES.iter())
+        .copied()
+        .collect::<Vec<_>>();
+    m.add("__numpy_direct_names__", numpy_direct_names)?;
     m.add_function(wrap_pyfunction!(operation_catalog_json, m)?)?;
     m.add_function(wrap_pyfunction!(factor_catalog_json, m)?)?;
     m.add_function(wrap_pyfunction!(operation_execute_json, m)?)?;
@@ -1311,6 +1317,7 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Advanced Indicators
     m.add_function(wrap_pyfunction!(ichimoku, m)?)?;
     m.add_function(wrap_pyfunction!(supertrend, m)?)?;
+    m.add_function(wrap_pyfunction!(supertrend_talib_compat, m)?)?;
     m.add_function(wrap_pyfunction!(vwap, m)?)?;
     m.add_function(wrap_pyfunction!(anchored_vwap, m)?)?;
     m.add_function(wrap_pyfunction!(vwap_bands, m)?)?;

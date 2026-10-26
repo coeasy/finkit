@@ -1,8 +1,9 @@
 //! Formula expression engine for technical analysis.
 //!
 //! Parses and evaluates indicator expressions like `SMA(CLOSE, 20)` or
-//! `CROSS(MA(C,5), MA(C,20))`. Supports bytecode compilation, JIT
-//! optimization, SIMD acceleration, and zero-copy evaluation.
+//! `CROSS(MA(C,5), MA(C,20))`. The Tree evaluator is the reference path and the
+//! reusable Plan executor is an opt-in path. Frozen bytecode/JIT/SIMD compatibility
+//! entry points do not provide native code generation or formula-level SIMD.
 //!
 //! # Features
 //!

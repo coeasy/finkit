@@ -702,13 +702,17 @@ fn fast_unary_period_scale<'py>(
     if operation == 2 && timeperiod == 20 {
         let output = unsafe { PyArray1::new(py, [close.len()], false) };
         let output_addr = output.data() as usize;
-        py.detach(|| unsafe {
+        let calculate = || unsafe {
             rolling_stats::variance20_into(
                 close,
                 std::slice::from_raw_parts_mut(output_addr as *mut f64, close.len()),
             )
-        })
-        .map_err(value_error)?;
+        };
+        if close.len() >= crate::conversion::PY_GIL_RELEASE_THRESHOLD {
+            py.detach(calculate).map_err(value_error)?;
+        } else {
+            calculate().map_err(value_error)?;
+        }
         return Ok(output);
     }
     let output = match operation {
@@ -716,7 +720,7 @@ fn fast_unary_period_scale<'py>(
             validate_period(close.len(), timeperiod)?;
             let output = unsafe { PyArray1::new(py, [close.len()], false) };
             let output_addr = output.data() as usize;
-            py.detach(|| unsafe {
+            let calculate = || unsafe {
                 let output_ptr = output_addr as *mut f64;
                 let output = std::slice::from_raw_parts_mut(output_ptr, close.len());
                 if timeperiod == 20 && scale == 1.0 {
@@ -724,13 +728,23 @@ fn fast_unary_period_scale<'py>(
                 } else {
                     rolling_stats::stddev_rolling_into(close, timeperiod, scale, output)
                 }
-            })
-            .map_err(value_error)?;
+            };
+            if close.len() >= crate::conversion::PY_GIL_RELEASE_THRESHOLD {
+                py.detach(calculate).map_err(value_error)?;
+            } else {
+                calculate().map_err(value_error)?;
+            }
             return Ok(output);
         }
-        2 => py
-            .detach(|| rolling_stats::variance(close, timeperiod))
-            .map_err(value_error)?,
+        2 => {
+            let calculate = || rolling_stats::variance(close, timeperiod);
+            if close.len() >= crate::conversion::PY_GIL_RELEASE_THRESHOLD {
+                py.detach(calculate)
+            } else {
+                calculate()
+            }
+            .map_err(value_error)?
+        }
         _ => {
             return Err(value_error(format!(
                 "invalid parameter: unsupported fast operation id {operation}"

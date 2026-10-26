@@ -32,7 +32,7 @@ const REPORT_PATH: &str = "target/talib_compat_report.json";
 
 fn known_indicators() -> Vec<String> {
     let matrix = common::talib_coverage::load_matrix();
-    common::talib_coverage::assert_catalog_matches_matrix(&matrix);
+    common::talib_coverage::assert_matrix_metadata(&matrix);
     let matrix_names = matrix
         .surfaces
         .numeric_reference

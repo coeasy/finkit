@@ -1,7 +1,7 @@
 {
   "metadata": {
     "generator": "checked-in differential fixture",
-    "reference": "TA-Lib Python 0.8.0",
+    "reference": "TA-Lib Python 0.8.1",
     "fixture": "synthetic_ohlcv_v1",
     "length": 256,
     "periods": "2 + (index % 29)",

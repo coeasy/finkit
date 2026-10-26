@@ -466,9 +466,8 @@ pub fn minindex(data: &[f64], period: usize) -> Result<Array1<i64>> {
 /// assert_eq!(maxs[2], 4.0);
 /// ```
 pub fn minmax(data: &[f64], period: usize) -> Result<(Array1<f64>, Array1<f64>)> {
-    let min_arr = min(data, period)?;
-    let max_arr = max(data, period)?;
-    Ok((min_arr, max_arr))
+    validate_window(data, period)?;
+    Ok((min(data, period)?, max(data, period)?))
 }
 
 /// 滚动窗口最小值与最大值的索引 MINMAXINDEX
@@ -874,6 +873,56 @@ mod tests {
     fn test_minindex_zero_period() {
         let data = vec![1.0, 2.0, 3.0];
         assert!(minindex(&data, 0).is_err());
+    }
+
+    #[test]
+    fn minmax_matches_separate_extrema_with_missing_values() {
+        let finite = (0..2048)
+            .map(|index| (index as f64 * 0.173).sin() * 10.0 + (index % 17) as f64)
+            .collect::<Vec<_>>();
+        let mut with_missing = finite.clone();
+        for index in [0, 15, 31, 255, 1023, 2047] {
+            with_missing[index] = f64::NAN;
+        }
+        with_missing[64] = f64::INFINITY;
+        with_missing[128] = f64::NEG_INFINITY;
+        let all_nan = vec![f64::NAN; 64];
+
+        for (data, period) in [
+            (&finite, 1),
+            (&finite, 2),
+            (&finite, 30),
+            (&finite, 64),
+            (&finite, 65),
+            (&finite, 512),
+            (&finite, 513),
+            (&finite, 2048),
+            (&with_missing, 30),
+            (&with_missing, 513),
+            (&all_nan, 14),
+        ] {
+            let (actual_min, actual_max) = minmax(data, period).unwrap();
+            let expected_min = min(data, period).unwrap();
+            let expected_max = max(data, period).unwrap();
+            for index in 0..data.len() {
+                if expected_min[index].is_nan() {
+                    assert!(actual_min[index].is_nan(), "min period={period}, i={index}");
+                } else {
+                    assert_eq!(
+                        actual_min[index], expected_min[index],
+                        "min period={period}, i={index}"
+                    );
+                }
+                if expected_max[index].is_nan() {
+                    assert!(actual_max[index].is_nan(), "max period={period}, i={index}");
+                } else {
+                    assert_eq!(
+                        actual_max[index], expected_max[index],
+                        "max period={period}, i={index}"
+                    );
+                }
+            }
+        }
     }
 
     // ------------------------- 长度验证 -------------------------

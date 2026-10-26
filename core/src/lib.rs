@@ -59,7 +59,10 @@ pub mod error;
 /// Numeric Architecture v3 execution plans compiled from semantic DAGs.
 pub mod execution_plan;
 #[cfg(feature = "formula")]
-/// Formula engine with AST parsing, bytecode compilation, JIT optimization, and SIMD acceleration.
+/// Dialect-aware formula engine with a Tree reference path and reusable Plan executor.
+///
+/// Compatibility bytecode/JIT/SIMD entry points remain available, but their names do not
+/// imply native code generation or formula-level SIMD execution.
 pub mod formula;
 #[cfg(feature = "std")]
 /// Batch technical indicator computations (150+ indicators).

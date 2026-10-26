@@ -67,10 +67,14 @@ LAYERS: dict[str, int] = {
 }
 
 DEP_TABLES = ("dependencies", "build-dependencies")
-# Dev-dependencies do not ship in a crate's public build, so a test-only edge
-# is reported but not gate-fatal: `core`'s tests deliberately pull
-# `finkit-ffi-common` to share golden reference vectors with the bindings.
+# Dev-dependencies do not ship in a crate's public build, so they are reported
+# separately. Architecture-critical test-only inversions are listed below.
 DEV_TABLES = ("dev-dependencies",)
+
+# Kernel integration tests must exercise adapter behavior from the adapter
+# crate. A dev-edge from the core back to ffi-common creates a test-only layer
+# inversion and needlessly builds every shared binding contract in core tests.
+FORBIDDEN_DEV_EDGES = {("finkit", "finkit-ffi-common")}
 
 
 def load_manifest(path: Path) -> dict:
@@ -152,9 +156,15 @@ def main() -> int:
                     f"{name} (L{up}) depends on {dep} (L{dp}) — {kind} dependency; "
                     f"an adapter/kernel cannot depend on a higher layer"
                 )
-        # Test-only edges: reported, not fatal (they never reach a consumer).
+        # Test-only edges: reported separately because they do not ship, while
+        # a small set of known layer inversions can still be forbidden below.
         for dep in sorted(internal_edges(by_name[name], by_name, DEV_TABLES)):
             dev_edges.append((name, LAYERS[name], dep, LAYERS[dep]))
+            if (name, dep) in FORBIDDEN_DEV_EDGES:
+                violations.append(
+                    f"{name} has a forbidden dev-dependency on {dep}; "
+                    "move adapter contract tests to the adapter crate"
+                )
 
     if violations:
         print(f"Layering violations ({len(violations)}):")
@@ -163,7 +173,7 @@ def main() -> int:
         return 1
 
     if dev_edges:
-        print("Test-only (dev-dependency) edges, not gate-fatal:")
+        print("Test-only (dev-dependency) edges:")
         for name, up, dep, dp in dev_edges:
             print(f"  - L{up} {name} --dev--> L{dp} {dep}")
 

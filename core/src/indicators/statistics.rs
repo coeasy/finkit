@@ -407,131 +407,188 @@ pub fn beta(asset: &[f64], benchmark: &[f64], timeperiod: usize) -> Result<Array
     validate_input(asset.len(), timeperiod + 1)?;
 
     let len = asset.len();
-    let mut output = init_output(len);
+    let mut output = crate::utils::uninit_output(len);
+    output[..timeperiod].fill(f64::NAN);
     let n = timeperiod as f64;
+
+    // Store moments of returns after subtracting a nearby origin. This keeps
+    // steadily drifting prices away from the catastrophic cancellation in
+    // n*sum(x*x) - sum(x)^2, while retaining an O(1) sliding update between
+    // deliberate re-anchors.
+    let mut last_x = asset[0];
+    let mut last_y = benchmark[0];
+    let first_x = if last_x != 0.0 {
+        (asset[1] - last_x) / last_x
+    } else {
+        0.0
+    };
+    let first_y = if last_y != 0.0 {
+        (benchmark[1] - last_y) / last_y
+    } else {
+        0.0
+    };
+    let mut shift_x = first_x;
+    let mut shift_y = first_y;
     let mut sum_xx = 0.0;
+    let mut sum_yy = 0.0;
     let mut sum_xy = 0.0;
     let mut sum_x = 0.0;
     let mut sum_y = 0.0;
-    let mut last_x = asset[0];
-    let mut last_y = benchmark[0];
+    let mut centered_returns = vec![(0.0, 0.0); timeperiod];
+    let mut return_head = 0usize;
+
+    for i in 1..timeperiod {
+        let price_x = asset[i];
+        let x = if last_x != 0.0 {
+            (price_x - last_x) / last_x - shift_x
+        } else {
+            -shift_x
+        };
+        last_x = price_x;
+        let price_y = benchmark[i];
+        let y = if last_y != 0.0 {
+            (price_y - last_y) / last_y - shift_y
+        } else {
+            -shift_y
+        };
+        last_y = price_y;
+        sum_xx += x * x;
+        sum_yy += y * y;
+        sum_xy += x * y;
+        sum_x += x;
+        sum_y += y;
+        centered_returns[i - 1] = (x, y);
+    }
+
     let mut trailing_last_x = asset[0];
     let mut trailing_last_y = benchmark[0];
     let mut trailing_idx = 1usize;
-
-    for i in 1..timeperiod {
-        let x = if last_x != 0.0 {
-            (asset[i] - last_x) / last_x
-        } else {
-            0.0
-        };
-        last_x = asset[i];
-        let y = if last_y != 0.0 {
-            (benchmark[i] - last_y) / last_y
-        } else {
-            0.0
-        };
-        last_y = benchmark[i];
-        sum_xx += x * x;
-        sum_xy += x * y;
-        sum_x += x;
-        sum_y += y;
-    }
+    let reseed_interval = timeperiod.saturating_mul(32).max(1);
+    let mut bars_since_reseed = reseed_interval;
+    let mut leaving_xx = 0.0;
+    let mut leaving_yy = 0.0;
 
     for i in timeperiod..len {
+        let price_x = asset[i];
         let x = if last_x != 0.0 {
-            (asset[i] - last_x) / last_x
+            (price_x - last_x) / last_x - shift_x
         } else {
-            0.0
+            -shift_x
         };
-        last_x = asset[i];
+        last_x = price_x;
+        let price_y = benchmark[i];
         let y = if last_y != 0.0 {
-            (benchmark[i] - last_y) / last_y
+            (price_y - last_y) / last_y - shift_y
         } else {
-            0.0
+            -shift_y
         };
-        last_y = benchmark[i];
+        last_y = price_y;
         sum_xx += x * x;
+        sum_yy += y * y;
         sum_xy += x * y;
         sum_x += x;
         sum_y += y;
 
-        let mut denominator = n * sum_xx - sum_x * sum_x;
-        let mut numerator = n * sum_xy - sum_x * sum_y;
         let mut denominator_scale = n * sum_xx;
-
-        // Returns in a drifting price series are almost constant. The raw
-        // moment formula then subtracts nearly equal values and can lose the
-        // entire variance to rounding. Rebuild only unstable windows after
-        // centering the returns; ordinary windows keep the O(1) rolling path.
-        if denominator <= 1e-4 * denominator_scale {
-            let first = i + 1 - timeperiod;
-            let mut prev_x = asset[first - 1];
-            let mut prev_y = benchmark[first - 1];
-            let mut shift_x = 0.0;
-            let mut shift_y = 0.0;
-            for j in first..=i {
+        let mut denominator = denominator_scale - sum_x * sum_x;
+        bars_since_reseed = bars_since_reseed.saturating_sub(1);
+        let mut window_rebuilt = false;
+        if denominator < 1e-6 * denominator_scale
+            || leaving_xx > 1000.0 * sum_xx
+            || leaving_yy > 1000.0 * sum_yy
+            || bars_since_reseed == 0
+        {
+            window_rebuilt = true;
+            bars_since_reseed = reseed_interval;
+            let mut prev_x = trailing_last_x;
+            let mut prev_y = trailing_last_y;
+            let mut raw_sum_x = 0.0;
+            let mut raw_sum_y = 0.0;
+            for j in trailing_idx..=i {
                 if prev_x != 0.0 {
-                    shift_x += (asset[j] - prev_x) / prev_x;
-                }
-                if prev_y != 0.0 {
-                    shift_y += (benchmark[j] - prev_y) / prev_y;
+                    raw_sum_x += (asset[j] - prev_x) / prev_x;
                 }
                 prev_x = asset[j];
+                if prev_y != 0.0 {
+                    raw_sum_y += (benchmark[j] - prev_y) / prev_y;
+                }
                 prev_y = benchmark[j];
             }
-            shift_x /= n;
-            shift_y /= n;
-            prev_x = asset[first - 1];
-            prev_y = benchmark[first - 1];
-            let mut centered_xx = 0.0;
-            let mut centered_xy = 0.0;
-            for j in first..=i {
+            shift_x = raw_sum_x / n;
+            shift_y = raw_sum_y / n;
+
+            prev_x = trailing_last_x;
+            prev_y = trailing_last_y;
+            sum_xx = 0.0;
+            sum_yy = 0.0;
+            sum_xy = 0.0;
+            sum_x = 0.0;
+            sum_y = 0.0;
+            let mut slot = return_head;
+            for j in trailing_idx..=i {
                 let x = if prev_x != 0.0 {
                     (asset[j] - prev_x) / prev_x - shift_x
                 } else {
                     -shift_x
                 };
+                prev_x = asset[j];
                 let y = if prev_y != 0.0 {
                     (benchmark[j] - prev_y) / prev_y - shift_y
                 } else {
                     -shift_y
                 };
-                prev_x = asset[j];
                 prev_y = benchmark[j];
-                centered_xx += x * x;
-                centered_xy += x * y;
+                sum_xx += x * x;
+                sum_yy += y * y;
+                sum_xy += x * y;
+                sum_x += x;
+                sum_y += y;
+
+                centered_returns[slot] = (x, y);
+                slot += 1;
+                if slot == timeperiod {
+                    slot = 0;
+                }
             }
-            denominator_scale = centered_xx;
-            denominator = centered_xx;
-            numerator = centered_xy;
+            denominator_scale = n * sum_xx;
+            denominator = denominator_scale - sum_x * sum_x;
+            if denominator < 0.0 {
+                denominator = 0.0;
+            }
         }
+
         output[i] = if denominator > 1e-14 * denominator_scale {
-            numerator / denominator
+            (n * sum_xy - sum_x * sum_y) / denominator
         } else {
             0.0
         };
 
-        let old_x = if trailing_last_x != 0.0 {
-            (asset[trailing_idx] - trailing_last_x) / trailing_last_x
-        } else {
-            0.0
-        };
+        let (old_x, old_y) = centered_returns[return_head];
         trailing_last_x = asset[trailing_idx];
-        let old_y = if trailing_last_y != 0.0 {
-            (benchmark[trailing_idx] - trailing_last_y) / trailing_last_y
-        } else {
-            0.0
-        };
         trailing_last_y = benchmark[trailing_idx];
+        let insert_slot = if return_head == 0 {
+            timeperiod - 1
+        } else {
+            return_head - 1
+        };
+        if !window_rebuilt {
+            centered_returns[insert_slot] = (x, y);
+        }
+        return_head += 1;
+        if return_head == timeperiod {
+            return_head = 0;
+        }
         trailing_idx += 1;
-        sum_xx -= old_x * old_x;
+        leaving_xx = old_x * old_x;
+        leaving_yy = old_y * old_y;
+        sum_xx -= leaving_xx;
+        sum_yy -= leaving_yy;
         sum_xy -= old_x * old_y;
         sum_x -= old_x;
         sum_y -= old_y;
     }
 
-    Ok(output)
+    Ok(output.into())
 }
 
 /// Correlation (相关系数 - Pearson)

@@ -503,21 +503,24 @@ pub fn dpo(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let len = input.len();
     let inv_period = 1.0 / period as f64;
     let shift = period / 2 + 1;
-    let mut output = init_output(len);
+    let first_output = (period - 1).max(shift);
+    let mut output = Vec::<f64>::with_capacity(len);
+    // SAFETY: the warm-up prefix is initialized below, and the rolling loop
+    // writes every output slot from `first_output` through `len - 1`.
+    unsafe { output.set_len(len) };
+    output[..first_output].fill(f64::NAN);
 
     let mut sum: f64 = input[..period].iter().sum();
-    let mut ma_buf = vec![f64::NAN; len];
-    ma_buf[period - 1] = sum * inv_period;
-    for i in period..len {
-        sum += input[i] - input[i - period];
-        ma_buf[i] = sum * inv_period;
+    for i in period - 1..len {
+        if i >= period {
+            sum += input[i] - input[i - period];
+        }
+        if i >= first_output {
+            output[i] = input[i - shift] - sum * inv_period;
+        }
     }
 
-    for i in (period - 1).max(shift)..len {
-        output[i] = input[i - shift] - ma_buf[i];
-    }
-
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// AR - Activity Ratio (人气指标)
@@ -900,6 +903,28 @@ mod tests {
         for i in (period - 1).max(shift)..input.len() {
             if !ma[i].is_nan() {
                 assert_relative_eq!(result[i], input[i - shift] - ma[i], epsilon = 1e-10);
+            }
+        }
+    }
+
+    #[test]
+    fn dpo_fused_rolling_sma_matches_window_reference() {
+        let input = (0..257)
+            .map(|i| (i as f64 * 0.071).sin() * 8.0 + i as f64 * 0.03)
+            .collect::<Vec<_>>();
+
+        for period in [1usize, 2, 3, 4, 5, 20, 30] {
+            let actual = dpo(&input, period).unwrap();
+            let shift = period / 2 + 1;
+            let first = (period - 1).max(shift);
+            for i in 0..first {
+                assert!(actual[i].is_nan(), "period={period}, i={i}");
+            }
+            for i in first..input.len() {
+                let start = i + 1 - period;
+                let mean = input[start..=i].iter().sum::<f64>() / period as f64;
+                let expected = input[i - shift] - mean;
+                assert_relative_eq!(actual[i], expected, epsilon = 1e-12);
             }
         }
     }

@@ -66,13 +66,45 @@ pub fn supertrend(
     atr_period: usize,
     multiplier: f64,
 ) -> Result<SuperTrendResult> {
+    let (direction, trend_line, upper_band, lower_band) =
+        supertrend_impl::<i32, true>(high, low, close, atr_period, multiplier)?;
+    Ok(SuperTrendResult {
+        direction,
+        trend_line,
+        upper_band,
+        lower_band,
+    })
+}
+
+/// TA-Lib-compatible SuperTrend outputs without allocating the two native-only
+/// band arrays. The direction and trend-line values share the same kernel as
+/// [`supertrend`], while this entry point returns only the comparable outputs.
+pub fn supertrend_talib_compat(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    atr_period: usize,
+    multiplier: f64,
+) -> Result<(Array1<f64>, Array1<f64>)> {
+    let (direction, trend_line, _, _) =
+        supertrend_impl::<f64, false>(high, low, close, atr_period, multiplier)?;
+    Ok((trend_line, direction))
+}
+
+fn supertrend_impl<Direction: From<i32> + Copy, const INCLUDE_BANDS: bool>(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    atr_period: usize,
+    multiplier: f64,
+) -> Result<(Array1<Direction>, Array1<f64>, Array1<f64>, Array1<f64>)> {
     if high.len() != low.len() || high.len() != close.len() {
         return Err(TaError::InvalidParameter {
             name: "high, low, close".to_string(),
             constraint: "must have the same length".to_string(),
         });
     }
-    validate_input(high.len(), atr_period)?;
+    validate_input(high.len(), atr_period.saturating_add(1))?;
 
     if multiplier <= 0.0 {
         return Err(TaError::InvalidParameter {
@@ -82,24 +114,31 @@ pub fn supertrend(
     }
 
     let len = high.len();
-    let atr_values = atr(high, low, close, atr_period)?;
 
-    let mut direction = Array1::from_elem(len, 0);
+    let mut direction = Array1::from_elem(len, Direction::from(0));
     let mut trend_line = init_output(len);
-    let mut upper_band = init_output(len);
-    let mut lower_band = init_output(len);
+    let mut upper_band = if INCLUDE_BANDS {
+        init_output(len)
+    } else {
+        Array1::zeros(0)
+    };
+    let mut lower_band = if INCLUDE_BANDS {
+        init_output(len)
+    } else {
+        Array1::zeros(0)
+    };
 
     let mut final_upper = f64::NAN;
     let mut final_lower = f64::NAN;
     let mut current_trend = 1;
 
-    for i in 0..len {
-        if atr_values[i].is_nan() {
-            continue;
+    let mut apply_atr = |i: usize, atr_value: f64| {
+        if atr_value.is_nan() {
+            return;
         }
 
-        let basic_upper = (high[i] + low[i]) / 2.0 + multiplier * atr_values[i];
-        let basic_lower = (high[i] + low[i]) / 2.0 - multiplier * atr_values[i];
+        let basic_upper = (high[i] + low[i]) / 2.0 + multiplier * atr_value;
+        let basic_lower = (high[i] + low[i]) / 2.0 - multiplier * atr_value;
 
         let new_final_upper = if i == 0
             || final_upper.is_nan()
@@ -124,8 +163,10 @@ pub fn supertrend(
         final_upper = new_final_upper;
         final_lower = new_final_lower;
 
-        upper_band[i] = final_upper;
-        lower_band[i] = final_lower;
+        if INCLUDE_BANDS {
+            upper_band[i] = final_upper;
+            lower_band[i] = final_lower;
+        }
 
         if i > 0 && !trend_line[i - 1].is_nan() {
             if close[i] > final_upper {
@@ -135,20 +176,52 @@ pub fn supertrend(
             }
         }
 
-        direction[i] = current_trend;
+        direction[i] = Direction::from(current_trend);
         trend_line[i] = if current_trend == 1 {
             final_lower
         } else {
             final_upper
         };
-    }
+    };
 
-    Ok(SuperTrendResult {
-        direction,
-        trend_line,
-        upper_band,
-        lower_band,
-    })
+    // Fuse Wilder ATR with the trend state machine for ordinary finite input,
+    // avoiding an intermediate ATR allocation and reread. Leading warm-up
+    // prefixes retain the established ATR path so the seed remains aligned.
+    let warmup = crate::math::leading_warmup(high)
+        .max(crate::math::leading_warmup(low))
+        .max(crate::math::leading_warmup(close));
+    if warmup == 0 {
+        let inverse_period = 1.0 / atr_period as f64;
+        let mut tr_seed = 0.0;
+        let mut previous_atr = f64::NAN;
+
+        for i in atr_period..len {
+            if i == atr_period {
+                for index in 1..=atr_period {
+                    let previous_close = close[index - 1];
+                    tr_seed += (high[index] - low[index])
+                        .max((high[index] - previous_close).abs())
+                        .max((low[index] - previous_close).abs());
+                }
+                previous_atr = tr_seed / atr_period as f64;
+            } else {
+                let previous_close = close[i - 1];
+                let true_range = (high[i] - low[i])
+                    .max((high[i] - previous_close).abs())
+                    .max((low[i] - previous_close).abs());
+                previous_atr += (true_range - previous_atr) * inverse_period;
+            }
+            apply_atr(i, previous_atr);
+        }
+    } else {
+        let atr_values = atr(high, low, close, atr_period)?;
+        for (i, value) in atr_values.iter().copied().enumerate() {
+            apply_atr(i, value);
+        }
+    }
+    drop(apply_atr);
+
+    Ok((direction, trend_line, upper_band, lower_band))
 }
 
 /// SuperTrend 趋势跟踪指标（使用默认参数）
@@ -360,6 +433,70 @@ mod tests {
     }
 
     #[test]
+    fn test_supertrend_talib_compat_matches_primary_outputs() {
+        let high: Vec<f64> = (0..257)
+            .map(|i| 80.0 + i as f64 * 0.03 + (i as f64 * 0.17).sin())
+            .collect();
+        let low: Vec<f64> = high.iter().map(|value| value - 1.4).collect();
+        let close: Vec<f64> = high.iter().map(|value| value - 0.6).collect();
+        let native = supertrend(&high, &low, &close, 14, 3.0).unwrap();
+        let (trend, direction) = supertrend_talib_compat(&high, &low, &close, 14, 3.0).unwrap();
+
+        assert_eq!(trend.len(), high.len());
+        assert_eq!(direction.len(), high.len());
+        for i in 0..high.len() {
+            assert_eq!(trend[i].is_nan(), native.trend_line[i].is_nan());
+            assert_eq!(direction[i], f64::from(native.direction[i]));
+            if !trend[i].is_nan() {
+                assert_eq!(trend[i], native.trend_line[i]);
+            }
+        }
+    }
+
+    #[test]
+    fn test_supertrend_leading_warmup_keeps_atr_seed_alignment() {
+        let high: Vec<f64> = (0..64)
+            .map(|i| 90.0 + i as f64 * 0.08 + (i as f64 * 0.21).sin())
+            .collect();
+        let low: Vec<f64> = high.iter().map(|value| value - 1.2).collect();
+        let close: Vec<f64> = high.iter().map(|value| value - 0.5).collect();
+        let baseline = supertrend(&high, &low, &close, 7, 2.5).unwrap();
+
+        let mut padded_high = vec![f64::NAN];
+        padded_high.extend_from_slice(&high);
+        let mut padded_low = vec![f64::NAN];
+        padded_low.extend_from_slice(&low);
+        let mut padded_close = vec![f64::NAN];
+        padded_close.extend_from_slice(&close);
+        let padded = supertrend(&padded_high, &padded_low, &padded_close, 7, 2.5).unwrap();
+
+        for i in 0..high.len() {
+            assert_eq!(
+                padded.trend_line[i + 1].is_nan(),
+                baseline.trend_line[i].is_nan()
+            );
+            if !baseline.trend_line[i].is_nan() {
+                assert_eq!(padded.trend_line[i + 1], baseline.trend_line[i]);
+            }
+            assert_eq!(padded.direction[i + 1], baseline.direction[i]);
+            assert_eq!(
+                padded.upper_band[i + 1].is_nan(),
+                baseline.upper_band[i].is_nan()
+            );
+            assert_eq!(
+                padded.lower_band[i + 1].is_nan(),
+                baseline.lower_band[i].is_nan()
+            );
+            if !baseline.upper_band[i].is_nan() {
+                assert_eq!(padded.upper_band[i + 1], baseline.upper_band[i]);
+            }
+            if !baseline.lower_band[i].is_nan() {
+                assert_eq!(padded.lower_band[i + 1], baseline.lower_band[i]);
+            }
+        }
+    }
+
+    #[test]
     fn test_supertrend_uptrend() {
         let high = vec![
             100.0, 105.0, 110.0, 115.0, 120.0, 125.0, 130.0, 135.0, 140.0, 145.0, 150.0,
@@ -504,6 +641,18 @@ mod tests {
 
         let result = supertrend(&high, &low, &close, 5, 2.0);
         assert!(result.is_err());
+
+        let exact_period_high = vec![10.0, 11.0, 12.0, 13.0, 14.0];
+        let exact_period_low = vec![8.0, 9.0, 10.0, 11.0, 12.0];
+        let exact_period_close = vec![9.0, 10.0, 11.0, 12.0, 13.0];
+        assert!(supertrend(
+            &exact_period_high,
+            &exact_period_low,
+            &exact_period_close,
+            5,
+            2.0
+        )
+        .is_err());
     }
 
     #[test]

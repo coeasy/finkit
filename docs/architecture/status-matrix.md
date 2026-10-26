@@ -1,6 +1,18 @@
 # 实现现状矩阵
 
-- 基线：`codex/release-v0.2.0-convergence`，提交 `f1fa798` 加本地候选改动（workspace `0.2.0`；最终 SHA 待提交）
+> **当前重构工作树（2026-10-23）**：审查基线仓库提交 `5252c15b`（`main` / `origin/main`，tag `v0.2.0`）；当前工作树包含尚未提交的方案实施修改，最终 SHA 尚未产生。以下本轮实际复验：coverage matcher 4/4、batch registry 235/235（214 exact + 21 aliases）、streaming registry 声明 144/144（136 exact + 8 aliases）、公式函数提取 452、streaming metadata registry 合同通过、依赖方向 30 条生产边通过、feature matrix 4 supported 构建通过/6 known-broken 仍失败、Tree-only engine 合同通过。`cargo test --workspace --locked --no-fail-fast` 在本轮工作树退出码 0；Node 消费者 16/16，Python engine contract 函数 3/3（以直接调用方式执行，解释器未安装 pytest）。
+>
+> 本机验证不表示 GitHub Actions 当前 SHA 已通过，也不证明 Linux/macOS/移动端构建、干净安装包消费者或公开 registry 发布。因子研究不是回测产品，用户明确排除回测实现。
+> 截至 2026-10-23，GitHub Releases 页面显示最新公开发行仍为 `v0.1.15`；`v0.2.0` 是仓库 tag/源码版本，不等同于公开 Release。
+
+- 当前工作流入口：[核心工作流矩阵](workflow-matrix.md)
+- 当前方案进度与后续阶段：[项目功能、架构与重构审查](../PROJECT_FUNCTIONALITY_ARCHITECTURE_REVIEW_2026-10-23.md) §9
+
+## 历史快照说明
+
+本文件下方的 2026-10-18、10-14、10-13、10-10 章节保留各自原始 SHA 和日期，均为历史记录。不得将历史候选分支、本机包或远端 Actions 结果误认为当前工作树或当前公开发行证据。
+
+- 历史基线：`codex/release-v0.2.0-convergence`，提交 `f1fa798` 加本地候选改动（workspace `0.2.0`；最终 SHA 待提交）
 - 状态更新日期：2026-10-18（Windows x64 本地验证 + 历史 PR #30 GitHub Actions；不代表公开发布）
 - 依据：[项目功能、架构与重构审查（2026-10-18）](../PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md)
 - 上一版基线：`496763b7`（2026-10-10），记录见 §5
@@ -14,7 +26,7 @@
 | 当前候选工作树测试 / 构建 | `cargo test --workspace --locked --no-fail-fast` **通过**；安装 wheel 后 TA-Lib 全重叠门禁 155/155、Python 新增合同测试 8/8 通过 | Windows x64；候选改动在最终提交后的远端复验仍需完成，不能外推到所有平台 |
 | 当前候选性能校准 | `benchmark_talib_arch_v3_gate.py --sizes 100000 1000000 --repetitions 3` 通过现有稳定基准门槛 | Windows x64 本地三轮中位数：总体 1.313x、100K 1.484x、1M 1.175x、Top20 1.497x；与 Linux hosted-runner 基线不同机型，不视作跨平台性能承诺。全覆盖脚本中的逐项慢于 TA-Lib 结果仅作诊断，不替代校准门槛 |
 | 当前候选 GitHub Actions | `71180ba` 上 Docs Check、Python ABI3 wheels、多语言发布和跨平台工作流通过；Architecture v3 校准门禁通过 | 历史 SHA CI 不是当前候选证明；PR 上发布资产 job 按条件跳过。新的源码改动须推送后以当前 SHA 重新跑 CI |
-| 公开发行 | GitHub Releases 页面显示最新公开 Release 为 `v0.1.15`；`0.2.0` 是仓库当前候选版本 | [GitHub Releases](https://github.com/coeasy/finkit/releases)；候选 tag、registry 发布、平台包均须按实际完成状态更新 |
+| 公开发行 | 截至 2026-10-23，GitHub Releases 最新公开 Release 为 `v0.1.15`；仓库存在 `v0.2.0` tag/源码，但不是公开 Release | [GitHub Releases](https://github.com/coeasy/finkit/releases)；各公共 registry 与平台包仍须按实际发布记录核对 |
 
 下列 §4–§6 记录保留其原始日期与 SHA，仅作历史追溯。它们不是 `8b398999` 的验证结果。
 

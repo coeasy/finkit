@@ -20,6 +20,8 @@ on:
       - 'docs/benchmark-baselines/architecture-v3-installed-wheel.json'
       - 'scripts/benchmark_talib_all_current_gate.py'
       - 'scripts/benchmark_talib_full_current_gate.py'
+      - 'scripts/benchmark_gate_contract.py'
+      - 'scripts/test_benchmark_gate_contract.py'
       - 'scripts/gen_talib_numeric_contract.py'
       - 'tests/contracts/talib_numeric_contract_v1.json'
       - 'ffi/python-binding/tests/test_talib_numeric_contract.py'
@@ -42,7 +44,7 @@ jobs:
       - name: Install benchmark toolchain
         run: |
           python -m pip install --upgrade pip
-          python -m pip install 'maturin>=1.7,<2' 'numpy==2.3.3' 'TA-Lib==0.8.0' pytest
+          python -m pip install 'maturin>=1.7,<2' 'numpy==2.3.3' 'TA-Lib==0.8.1' pytest
       - name: Prepare canonical NumPy-direct Python bindings
         run: |
           python scripts/prepare_python_hot_bindings.py
@@ -62,6 +64,8 @@ jobs:
             ffi/python-binding/tests/test_talib_numeric_contract.py
       - name: Verify generated TA-Lib numeric contract
         run: python scripts/gen_talib_numeric_contract.py --check
+      - name: Test per-indicator performance floor gate
+        run: python scripts/test_benchmark_gate_contract.py
       - name: Installed-wheel Architecture v3 parity and speedup gate
         run: python scripts/benchmark_talib_arch_v3_gate.py
       # Nothing ran these: they were only mentioned by documents that have since

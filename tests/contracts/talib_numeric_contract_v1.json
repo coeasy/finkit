@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "semantic_profile": "talib_0_8_0",
+  "semantic_profile": "talib_0_8_1",
   "reference": {
-    "talib_python_version": "0.8.0",
+    "talib_python_version": "0.8.1",
     "dataset_id": "synthetic",
     "rows": 160,
     "generator": "scripts/gen_talib_numeric_contract.py",

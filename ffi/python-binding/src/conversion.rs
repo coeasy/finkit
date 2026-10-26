@@ -123,22 +123,41 @@ pub fn formula_error_to_pyerr(e: FormulaError) -> PyErr {
     }
 }
 
-pub fn py_array_f64<'py, F>(py: Python<'py>, calculate: F) -> PyResult<Py<PyArray1<f64>>>
+pub const PY_GIL_RELEASE_THRESHOLD: usize = 16_384;
+
+fn run_sized<T, F>(py: Python<'_>, input_len: usize, calculate: F) -> PyResult<T>
+where
+    T: Ungil + Send,
+    F: Ungil + FnOnce() -> PyResult<T>,
+{
+    if input_len >= PY_GIL_RELEASE_THRESHOLD {
+        py.detach(calculate)
+    } else {
+        calculate()
+    }
+}
+
+pub fn py_array_f64<'py, F>(
+    py: Python<'py>,
+    input_len: usize,
+    calculate: F,
+) -> PyResult<Py<PyArray1<f64>>>
 where
     F: Ungil + FnOnce() -> PyResult<Vec<f64>>,
 {
-    let values = py.detach(calculate)?;
+    let values = run_sized(py, input_len, calculate)?;
     Ok(PyArray1::from_vec(py, values).unbind())
 }
 
 pub fn py_arrays2_f64<'py, F>(
     py: Python<'py>,
+    input_len: usize,
     calculate: F,
 ) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)>
 where
     F: Ungil + FnOnce() -> PyResult<(Vec<f64>, Vec<f64>)>,
 {
-    let (first, second) = py.detach(calculate)?;
+    let (first, second) = run_sized(py, input_len, calculate)?;
     Ok((
         PyArray1::from_vec(py, first).unbind(),
         PyArray1::from_vec(py, second).unbind(),
@@ -147,12 +166,13 @@ where
 
 pub fn py_arrays3_f64<'py, F>(
     py: Python<'py>,
+    input_len: usize,
     calculate: F,
 ) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)>
 where
     F: Ungil + FnOnce() -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)>,
 {
-    let (first, second, third) = py.detach(calculate)?;
+    let (first, second, third) = run_sized(py, input_len, calculate)?;
     Ok((
         PyArray1::from_vec(py, first).unbind(),
         PyArray1::from_vec(py, second).unbind(),
@@ -162,6 +182,7 @@ where
 
 pub fn py_arrays4_f64<'py, F>(
     py: Python<'py>,
+    input_len: usize,
     calculate: F,
 ) -> PyResult<(
     Py<PyArray1<f64>>,
@@ -172,7 +193,7 @@ pub fn py_arrays4_f64<'py, F>(
 where
     F: Ungil + FnOnce() -> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>)>,
 {
-    let (first, second, third, fourth) = py.detach(calculate)?;
+    let (first, second, third, fourth) = run_sized(py, input_len, calculate)?;
     Ok((
         PyArray1::from_vec(py, first).unbind(),
         PyArray1::from_vec(py, second).unbind(),
@@ -183,12 +204,13 @@ where
 
 pub fn py_array_f64_i32<'py, F>(
     py: Python<'py>,
+    input_len: usize,
     calculate: F,
 ) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<i32>>)>
 where
     F: Ungil + FnOnce() -> PyResult<(Vec<f64>, Vec<i32>)>,
 {
-    let (values, states) = py.detach(calculate)?;
+    let (values, states) = run_sized(py, input_len, calculate)?;
     Ok((
         PyArray1::from_vec(py, values).unbind(),
         PyArray1::from_vec(py, states).unbind(),
@@ -197,12 +219,13 @@ where
 
 pub fn py_arrays2_f64_i32<'py, F>(
     py: Python<'py>,
+    input_len: usize,
     calculate: F,
 ) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<i32>>)>
 where
     F: Ungil + FnOnce() -> PyResult<(Vec<f64>, Vec<f64>, Vec<i32>)>,
 {
-    let (first, second, states) = py.detach(calculate)?;
+    let (first, second, states) = run_sized(py, input_len, calculate)?;
     Ok((
         PyArray1::from_vec(py, first).unbind(),
         PyArray1::from_vec(py, second).unbind(),
@@ -212,12 +235,13 @@ where
 
 pub fn py_array_f64_i32_i32<'py, F>(
     py: Python<'py>,
+    input_len: usize,
     calculate: F,
 ) -> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<i32>>, Py<PyArray1<i32>>)>
 where
     F: Ungil + FnOnce() -> PyResult<(Vec<f64>, Vec<i32>, Vec<i32>)>,
 {
-    let (values, first_state, second_state) = py.detach(calculate)?;
+    let (values, first_state, second_state) = run_sized(py, input_len, calculate)?;
     Ok((
         PyArray1::from_vec(py, values).unbind(),
         PyArray1::from_vec(py, first_state).unbind(),
