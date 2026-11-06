@@ -324,9 +324,9 @@ pub fn macdfix_with_signal(input: &[f64], signal_period: usize) -> Result<MacdRe
     }
     validate_input(input.len(), 26 + signal_period - 1)?;
     let len = input.len();
-    let mut macd_line = vec![f64::NAN; len];
-    let mut signal = vec![f64::NAN; len];
-    let mut hist = vec![f64::NAN; len];
+    let mut macd_line = crate::utils::uninit_output(len);
+    let mut signal = crate::utils::uninit_output(len);
+    let mut hist = crate::utils::uninit_output(len);
 
     // MACDFIX uses the fixed TA-Lib smoothing constants 0.15 and 0.075,
     // rather than recomputing 2/(period+1) as the general MACD path does.
@@ -357,8 +357,11 @@ pub fn macdfix_with_signal(input: &[f64], signal_period: usize) -> Result<MacdRe
     }
 
     let first_output = first_macd + signal_period - 1;
+    signal[..first_output].fill(f64::NAN);
+    hist[..first_output].fill(f64::NAN);
     let mut signal_value =
         macd_line[first_macd..=first_output].iter().sum::<f64>() / signal_period as f64;
+    macd_line[..first_output].fill(f64::NAN);
     signal[first_output] = signal_value;
     hist[first_output] = macd_line[first_output] - signal_value;
     for i in first_output + 1..len {
@@ -366,8 +369,6 @@ pub fn macdfix_with_signal(input: &[f64], signal_period: usize) -> Result<MacdRe
         signal[i] = signal_value;
         hist[i] = macd_line[i] - signal_value;
     }
-    // TA-Lib only exposes the stable signal zone for MACDFIX.
-    macd_line[..first_output].fill(f64::NAN);
     Ok(MacdResult {
         macd: Array1::from_vec(macd_line),
         signal: Array1::from_vec(signal),

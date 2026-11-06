@@ -742,6 +742,14 @@ pub fn kc(
     period("timeperiod", p, 2)?;
     period("atrperiod", atr_p, 1)?;
     validate_input(len, p.max(atr_p) + 1)?;
+    if high
+        .iter()
+        .chain(low)
+        .chain(close)
+        .all(|value| value.is_finite())
+    {
+        return kc_finite_fused(high, low, close, p, atr_p, dev);
+    }
     let tp: Vec<f64> = high
         .iter()
         .zip(low)
@@ -781,6 +789,69 @@ pub fn kc(
         upperband: u,
         middleband: m,
         lowerband: l,
+    })
+}
+
+/// Fused finite-input Keltner calculation. The center EMA and ATR recurrence
+/// are independent, so both can be updated in one pass without materializing
+/// typical-price, true-range, EMA, and ATR scratch arrays.
+fn kc_finite_fused(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    p: usize,
+    atr_p: usize,
+    dev: f64,
+) -> Result<KcResult> {
+    let len = close.len();
+    let first = (p - 1).max(atr_p);
+    let alpha = crate::utils::smoothing_factor(p);
+    let mut middle = crate::utils::uninit_output(len);
+    let mut upper = crate::utils::uninit_output(len);
+    let mut lower = crate::utils::uninit_output(len);
+    middle[..first].fill(f64::NAN);
+    upper[..first].fill(f64::NAN);
+    lower[..first].fill(f64::NAN);
+
+    let mut ema = high[..p]
+        .iter()
+        .zip(&low[..p])
+        .zip(&close[..p])
+        .map(|((h, l), c)| (h + l + c) / 3.0)
+        .sum::<f64>()
+        / p as f64;
+    for i in p..=first {
+        let typical = (high[i] + low[i] + close[i]) / 3.0;
+        ema = (typical - ema).mul_add(alpha, ema);
+    }
+
+    let seed_start = first + 1 - atr_p;
+    let mut atr = 0.0;
+    for i in seed_start..=first {
+        atr += (high[i] - low[i])
+            .max((high[i] - close[i - 1]).abs())
+            .max((low[i] - close[i - 1]).abs());
+    }
+    atr /= atr_p as f64;
+    middle[first] = ema;
+    upper[first] = ema + dev * atr;
+    lower[first] = ema - dev * atr;
+
+    for i in first + 1..len {
+        let typical = (high[i] + low[i] + close[i]) / 3.0;
+        ema = (typical - ema).mul_add(alpha, ema);
+        let true_range = (high[i] - low[i])
+            .max((high[i] - close[i - 1]).abs())
+            .max((low[i] - close[i - 1]).abs());
+        atr += (true_range - atr) / atr_p as f64;
+        middle[i] = ema;
+        upper[i] = ema + dev * atr;
+        lower[i] = ema - dev * atr;
+    }
+    Ok(KcResult {
+        upperband: Array1::from_vec(upper),
+        middleband: Array1::from_vec(middle),
+        lowerband: Array1::from_vec(lower),
     })
 }
 
@@ -1466,11 +1537,7 @@ pub fn smi(
     period("slowperiod", slow, 2)?;
     period("signalperiod", signal, 2)?;
     validate_input(len, p + slow + fast + signal - 3)?;
-    const FUSED_SMI_THRESHOLD: usize = 16_384;
-    if len >= FUSED_SMI_THRESHOLD
-        && crate::math::leading_warmup(high) == 0
-        && crate::math::leading_warmup(low) == 0
-    {
+    if crate::math::leading_warmup(high) == 0 && crate::math::leading_warmup(low) == 0 {
         if let Some(result) = smi_finite_fused(high, low, close, p, fast, slow, signal) {
             return Ok(result);
         }

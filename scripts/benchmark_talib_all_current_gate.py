@@ -29,6 +29,7 @@ from benchmark_talib_full_current_gate import (
     flatten,
     measure,
     parity,
+    parity_tolerance,
     talib_aroon_order,
 )
 from benchmark_gate_contract import evaluate_performance_rows
@@ -189,7 +190,10 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             try:
                 f_value = ff()
                 t_value = tf()
-                ok, mask, abs_err, rel_err = parity(f_value, t_value)
+                rtol, atol = parity_tolerance(name)
+                ok, mask, abs_err, rel_err = parity(
+                    f_value, t_value, rtol=rtol, atol=atol
+                )
                 if not ok:
                     parity_failures.append(f"{name}:n={n}:mask={mask}:abs={abs_err:.3e}:rel={rel_err:.3e}")
                 f_us, t_us, loops = measure(ff, tf)
