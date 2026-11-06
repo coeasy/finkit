@@ -1657,11 +1657,14 @@ fn smi_finite_fused(
     let alpha_slow = crate::utils::smoothing_factor(slow);
     let alpha_fast = crate::utils::smoothing_factor(fast);
     let alpha_signal = crate::utils::smoothing_factor(signal);
-    let mut slow_seed_n = Vec::with_capacity(slow);
-    let mut slow_seed_d = Vec::with_capacity(slow);
-    let mut fast_seed_n = Vec::with_capacity(fast);
-    let mut fast_seed_d = Vec::with_capacity(fast);
-    let mut signal_seed = Vec::with_capacity(signal);
+    let mut slow_count = 0usize;
+    let mut slow_seed_n = 0.0;
+    let mut slow_seed_d = 0.0;
+    let mut fast_count = 0usize;
+    let mut fast_seed_n = 0.0;
+    let mut fast_seed_d = 0.0;
+    let mut signal_count = 0usize;
+    let mut signal_seed = 0.0;
     let mut slow_n = 0.0;
     let mut slow_d = 0.0;
     let mut fast_n = 0.0;
@@ -1681,14 +1684,15 @@ fn smi_finite_fused(
             return;
         }
 
-        let (slow_n_value, slow_d_value) = if slow_seed_n.len() < slow {
-            slow_seed_n.push(numerator);
-            slow_seed_d.push(denominator);
-            if slow_seed_n.len() < slow {
+        let (slow_n_value, slow_d_value) = if slow_count < slow {
+            slow_seed_n += numerator;
+            slow_seed_d += denominator;
+            slow_count += 1;
+            if slow_count < slow {
                 return;
             }
-            slow_n = crate::math::moving_avg::simd_horizontal_sum(&slow_seed_n) / slow as f64;
-            slow_d = crate::math::moving_avg::simd_horizontal_sum(&slow_seed_d) / slow as f64;
+            slow_n = slow_seed_n / slow as f64;
+            slow_d = slow_seed_d / slow as f64;
             if !slow_n.is_finite() || !slow_d.is_finite() {
                 valid = false;
                 return;
@@ -1704,14 +1708,15 @@ fn smi_finite_fused(
             (slow_n, slow_d)
         };
 
-        let (fast_n_value, fast_d_value) = if fast_seed_n.len() < fast {
-            fast_seed_n.push(slow_n_value);
-            fast_seed_d.push(slow_d_value);
-            if fast_seed_n.len() < fast {
+        let (fast_n_value, fast_d_value) = if fast_count < fast {
+            fast_seed_n += slow_n_value;
+            fast_seed_d += slow_d_value;
+            fast_count += 1;
+            if fast_count < fast {
                 return;
             }
-            fast_n = crate::math::moving_avg::simd_horizontal_sum(&fast_seed_n) / fast as f64;
-            fast_d = crate::math::moving_avg::simd_horizontal_sum(&fast_seed_d) / fast as f64;
+            fast_n = fast_seed_n / fast as f64;
+            fast_d = fast_seed_d / fast as f64;
             (fast_n, fast_d)
         } else {
             fast_n = (slow_n_value - fast_n).mul_add(alpha_fast, fast_n);
@@ -1730,13 +1735,13 @@ fn smi_finite_fused(
             return;
         }
 
-        if signal_seed.len() < signal {
-            signal_seed.push(raw);
-            if signal_seed.len() < signal {
+        if signal_count < signal {
+            signal_seed += raw;
+            signal_count += 1;
+            if signal_count < signal {
                 return;
             }
-            signal_value =
-                crate::math::moving_avg::simd_horizontal_sum(&signal_seed) / signal as f64;
+            signal_value = signal_seed / signal as f64;
         } else {
             signal_value = (raw - signal_value).mul_add(alpha_signal, signal_value);
         }
