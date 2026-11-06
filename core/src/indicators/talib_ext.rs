@@ -892,10 +892,14 @@ pub fn kdj(
         let rawv = raw[fast - 1..].to_vec();
         let kv = rma_profile(&rawv, slow)?.to_vec();
         let dv = rma_profile(&kv[slow - 1..], signal)?;
-        let mut k = init_output(len);
-        let mut d = init_output(len);
-        let mut j = init_output(len);
         let base = fast - 1 + slow - 1;
+        let valid_start = base + signal - 1;
+        let mut k = Array1::from(crate::utils::uninit_output(len));
+        let mut d = Array1::from(crate::utils::uninit_output(len));
+        let mut j = Array1::from(crate::utils::uninit_output(len));
+        k.as_slice_mut().unwrap()[..valid_start].fill(f64::NAN);
+        d.as_slice_mut().unwrap()[..valid_start].fill(f64::NAN);
+        j.as_slice_mut().unwrap()[..valid_start].fill(f64::NAN);
         for i in signal - 1..dv.len() {
             let idx = base + i;
             if idx < len {
@@ -907,9 +911,13 @@ pub fn kdj(
         return Ok(KdjResult { k, d, j });
     }
 
-    let mut k = init_output(len);
-    let mut d = init_output(len);
-    let mut j = init_output(len);
+    let valid_start = fast + slow + signal - 3;
+    let mut k = Array1::from(crate::utils::uninit_output(len));
+    let mut d = Array1::from(crate::utils::uninit_output(len));
+    let mut j = Array1::from(crate::utils::uninit_output(len));
+    k.as_slice_mut().unwrap()[..valid_start].fill(f64::NAN);
+    d.as_slice_mut().unwrap()[..valid_start].fill(f64::NAN);
+    j.as_slice_mut().unwrap()[..valid_start].fill(f64::NAN);
 
     // The original batch composition materialized two extrema arrays, raw K,
     // the first RMA result, and a second copy of that result before applying
