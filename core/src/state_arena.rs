@@ -264,6 +264,12 @@ impl StateArena {
 
     /// Drop all persistent state while retaining slot vector capacity.
     pub fn clear(&mut self) {
+        // `reserve_slots` intentionally retains the high-water mark so later
+        // plans can reuse the arena. Once the live count reaches zero, walking
+        // that retained capacity on every stateless execution is pure overhead.
+        if self.live == 0 {
+            return;
+        }
         for entry in &mut self.entries {
             *entry = None;
         }
@@ -445,5 +451,16 @@ mod tests {
             Some(RollingSum { sum: 7.0 })
         );
         assert!(arena.is_empty());
+    }
+
+    #[test]
+    fn clearing_empty_reserved_arena_keeps_capacity() {
+        let mut arena = StateArena::new();
+        arena.reserve_slots(4096);
+        arena.clear();
+        arena.clear();
+
+        assert!(arena.is_empty());
+        assert_eq!(arena.slot_capacity(), 4096);
     }
 }

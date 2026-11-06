@@ -63,7 +63,7 @@ impl<'a> TaVarianceState<'a> {
             total1,
             total2,
             trailing_idx: 0,
-            bars_since_reseed: 32 * period,
+            bars_since_reseed: period.saturating_mul(32).max(1),
         }
     }
 
@@ -97,24 +97,36 @@ impl<'a> TaVarianceState<'a> {
 
     #[inline(always)]
     fn next(&mut self, index: usize) -> f64 {
-        let delta = self.input[index] - self.shift;
+        // `variance_into` calls `next` only for `period - 1 <= index < len`,
+        // and the trailing index advances once per call from zero, so both
+        // offsets are inside `input` for every reachable state.
+        let (incoming, trailing) = unsafe {
+            (
+                *self.input.get_unchecked(index),
+                *self.input.get_unchecked(self.trailing_idx),
+            )
+        };
+        let delta = incoming - self.shift;
         self.total1 += delta;
         self.total2 += delta * delta;
         let mean = self.total1 * self.inv_period;
         let mut variance = self.total2 * self.inv_period - mean * mean;
 
-        let trailing_delta = self.input[self.trailing_idx] - self.shift;
+        let trailing_delta = trailing - self.shift;
         let trailing_square = trailing_delta * trailing_delta;
         self.total1 -= trailing_delta;
         self.total2 -= trailing_square;
         self.trailing_idx += 1;
-        self.bars_since_reseed = self.bars_since_reseed.saturating_sub(1);
+        // Initialized positive and reset to `32 * period` at the zero branch
+        // below, so this countdown cannot underflow. Keep it as one decrement
+        // on the per-bar path instead of lowering `saturating_sub` to a clamp.
+        self.bars_since_reseed -= 1;
 
         if variance < 1e-6 * (self.total2 * self.inv_period)
             || trailing_square > 1e6 * self.total2
             || self.bars_since_reseed == 0
         {
-            self.bars_since_reseed = 32 * self.period;
+            self.bars_since_reseed = self.period.saturating_mul(32).max(1);
             variance = self.reseed(index + 1 - self.period, index);
         }
         variance
@@ -160,7 +172,9 @@ pub fn variance_into(input: &[f64], period: usize, output: &mut [f64]) -> Result
 
 /// Population variance with the exact rolling update order used by TA_VAR 0.8.x.
 pub fn variance(input: &[f64], period: usize) -> Result<Vec<f64>> {
-    let mut output = vec![f64::NAN; input.len()];
+    // `variance_into` writes every slot, including the warm-up prefix. Avoid
+    // initializing the full output to NaN only to overwrite it in the kernel.
+    let mut output = crate::utils::uninit_output(input.len());
     variance_into(input, period, &mut output)?;
     Ok(output)
 }
@@ -172,18 +186,23 @@ pub fn variance(input: &[f64], period: usize) -> Result<Vec<f64>> {
 /// read/write pass while preserving the exact variance arithmetic.
 pub fn stddev(input: &[f64], period: usize, nb_dev: f64) -> Result<Vec<f64>> {
     validate_period(input.len(), period, 2)?;
-    let mut output = vec![f64::NAN; input.len()];
+    let mut output = crate::utils::uninit_output(input.len());
     // See `variance_into`: skip an upstream warm-up run instead of poisoning the
     // rolling moment state with it.
     let start = crate::math::leading_warmup(input);
     if start > 0 {
-        if start + period <= input.len() {
-            let tail = stddev(&input[start..], period, nb_dev)?;
-            output[start..].copy_from_slice(&tail);
+        if period > input.len() - start {
+            output.fill(f64::NAN);
+            return Ok(output);
         }
+        let warm_up_end = start.saturating_add(period - 1).min(input.len());
+        output[..warm_up_end].fill(f64::NAN);
+        let tail = stddev(&input[start..], period, nb_dev)?;
+        output[start..].copy_from_slice(&tail);
         return Ok(output);
     }
     let lookback = period - 1;
+    output[..lookback].fill(f64::NAN);
     let mut state = TaVarianceState::new(input, period);
     for index in lookback..input.len() {
         output[index] = state.next(index).sqrt() * nb_dev;
@@ -629,7 +648,11 @@ pub fn correlation(input_a: &[f64], input_b: &[f64], period: usize) -> Result<Ve
 
     let lookback = period - 1;
     let inv_period = 1.0 / period as f64;
-    let mut output = vec![f64::NAN; input_a.len()];
+    // The rolling loop below writes every slot after the lookback. Initialize
+    // only the warm-up prefix instead of clearing the full output and
+    // overwriting nearly all of it on long histories.
+    let mut output = crate::utils::uninit_output(input_a.len());
+    output[..lookback].fill(f64::NAN);
     let mut trailing_idx = 0usize;
     let mut shift_x = input_a[0];
     let mut shift_y = input_b[0];

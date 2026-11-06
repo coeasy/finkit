@@ -2,7 +2,7 @@
 
 This directory is the canonical documentation set for Finkit.
 
-Finkit is a Rust-powered quantitative finance engine for technical analysis, reusable formulas, factor graphs, streaming computation, feature engineering, and research workflows. As of 2026-10-23, the documentation separates the **latest public GitHub Release, v0.1.15**, from the repository's **v0.2.0 source/tag**; a repository tag or passing local test is not by itself a published package. See the [release page](https://github.com/coeasy/finkit/releases) for the current public release record.
+Finkit is a Rust-powered quantitative finance engine for technical analysis, reusable formulas, factor graphs, streaming computation, feature engineering, and research workflows. As of 2026-11-06, the latest public GitHub Release is **v0.2.0**; this repository targets **v0.3.0**. A candidate tag or passing local test is not itself proof that every package is available. See the [release page](https://github.com/coeasy/finkit/releases) for the current public release record.
 
 ## Start here
 
@@ -68,14 +68,14 @@ Two properties are contracts rather than aspirations:
 
 Path agreement alone is not evidence of correctness: two paths that are wrong in the same way still agree. Numerical gates therefore pair agreement with **absolute-property assertions** (exact finite-value counts, identities, non-degeneracy) and **duplicate-implementation cross-checks**. Details in [formula-runtime-contract.md](formula-runtime-contract.md) §3.1–§3.2.
 
-## Published v0.1.15 contract
+## Published v0.2.0 contract
 
-The GitHub `v0.1.15` Release is the authoritative distribution contract for the current published version.
+The GitHub `v0.2.0` Release is the authoritative distribution contract for the current published version.
 
 Its release assets include:
 
 - four Python `cp38-abi3` wheels for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64;
-- `finkit-0.1.15.crate`;
+- `finkit-0.2.0.crate`;
 - `finkit-cli-linux-x86_64`;
 - `SHA256SUMS`.
 
@@ -93,7 +93,7 @@ The active next-release work expands the reusable runtime and factor-research st
 - retained materializations for caller-owned range/into updates;
 - reuse-first Factor Research integration built on canonical returns/statistics/regression/rank/risk/calendar infrastructure.
 
-These capabilities are next-release development facts and are not retroactively claimed as published v0.1.15 assets.
+These capabilities are next-release development facts and are not retroactively claimed as published v0.2.0 assets.
 
 ## Multi-language validation model
 
@@ -286,4 +286,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last product/documentation review: 2026-10-18. Workspace target: v0.2.0 candidate. Latest published distribution baseline: v0.1.15._
+_Last product/documentation review: 2026-10-18. Workspace target: v0.2.0 candidate. Latest published distribution baseline: v0.2.0._

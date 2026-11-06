@@ -132,11 +132,37 @@ impl PlanBufferLayout {
             .collect()
     }
 
+    /// Fill caller-owned slot storage with exactly the buffers required by this layout.
+    ///
+    /// Executors with a small fixed inline workspace can avoid allocating an
+    /// outer `Vec<Vec<f64>>` on every run while the `BufferArena` continues to
+    /// own and recycle the individual series allocations.
+    pub(crate) fn take_buffers_into(
+        &self,
+        arena: &mut BufferArena,
+        len: usize,
+        slots: &mut [Vec<f64>],
+    ) {
+        assert_eq!(slots.len(), self.slot_count);
+        for slot in slots {
+            *slot = arena.take_overwrite(len);
+        }
+    }
+
     /// Return a set of plan scratch buffers to the reusable arena.
     pub fn recycle_buffers(&self, arena: &mut BufferArena, buffers: Vec<Vec<f64>>) {
         debug_assert_eq!(buffers.len(), self.slot_count);
         for buffer in buffers {
             arena.recycle(buffer);
+        }
+    }
+
+    /// Recycle slot buffers from caller-owned storage, leaving that storage
+    /// empty and reusable by its owner.
+    pub(crate) fn recycle_buffers_from(&self, arena: &mut BufferArena, slots: &mut [Vec<f64>]) {
+        debug_assert_eq!(slots.len(), self.slot_count);
+        for slot in slots {
+            arena.recycle(std::mem::take(slot));
         }
     }
 }

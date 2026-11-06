@@ -76,7 +76,12 @@ fn rolling_sum(input: &[f64], p: usize) -> Vec<f64> {
 /// kernel picks between are NaN-transparent, so a missing bar never poisons the
 /// extrema and never blocks the bars behind it. The warm-up slots stay `NaN`
 /// because the kernel only visits fully populated windows.
-fn rolling_minmax(high: &[f64], low: &[f64], p: usize) -> (Vec<f64>, Vec<f64>) {
+///
+/// This hidden public wrapper exists so the release benchmark example can use
+/// the identical extrema implementation in its pre-optimization reference.
+/// It is not a stable public API.
+#[doc(hidden)]
+pub fn rolling_minmax(high: &[f64], low: &[f64], p: usize) -> (Vec<f64>, Vec<f64>) {
     let mut hi = vec![f64::NAN; high.len()];
     let mut lo = vec![f64::NAN; low.len()];
     crate::math::statistics::rolling_minmax_visit(high, low, p, |i, highest, lowest| {
@@ -90,7 +95,8 @@ fn rolling_minmax(high: &[f64], low: &[f64], p: usize) -> (Vec<f64>, Vec<f64>) {
 pub fn rma_profile(input: &[f64], p: usize) -> Result<Array1<f64>> {
     period("timeperiod", p, 1)?;
     validate_input(input.len(), p)?;
-    let mut out = init_output(input.len());
+    let mut out = crate::utils::uninit_output(input.len());
+    out[..p - 1].fill(f64::NAN);
     let mut value = input[..p].iter().sum::<f64>() / p as f64;
     out[p - 1] = value;
     let inv = 1.0 / p as f64;
@@ -98,7 +104,7 @@ pub fn rma_profile(input: &[f64], p: usize) -> Result<Array1<f64>> {
         value += (input[i] - value) * inv;
         out[i] = value;
     }
-    Ok(out)
+    Ok(Array1::from_vec(out))
 }
 
 pub fn ac(
@@ -126,6 +132,9 @@ pub fn ac(
     // prices, two rolling sums, the AO series, and repeatedly summing its
     // signal windows.
     let osc_start = window - 1;
+    let inv_fast = 1.0 / fast as f64;
+    let inv_slow = 1.0 / slow as f64;
+    let inv_signal = 1.0 / signal as f64;
     let mut fast_sum = 0.0;
     let mut slow_sum = 0.0;
     let mut trailing_fast = osc_start - (fast - 1);
@@ -160,7 +169,7 @@ pub fn ac(
         let median = (high[i] + low[i]) / 2.0;
         fast_sum += median;
         slow_sum += median;
-        let oscillator = fast_sum / fast as f64 - slow_sum / slow as f64;
+        let oscillator = fast_sum * inv_fast - slow_sum * inv_slow;
 
         fast_sum -= (high[trailing_fast] + low[trailing_fast]) / 2.0;
         slow_sum -= (high[trailing_slow] + low[trailing_slow]) / 2.0;
@@ -170,7 +179,7 @@ pub fn ac(
         osc_ring[osc_ring_index] = oscillator;
         signal_sum += oscillator;
         if i >= lookback {
-            out_spare[i - lookback].write(oscillator - signal_sum / signal as f64);
+            out_spare[i - lookback].write(oscillator - signal_sum * inv_signal);
             osc_ring_index += 1;
             if osc_ring_index == signal {
                 osc_ring_index = 0;
@@ -197,7 +206,10 @@ pub fn adr(high: &[f64], low: &[f64], p: usize) -> Result<Array1<f64>> {
     // materialized both a full range vector and rolling-sum output before
     // collecting a third result vector. Preserve the rolling_sum operation
     // order so NaN/Inf propagation and floating-point rounding stay identical.
-    let mut out = vec![f64::NAN; len];
+    // Only the warm-up prefix is undefined; the rolling loop writes every
+    // result from `p - 1` onward, so avoid clearing the full output first.
+    let mut out = crate::utils::uninit_output(len);
+    out[..p - 1].fill(f64::NAN);
     let mut sum = 0.0;
     for i in 0..len {
         sum += high[i] - low[i];
@@ -303,15 +315,112 @@ fn cmou_reference(close: &[f64], p: usize) -> Result<Array1<f64>> {
     Ok(Array1::from_vec(out))
 }
 
+#[inline]
+fn cvi_fused(high: &[f64], low: &[f64], period: usize, roc_period: usize) -> Result<Array1<f64>> {
+    let len = high.len();
+    let mut seed_ranges = Vec::with_capacity(period);
+    for i in 0..period {
+        let range = high[i] - low[i];
+        if !range.is_finite() {
+            return Err(TaError::InvalidParameter {
+                name: "input".to_string(),
+                constraint: format!("non-finite value at index {i}"),
+            });
+        }
+        seed_ranges.push(range);
+    }
+    let mut average = crate::math::moving_avg::simd_horizontal_sum(&seed_ranges) / period as f64;
+    let alpha = 2.0 / (period as f64 + 1.0);
+
+    #[cfg(target_arch = "x86_64")]
+    let use_fma = std::is_x86_feature_detected!("avx512f")
+        || (std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("fma"));
+    #[cfg(not(target_arch = "x86_64"))]
+    let use_fma = false;
+
+    let mut average_ring = vec![0.0; roc_period];
+    average_ring[0] = average;
+    let mut ring_len = 1usize;
+    let mut ring_head = 0usize;
+    let first_output = period - 1 + roc_period;
+
+    let mut output = Vec::<std::mem::MaybeUninit<f64>>::with_capacity(len);
+    // SAFETY: MaybeUninit permits uninitialized elements; the prefix is filled
+    // here and every later output slot is written in the recurrence below.
+    unsafe { output.set_len(len) };
+    for slot in &mut output[..first_output] {
+        slot.write(f64::NAN);
+    }
+
+    for i in period..len {
+        let range = high[i] - low[i];
+        if !range.is_finite() {
+            return Err(TaError::InvalidParameter {
+                name: "input".to_string(),
+                constraint: format!("non-finite value at index {i}"),
+            });
+        }
+        average = if use_fma {
+            (range - average).mul_add(alpha, average)
+        } else {
+            (range - average) * alpha + average
+        };
+
+        if ring_len < roc_period {
+            average_ring[(ring_head + ring_len) % roc_period] = average;
+            ring_len += 1;
+        } else {
+            let previous = average_ring[ring_head];
+            output[i].write(if previous == 0.0 {
+                0.0
+            } else {
+                100.0 * (average - previous) / previous
+            });
+            average_ring[ring_head] = average;
+            ring_head += 1;
+            if ring_head == roc_period {
+                ring_head = 0;
+            }
+        }
+    }
+
+    let mut output = std::mem::ManuallyDrop::new(output);
+    let ptr = output.as_mut_ptr().cast::<f64>();
+    let len = output.len();
+    let capacity = output.capacity();
+    // SAFETY: every element has been written before changing the element type.
+    Ok(Array1::from_vec(unsafe {
+        Vec::from_raw_parts(ptr, len, capacity)
+    }))
+}
+
 pub fn cvi(high: &[f64], low: &[f64], p: usize, roc: usize) -> Result<Array1<f64>> {
     let len = same_len("high, low", &[high, low])?;
     period("timeperiod", p, 1)?;
     period("rocperiod", roc, 1)?;
     validate_input(len, p + roc)?;
+
+    const FUSED_THRESHOLD: usize = 16_384;
+    if len >= FUSED_THRESHOLD {
+        return cvi_fused(high, low, p, roc);
+    }
+
     let range: Vec<f64> = high.iter().zip(low).map(|(h, l)| h - l).collect();
     let e = ema(&range, p)?;
-    let mut out = init_output(len);
-    for i in p - 1 + roc..len {
+
+    // The ROC loop overwrites every slot after its lookback, so initialize only
+    // the warm-up prefix instead of clearing a full output series first.
+    let start = p - 1 + roc;
+    const UNINIT_OUTPUT_THRESHOLD: usize = 16_384;
+    let mut out = if len >= UNINIT_OUTPUT_THRESHOLD {
+        crate::utils::uninit_output(len)
+    } else {
+        init_output(len).into_raw_vec_and_offset().0
+    };
+    if len >= UNINIT_OUTPUT_THRESHOLD {
+        out[..start].fill(f64::NAN);
+    }
+    for i in start..len {
         let prev = e[i - roc];
         out[i] = if prev == 0.0 {
             0.0
@@ -319,33 +428,34 @@ pub fn cvi(high: &[f64], low: &[f64], p: usize, roc: usize) -> Result<Array1<f64
             100.0 * (e[i] - prev) / prev
         };
     }
-    Ok(out)
+    Ok(Array1::from_vec(out))
 }
 
 pub fn efi(close: &[f64], volume: &[f64], p: usize) -> Result<Array1<f64>> {
     let len = same_len("close, volume", &[close, volume])?;
     period("timeperiod", p, 1)?;
     validate_input(len, p + (p > 0) as usize)?;
-    let mut force = vec![0.0; len];
-    for i in 1..len {
-        force[i] = (close[i] - close[i - 1]) * volume[i];
-    }
-    let mut out = init_output(len);
+    let mut out = crate::utils::uninit_output(len);
+    out[..p].fill(f64::NAN);
     if p == 1 {
         for i in 1..len {
-            out[i] = force[i];
+            out[i] = (close[i] - close[i - 1]) * volume[i];
         }
-        return Ok(out);
+        return Ok(Array1::from_vec(out));
     }
     let start = p;
-    let mut value = force[1..=p].iter().sum::<f64>() / p as f64;
+    let mut value = (1..=p)
+        .map(|i| (close[i] - close[i - 1]) * volume[i])
+        .sum::<f64>()
+        / p as f64;
     out[start] = value;
     let alpha = 2.0 / (p as f64 + 1.0);
     for i in start + 1..len {
-        value += (force[i] - value) * alpha;
+        let force = (close[i] - close[i - 1]) * volume[i];
+        value += (force - value) * alpha;
         out[i] = value;
     }
-    Ok(out)
+    Ok(Array1::from_vec(out))
 }
 
 pub fn eri(high: &[f64], low: &[f64], close: &[f64], p: usize) -> Result<EriResult> {
@@ -353,15 +463,30 @@ pub fn eri(high: &[f64], low: &[f64], close: &[f64], p: usize) -> Result<EriResu
     period("timeperiod", p, 1)?;
     validate_input(len, p)?;
     let e = ema(close, p)?;
-    let mut bull = init_output(len);
-    let mut bear = init_output(len);
+
+    const UNINIT_OUTPUT_THRESHOLD: usize = 16_384;
+    let use_uninit = len >= UNINIT_OUTPUT_THRESHOLD;
+    let mut bull = if use_uninit {
+        crate::utils::uninit_output(len)
+    } else {
+        init_output(len).into_raw_vec_and_offset().0
+    };
+    let mut bear = if use_uninit {
+        crate::utils::uninit_output(len)
+    } else {
+        init_output(len).into_raw_vec_and_offset().0
+    };
+    if use_uninit {
+        bull[..p - 1].fill(f64::NAN);
+        bear[..p - 1].fill(f64::NAN);
+    }
     for i in p - 1..len {
         bull[i] = high[i] - e[i];
         bear[i] = low[i] - e[i];
     }
     Ok(EriResult {
-        bullpower: bull,
-        bearpower: bear,
+        bullpower: Array1::from_vec(bull),
+        bearpower: Array1::from_vec(bear),
     })
 }
 
@@ -650,40 +775,110 @@ pub fn kdj(
     period("slowk_period", slow, 1)?;
     period("slowd_period", signal, 1)?;
     validate_input(len, fast + slow + signal - 2)?;
-    let (hi, lo) = rolling_minmax(high, low, fast);
-    let mut raw = vec![f64::NAN; len];
-    for i in fast - 1..len {
-        let den = hi[i] - lo[i];
-        raw[i] = if den == 0.0 {
-            0.0
-        } else {
-            (close[i] - lo[i]) / den * 100.0
-        };
+
+    // Keep the established missing/infinite-value path: its batch RMA behavior
+    // is the compatibility reference for partially missing series.
+    if high
+        .iter()
+        .chain(low)
+        .chain(close)
+        .any(|value| !value.is_finite())
+    {
+        let (hi, lo) = rolling_minmax(high, low, fast);
+        let mut raw = vec![f64::NAN; len];
+        for i in fast - 1..len {
+            let den = hi[i] - lo[i];
+            raw[i] = if den == 0.0 {
+                0.0
+            } else {
+                (close[i] - lo[i]) / den * 100.0
+            };
+        }
+        let rawv = raw[fast - 1..].to_vec();
+        let kv = rma_profile(&rawv, slow)?.to_vec();
+        let dv = rma_profile(&kv[slow - 1..], signal)?;
+        let mut k = init_output(len);
+        let mut d = init_output(len);
+        let mut j = init_output(len);
+        let base = fast - 1 + slow - 1;
+        for i in signal - 1..dv.len() {
+            let idx = base + i;
+            if idx < len {
+                d[idx] = dv[i];
+                k[idx] = kv[idx - (fast - 1)];
+                j[idx] = 3.0 * k[idx] - 2.0 * d[idx];
+            }
+        }
+        return Ok(KdjResult { k, d, j });
     }
-    let rawv = raw[fast - 1..].to_vec();
-    let ksmall = rma_profile(&rawv, slow)?;
-    let kv = ksmall.to_vec();
-    let dv = rma_profile(&kv[slow - 1..], signal)?;
+
     let mut k = init_output(len);
     let mut d = init_output(len);
     let mut j = init_output(len);
-    let kbase = fast - 1;
-    let dbase = kbase + slow - 1;
-    for i in signal.saturating_sub(1)..dv.len() {
-        let idx = dbase + signal.saturating_sub(1) + i - signal.saturating_sub(1);
-        if idx < len {
-            d[idx] = dv[i];
-            k[idx] = kv[idx - kbase];
-            j[idx] = 3.0 * k[idx] - 2.0 * d[idx];
+
+    // The original batch composition materialized two extrema arrays, raw K,
+    // the first RMA result, and a second copy of that result before applying
+    // the signal RMA. The recurrence only needs the current raw value, current
+    // K, and the two seed accumulators, so consume extrema as they are visited
+    // and write the three public outputs once D has warmed up.
+    let inverse_slow = 1.0 / slow as f64;
+    let inverse_signal = 1.0 / signal as f64;
+    let mut raw_count = 0usize;
+    let mut raw_seed = 0.0;
+    let mut k_value = f64::NAN;
+    let mut k_valid = false;
+    let mut k_count = 0usize;
+    let mut d_seed = 0.0;
+    let mut d_value = f64::NAN;
+    let mut d_valid = false;
+
+    crate::math::statistics::rolling_minmax_visit(high, low, fast, |i, highest, lowest| {
+        let den = highest - lowest;
+        let raw = if den == 0.0 {
+            0.0
+        } else {
+            (close[i] - lowest) / den * 100.0
+        };
+
+        if !k_valid {
+            raw_seed += raw;
+            raw_count += 1;
+            if raw_count == slow {
+                k_value = raw_seed / slow as f64;
+                k_valid = true;
+            }
+        } else {
+            k_value += (raw - k_value) * inverse_slow;
         }
-    }
+
+        if !k_valid {
+            return;
+        }
+
+        if !d_valid {
+            d_seed += k_value;
+            k_count += 1;
+            if k_count == signal {
+                d_value = d_seed / signal as f64;
+                d_valid = true;
+            }
+        } else {
+            d_value += (k_value - d_value) * inverse_signal;
+        }
+
+        if d_valid {
+            d[i] = d_value;
+            k[i] = k_value;
+            j[i] = 3.0 * k_value - 2.0 * d_value;
+        }
+    });
     Ok(KdjResult { k, d, j })
 }
 
 pub fn marketfi(high: &[f64], low: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     let len = same_len("high, low, volume", &[high, low, volume])?;
     validate_input(len, 1)?;
-    let mut out = init_output(len);
+    let mut out = crate::utils::uninit_output(len);
     for i in 0..len {
         out[i] = if volume[i] == 0.0 {
             0.0
@@ -691,7 +886,7 @@ pub fn marketfi(high: &[f64], low: &[f64], volume: &[f64]) -> Result<Array1<f64>
             (high[i] - low[i]) / volume[i]
         };
     }
-    Ok(out)
+    Ok(Array1::from_vec(out))
 }
 
 pub fn massi(high: &[f64], low: &[f64], fast: usize, slow: usize) -> Result<Array1<f64>> {
@@ -775,7 +970,8 @@ pub fn percentile(input: &[f64], p: usize, pct: f64) -> Result<Array1<f64>> {
         (0.0..=100.0).contains(&pct)
     })?;
     validate_input(input.len(), p)?;
-    let mut out = init_output(input.len());
+    let mut out = crate::utils::uninit_output(input.len());
+    out[..p - 1].fill(f64::NAN);
     let rank = ((pct * p as f64 / 100.0).ceil() as usize).clamp(1, p);
     if input.iter().all(|value| value.is_finite()) {
         let mut ordered = input[..p].to_vec();
@@ -840,7 +1036,7 @@ pub fn percentile(input: &[f64], p: usize, pct: f64) -> Result<Array1<f64>> {
             out[i] = window[rank - 1];
         }
     }
-    Ok(out)
+    Ok(Array1::from_vec(out))
 }
 
 pub fn pvo(volume: &[f64], fast: usize, slow: usize, _ma_type: usize) -> Result<Array1<f64>> {
@@ -1246,21 +1442,57 @@ pub fn smi(
     period("slowperiod", slow, 2)?;
     period("signalperiod", signal, 2)?;
     validate_input(len, p + slow + fast + signal - 3)?;
+    const FUSED_SMI_THRESHOLD: usize = 16_384;
+    if len >= FUSED_SMI_THRESHOLD
+        && crate::math::leading_warmup(high) == 0
+        && crate::math::leading_warmup(low) == 0
+    {
+        if let Some(result) = smi_finite_fused(high, low, close, p, fast, slow, signal) {
+            return Ok(result);
+        }
+    }
     let (hi, lo) = rolling_minmax(high, low, p);
-    let mut n = vec![f64::NAN; len];
-    let mut den = vec![f64::NAN; len];
+    const UNINIT_OUTPUT_THRESHOLD: usize = 16_384;
+    let use_uninit = len >= UNINIT_OUTPUT_THRESHOLD;
+    let mut n = if use_uninit {
+        crate::utils::uninit_output(len)
+    } else {
+        vec![f64::NAN; len]
+    };
+    let mut den = if use_uninit {
+        crate::utils::uninit_output(len)
+    } else {
+        vec![f64::NAN; len]
+    };
+    if use_uninit {
+        n[..p - 1].fill(f64::NAN);
+        den[..p - 1].fill(f64::NAN);
+    }
     for i in p - 1..len {
         n[i] = close[i] - (hi[i] + lo[i]) * 0.5;
         den[i] = hi[i] - lo[i];
     }
     let ns = ema(&n[p - 1..], slow)?;
     let ds = ema(&den[p - 1..], slow)?;
-    let nsv = ns.to_vec();
-    let dsv = ds.to_vec();
-    let nf = ema(&nsv[slow - 1..], fast)?;
-    let df = ema(&dsv[slow - 1..], fast)?;
-    let mut raw = vec![f64::NAN; len];
+    // EMA outputs are already contiguous; borrow their tails instead of
+    // cloning both complete intermediate arrays into temporary Vecs.
+    let nf = ema(
+        &ns.as_slice().expect("EMA output is contiguous")[slow - 1..],
+        fast,
+    )?;
+    let df = ema(
+        &ds.as_slice().expect("EMA output is contiguous")[slow - 1..],
+        fast,
+    )?;
     let base = p - 1 + slow - 1 + fast - 1;
+    let mut raw = if use_uninit {
+        crate::utils::uninit_output(len)
+    } else {
+        vec![f64::NAN; len]
+    };
+    if use_uninit {
+        raw[..base].fill(f64::NAN);
+    }
     for i in fast - 1..nf.len() {
         let idx = base + i - (fast - 1);
         if idx >= len {
@@ -1274,8 +1506,21 @@ pub fn smi(
         };
     }
     let sig = ema(&raw[base..], signal)?;
-    let mut smi = init_output(len);
-    let mut line = init_output(len);
+    let mut smi = if use_uninit {
+        Array1::from(crate::utils::uninit_output(len))
+    } else {
+        init_output(len)
+    };
+    let mut line = if use_uninit {
+        Array1::from(crate::utils::uninit_output(len))
+    } else {
+        init_output(len)
+    };
+    if use_uninit {
+        let valid_start = base + signal - 1;
+        smi.as_slice_mut().unwrap()[..valid_start].fill(f64::NAN);
+        line.as_slice_mut().unwrap()[..valid_start].fill(f64::NAN);
+    }
     for i in signal - 1..sig.len() {
         let idx = base + i;
         if idx < len {
@@ -1286,6 +1531,126 @@ pub fn smi(
     Ok(SmiResult {
         smi,
         smisignal: line,
+    })
+}
+
+/// Stream rolling extrema, the two double-EMA legs, raw SMI, and the signal
+/// EMA without materializing any full-length intermediate series. Returns
+/// `None` when the inputs require the established batch path (for example a
+/// leading warm-up or a non-finite EMA input).
+fn smi_finite_fused(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    p: usize,
+    fast: usize,
+    slow: usize,
+    signal: usize,
+) -> Option<SmiResult> {
+    let len = close.len();
+    let base = p - 1 + slow - 1 + fast - 1;
+    let valid_start = base + signal - 1;
+    let mut smi = crate::utils::uninit_output(len);
+    let mut smisignal = crate::utils::uninit_output(len);
+    smi[..valid_start].fill(f64::NAN);
+    smisignal[..valid_start].fill(f64::NAN);
+
+    let alpha_slow = crate::utils::smoothing_factor(slow);
+    let alpha_fast = crate::utils::smoothing_factor(fast);
+    let alpha_signal = crate::utils::smoothing_factor(signal);
+    let mut slow_seed_n = Vec::with_capacity(slow);
+    let mut slow_seed_d = Vec::with_capacity(slow);
+    let mut fast_seed_n = Vec::with_capacity(fast);
+    let mut fast_seed_d = Vec::with_capacity(fast);
+    let mut signal_seed = Vec::with_capacity(signal);
+    let mut slow_n = 0.0;
+    let mut slow_d = 0.0;
+    let mut fast_n = 0.0;
+    let mut fast_d = 0.0;
+    let mut signal_value = 0.0;
+    let mut valid = true;
+
+    crate::math::statistics::rolling_minmax_visit(high, low, p, |i, highest, lowest| {
+        if !valid {
+            return;
+        }
+
+        let numerator = close[i] - (highest + lowest) * 0.5;
+        let denominator = highest - lowest;
+        if !numerator.is_finite() || !denominator.is_finite() {
+            valid = false;
+            return;
+        }
+
+        let (slow_n_value, slow_d_value) = if slow_seed_n.len() < slow {
+            slow_seed_n.push(numerator);
+            slow_seed_d.push(denominator);
+            if slow_seed_n.len() < slow {
+                return;
+            }
+            slow_n = crate::math::moving_avg::simd_horizontal_sum(&slow_seed_n) / slow as f64;
+            slow_d = crate::math::moving_avg::simd_horizontal_sum(&slow_seed_d) / slow as f64;
+            if !slow_n.is_finite() || !slow_d.is_finite() {
+                valid = false;
+                return;
+            }
+            (slow_n, slow_d)
+        } else {
+            slow_n = (numerator - slow_n).mul_add(alpha_slow, slow_n);
+            slow_d = (denominator - slow_d).mul_add(alpha_slow, slow_d);
+            if !slow_n.is_finite() || !slow_d.is_finite() {
+                valid = false;
+                return;
+            }
+            (slow_n, slow_d)
+        };
+
+        let (fast_n_value, fast_d_value) = if fast_seed_n.len() < fast {
+            fast_seed_n.push(slow_n_value);
+            fast_seed_d.push(slow_d_value);
+            if fast_seed_n.len() < fast {
+                return;
+            }
+            fast_n = crate::math::moving_avg::simd_horizontal_sum(&fast_seed_n) / fast as f64;
+            fast_d = crate::math::moving_avg::simd_horizontal_sum(&fast_seed_d) / fast as f64;
+            (fast_n, fast_d)
+        } else {
+            fast_n = (slow_n_value - fast_n).mul_add(alpha_fast, fast_n);
+            fast_d = (slow_d_value - fast_d).mul_add(alpha_fast, fast_d);
+            (fast_n, fast_d)
+        };
+
+        let denom = fast_d_value * 0.5;
+        let raw = if denom == 0.0 {
+            0.0
+        } else {
+            100.0 * fast_n_value / denom
+        };
+        if !raw.is_finite() {
+            valid = false;
+            return;
+        }
+
+        if signal_seed.len() < signal {
+            signal_seed.push(raw);
+            if signal_seed.len() < signal {
+                return;
+            }
+            signal_value =
+                crate::math::moving_avg::simd_horizontal_sum(&signal_seed) / signal as f64;
+        } else {
+            signal_value = (raw - signal_value).mul_add(alpha_signal, signal_value);
+        }
+        smi[i] = raw;
+        smisignal[i] = signal_value;
+    });
+
+    if !valid {
+        return None;
+    }
+    Some(SmiResult {
+        smi: Array1::from_vec(smi),
+        smisignal: Array1::from_vec(smisignal),
     })
 }
 
@@ -1335,19 +1700,30 @@ pub fn vhf(input: &[f64], p: usize) -> Result<Array1<f64>> {
 pub fn wad(high: &[f64], low: &[f64], close: &[f64]) -> Result<Array1<f64>> {
     let len = same_len("high, low, close", &[high, low, close])?;
     validate_input(len, 1)?;
-    let mut out = Vec::with_capacity(len);
-    out.push(f64::NAN);
+    // The recurrence writes every slot after the first warm-up value. Avoid
+    // the per-iteration Vec::push length/capacity bookkeeping and use zipped
+    // slices to avoid repeated bounds checks across the aligned inputs.
+    let mut out = crate::utils::uninit_output(len);
+    out[0] = f64::NAN;
+    let out_ptr = out.as_mut_ptr();
     let mut sum = 0.0;
-    for i in 1..len {
-        let prev = close[i - 1];
-        let tr_hi = high[i].max(prev);
-        let tr_lo = low[i].min(prev);
-        if close[i] > prev {
-            sum += close[i] - tr_lo;
-        } else if close[i] < prev {
-            sum += close[i] - tr_hi;
+    for (index, (((&previous, &current), &current_high), &current_low)) in close
+        .iter()
+        .zip(&close[1..])
+        .zip(&high[1..])
+        .zip(&low[1..])
+        .enumerate()
+    {
+        let true_high = current_high.max(previous);
+        let true_low = current_low.min(previous);
+        if current > previous {
+            sum += current - true_low;
+        } else if current < previous {
+            sum += current - true_high;
         }
-        out.push(sum);
+        // SAFETY: `len >= 1` is validated above and the zipped slices yield
+        // exactly `len - 1` iterations, covering every output slot after 0.
+        unsafe { out_ptr.add(index + 1).write(sum) };
     }
     Ok(Array1::from_vec(out))
 }
@@ -1357,7 +1733,7 @@ mod nan_safety_tests {
     use super::*;
 
     #[test]
-    fn wad_push_output_matches_initialized_reference() {
+    fn wad_output_matches_initialized_reference() {
         let mut high: Vec<f64> = (0..257)
             .map(|i| 100.0 + (i as f64 * 0.17).sin() * 3.0)
             .collect();

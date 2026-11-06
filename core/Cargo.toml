@@ -58,6 +58,90 @@ harness = false
 name = "talib_gap_probe"
 required-features = ["talib-c"]
 
+[[example]]
+name = "extrema_talib_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "morningstar_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "coppock_gate_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "cmf_gate_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "wad_output_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "cvi_gate_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "var_talib_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "aroon_monotone_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "math_transform_parallel_probe"
+required-features = ["rayon"]
+
+[[example]]
+name = "adx_batch_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "cdl_doji_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "cdl_inneck_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "cmo_recurrence_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "correl_batch_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "dx_direct_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "dm_batch_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "evening_doji_candidate"
+required-features = ["talib-c"]
+
+[[example]]
+name = "formula_correl_kernel_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "mfi_batch_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "pvt_gate_probe"
+required-features = ["talib-c"]
+
+[[example]]
+name = "sum_prefix_probe"
+required-features = ["talib-c"]
+
 [[bench]]
 name = "trend_bench"
 harness = false

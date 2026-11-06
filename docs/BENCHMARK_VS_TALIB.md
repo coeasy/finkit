@@ -187,17 +187,17 @@ Not allowed:
 
 Performance superiority must remain a reproducible result, not a permanent adjective.
 
-## Finkit 0.2.0 wheel vs TA-Lib Python 0.6.8 — measured parity snapshot
+## Finkit 0.3.0 wheel vs TA-Lib Python 0.6.8 — measured parity snapshot
 
 This is a **supplementary Python-binding parity check** distinct from the
-weekly C 0.8.1 Criterion gate above. It compares the shipped Finkit **0.2.0**
+weekly C 0.8.1 Criterion gate above. It compares the shipped Finkit **0.3.0**
 Python wheel against the `talib` **0.6.8** Python binding on identical synthetic
 OHLCV (`N = 5000`, `numpy.random.default_rng(42)`, clipped positive prices).
 Each indicator is computed twice and the maximum absolute difference over the
 finite post-warm-up region is reported. Reproduce with:
 
 ```bash
-python .workbuddy-ai/round6-talib-parity.py   # needs numpy + talib 0.6.8 + finkit 0.2.0 wheel
+python .workbuddy-ai/round6-talib-parity.py   # needs numpy + talib 0.6.8 + finkit 0.3.0 wheel
 ```
 
 | Indicator | `max|diff|` | tol | parity | Finkit (ms) | TA-Lib (ms) | speedup |

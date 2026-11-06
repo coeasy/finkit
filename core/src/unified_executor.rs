@@ -10,7 +10,9 @@ use crate::execution_plan::{HotExecutionPlan, KernelId, ParameterValue};
 use crate::runtime_context::{ExecutionKind, ExecutionLimits, RuntimeContext, RuntimeContextError};
 use crate::state_arena::{StateArena, StateSlot};
 use std::fmt;
+use std::ops::Deref;
 use std::ops::Range;
+use std::sync::Arc;
 
 /// One pre-resolved kernel invocation presented to a numeric dispatcher.
 #[derive(Debug, Clone, Copy)]
@@ -208,6 +210,11 @@ pub struct ExecutionOutput {
     pub values: Vec<Vec<f64>>,
 }
 
+enum RetainedOutput {
+    All(ExecutionOutput),
+    Primary(Vec<f64>),
+}
+
 impl ExecutionOutput {
     /// Number of retained outputs.
     pub fn len(&self) -> usize {
@@ -227,9 +234,25 @@ impl ExecutionOutput {
 /// keeps state for streaming use. Call [`Self::reset`] when starting a logically
 /// independent series.
 pub struct UnifiedExecutor<D> {
-    plan: HotExecutionPlan,
+    plan: ExecutorPlan,
     dispatcher: D,
     context: RuntimeContext,
+}
+
+enum ExecutorPlan {
+    Owned(HotExecutionPlan),
+    Shared(Arc<HotExecutionPlan>),
+}
+
+impl Deref for ExecutorPlan {
+    type Target = HotExecutionPlan;
+
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Owned(plan) => plan,
+            Self::Shared(plan) => plan,
+        }
+    }
 }
 
 impl<D: KernelDispatcher> UnifiedExecutor<D> {
@@ -262,7 +285,26 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
     ) -> Self {
         plan.state_layout().prepare(context.states_mut());
         Self {
-            plan,
+            plan: ExecutorPlan::Owned(plan),
+            dispatcher,
+            context,
+        }
+    }
+
+    /// Construct an executor that shares a compiled plan with its owner.
+    ///
+    /// This is useful when a frontend caches plans across calls but creates a
+    /// fresh dispatcher for each call because that dispatcher borrows the
+    /// current input context. Sharing the immutable plan avoids cloning its
+    /// node, input, output and parameter vectors on every evaluation.
+    pub fn with_shared_context(
+        plan: Arc<HotExecutionPlan>,
+        dispatcher: D,
+        mut context: RuntimeContext,
+    ) -> Self {
+        plan.state_layout().prepare(context.states_mut());
+        Self {
+            plan: ExecutorPlan::Shared(plan),
             dispatcher,
             context,
         }
@@ -278,6 +320,23 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
             .map(|input| input.len())
             .ok_or(ExecuteError::NoInputs)?;
         self.execute_range(inputs, 0..len)
+    }
+
+    /// Execute a single-output plan without allocating the outer output vector.
+    /// This is useful when the caller's API returns only the primary series.
+    pub fn execute_primary(&mut self, inputs: &[&[f64]]) -> Result<Vec<f64>, ExecuteError> {
+        let actual = self.plan.output_layout().len();
+        if actual != 1 {
+            return Err(ExecuteError::OutputCount {
+                expected: 1,
+                actual,
+            });
+        }
+        let len = validate_inputs(&self.plan, inputs)?.ok_or(ExecuteError::NoInputs)?;
+        match self.run_retained(inputs, 0..len, ExecutionKind::Full, true)? {
+            RetainedOutput::Primary(output) => Ok(output),
+            RetainedOutput::All(_) => unreachable!("primary execution retains one output"),
+        }
     }
 
     /// Execute one explicit half-open input range.
@@ -309,7 +368,10 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
         } else {
             ExecutionKind::Range
         };
-        self.run(inputs, range, kind)
+        match self.run_retained(inputs, range, kind, false)? {
+            RetainedOutput::All(output) => Ok(output),
+            RetainedOutput::Primary(_) => unreachable!("range execution retains all outputs"),
+        }
     }
 
     /// Execute only the final bound sample while preserving persistent state.
@@ -334,15 +396,24 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
                 len: 0,
             });
         }
-        self.run(inputs, common_len - 1..common_len, ExecutionKind::Last)
+        match self.run_retained(
+            inputs,
+            common_len - 1..common_len,
+            ExecutionKind::Last,
+            false,
+        )? {
+            RetainedOutput::All(output) => Ok(output),
+            RetainedOutput::Primary(_) => unreachable!("last execution retains all outputs"),
+        }
     }
 
-    fn run(
+    fn run_retained(
         &mut self,
         inputs: &[&[f64]],
         range: Range<usize>,
         kind: ExecutionKind,
-    ) -> Result<ExecutionOutput, ExecuteError> {
+        primary_only: bool,
+    ) -> Result<RetainedOutput, ExecuteError> {
         let logical_len = range.end - range.start;
         if let Some(slot) = self.plan.output_layout().duplicate_slot() {
             return Err(ExecuteError::AliasedOutput(slot));
@@ -353,18 +424,40 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
         let node_count = self.plan.nodes().len();
 
         let layout = self.plan.buffer_layout();
-        let mut buffers = layout.take_buffers(self.context.buffers_mut(), logical_len);
-        let buffers_taken = buffers.len();
-
-        let outcome = Self::dispatch_nodes(
-            &self.plan,
-            &mut self.dispatcher,
-            inputs,
-            &range,
-            &mut buffers,
-            self.context.states_mut(),
-        );
-        layout.recycle_buffers(self.context.buffers_mut(), buffers);
+        const INLINE_BUFFER_SLOTS: usize = 32;
+        let buffers_taken = layout.slot_count();
+        let outcome = if buffers_taken <= INLINE_BUFFER_SLOTS {
+            // Most formula and indicator plans fit in this stack-backed slot
+            // table. Keep the actual series allocations in BufferArena, but
+            // avoid allocating a fresh outer Vec<Vec<f64>> on each evaluation.
+            let mut inline: [Vec<f64>; INLINE_BUFFER_SLOTS] = std::array::from_fn(|_| Vec::new());
+            let slots = &mut inline[..buffers_taken];
+            layout.take_buffers_into(self.context.buffers_mut(), logical_len, slots);
+            let outcome = Self::dispatch_nodes(
+                &self.plan,
+                &mut self.dispatcher,
+                inputs,
+                &range,
+                slots,
+                self.context.states_mut(),
+                primary_only,
+            );
+            layout.recycle_buffers_from(self.context.buffers_mut(), slots);
+            outcome
+        } else {
+            let mut buffers = layout.take_buffers(self.context.buffers_mut(), logical_len);
+            let outcome = Self::dispatch_nodes(
+                &self.plan,
+                &mut self.dispatcher,
+                inputs,
+                &range,
+                &mut buffers,
+                self.context.states_mut(),
+                primary_only,
+            );
+            layout.recycle_buffers(self.context.buffers_mut(), buffers);
+            outcome
+        };
 
         let (output, kernel_calls) = outcome?;
         self.context.record_execution(kind, node_count);
@@ -385,7 +478,8 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
         range: &Range<usize>,
         buffers: &mut [Vec<f64>],
         states: &mut StateArena,
-    ) -> Result<(ExecutionOutput, usize), ExecuteError> {
+        primary_only: bool,
+    ) -> Result<(RetainedOutput, usize), ExecuteError> {
         let mut kernel_calls = 0usize;
         for node in plan.nodes() {
             if let Some(input_slot) = plan.input_layout().slot(node.node) {
@@ -414,11 +508,29 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
             kernel_calls += 1;
         }
 
+        if primary_only {
+            let (_, slot) =
+                plan.output_layout()
+                    .outputs()
+                    .first()
+                    .ok_or(ExecuteError::OutputCount {
+                        expected: 1,
+                        actual: 0,
+                    })?;
+            return Ok((
+                RetainedOutput::Primary(std::mem::take(&mut buffers[slot.0])),
+                kernel_calls,
+            ));
+        }
+
         let mut values = Vec::with_capacity(plan.output_layout().len());
         for &(_, slot) in plan.output_layout().outputs() {
             values.push(std::mem::take(&mut buffers[slot.0]));
         }
-        Ok((ExecutionOutput { values }, kernel_calls))
+        Ok((
+            RetainedOutput::All(ExecutionOutput { values }),
+            kernel_calls,
+        ))
     }
 
     /// Execute and copy the retained outputs into caller-owned storage.
@@ -524,12 +636,12 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
     ///
     /// Scratch-buffer cache allocations remain reusable across compatible lengths.
     pub fn rebind(&mut self, plan: HotExecutionPlan) {
-        self.plan = plan;
+        self.plan = ExecutorPlan::Owned(plan);
         self.reset();
     }
 
     /// Current immutable numeric plan.
-    pub const fn plan(&self) -> &HotExecutionPlan {
+    pub fn plan(&self) -> &HotExecutionPlan {
         &self.plan
     }
 
@@ -546,6 +658,11 @@ impl<D: KernelDispatcher> UnifiedExecutor<D> {
     /// Mutable runtime context (limits, diagnostics, metrics).
     pub const fn context_mut(&mut self) -> &mut RuntimeContext {
         &mut self.context
+    }
+
+    /// Consume the executor and return its reusable runtime arenas.
+    pub(crate) fn into_context(self) -> RuntimeContext {
+        self.context
     }
 
     /// Persistent state arena used by streaming/stateful kernels.

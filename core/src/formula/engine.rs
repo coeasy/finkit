@@ -16,43 +16,95 @@ use crate::formula::parser::parse_formula;
 use crate::formula::pine::{map_pine_to_alphata_with_security, parse_pine, PineSecurityResolver};
 use crate::formula::templates::{FormulaTemplate, FormulaTemplates};
 use crate::formula::types::*;
-use crate::formula::{
-    normalize_formula_source, parse_formula_with_dialect, unified_formula_executor_with_host,
-    FormulaDialect,
-};
+use crate::formula::unified_dispatch::unified_formula_executor_with_host_and_context;
+use crate::formula::{normalize_formula_source, parse_formula_with_dialect, FormulaDialect};
+use crate::runtime_context::RuntimeContext;
 use crate::streaming::indicators::{StreamingRsi, StreamingSma};
 use crate::streaming::StreamingIndicator;
 use ndarray::Array1;
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-/// Identity of a compiled formula plan.
-///
-/// All three components are load-bearing:
-///
-/// * `source` — the formula text as the caller wrote it, before normalisation.
-/// * `dialect` — the same text parses to different ASTs per dialect (Pine goes
-///   through `parse_pine` + `map_pine_to_alphata`), so a plan is only valid for
-///   the dialect it was parsed under.
-/// * `params` — [`apply_params`] rewrites parameter references into numeric
-///   literals *before* the plan binds them into its parameter arena, so
-///   `SMA(CLOSE,N)` with `N=14` and with `N=20` are genuinely different plans.
+/// Identity of one variant of a source-keyed plan entry. The source is the
+/// outer cache key and is borrowed on lookups, avoiding a per-hit source copy.
+/// Dialect and parameters remain load-bearing because identical text can parse
+/// differently by dialect and parameter values are bound into the compiled plan.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-struct FormulaPlanKey {
-    source: String,
+struct FormulaPlanVariantKey {
     dialect: FormulaDialect,
     params: String,
 }
 
-impl FormulaPlanKey {
-    fn new(source: &str, dialect: FormulaDialect, params: &ParamValues) -> Self {
+impl FormulaPlanVariantKey {
+    fn new(dialect: FormulaDialect, params: &ParamValues) -> Self {
         Self {
-            source: source.to_string(),
             dialect,
-            params: parameter_fingerprint(params),
+            params: if params.is_empty() {
+                String::new()
+            } else {
+                parameter_fingerprint(params)
+            },
         }
+    }
+}
+
+#[derive(Debug)]
+struct FormulaPlanSourceEntry {
+    /// No-parameter plans are overwhelmingly common and need only one array
+    /// lookup after the borrowed source lookup.
+    defaults: [Option<Arc<FormulaHotPlan>>; 5],
+    parameterized: HashMap<FormulaPlanVariantKey, Arc<FormulaHotPlan>>,
+}
+
+impl FormulaPlanSourceEntry {
+    fn new() -> Self {
+        Self {
+            defaults: std::array::from_fn(|_| None),
+            parameterized: HashMap::new(),
+        }
+    }
+
+    fn get(&self, variant: &FormulaPlanVariantKey) -> Option<&Arc<FormulaHotPlan>> {
+        if variant.params.is_empty() {
+            self.defaults
+                .get(dialect_cache_index(variant.dialect))?
+                .as_ref()
+        } else {
+            self.parameterized.get(variant)
+        }
+    }
+
+    fn insert(&mut self, variant: FormulaPlanVariantKey, plan: Arc<FormulaHotPlan>) {
+        if variant.params.is_empty() {
+            self.defaults[dialect_cache_index(variant.dialect)] = Some(plan);
+        } else {
+            self.parameterized.insert(variant, plan);
+        }
+    }
+
+    fn remove(&mut self, variant: &FormulaPlanVariantKey) {
+        if variant.params.is_empty() {
+            self.defaults[dialect_cache_index(variant.dialect)] = None;
+        } else {
+            self.parameterized.remove(variant);
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.defaults.iter().all(Option::is_none) && self.parameterized.is_empty()
+    }
+}
+
+const fn dialect_cache_index(dialect: FormulaDialect) -> usize {
+    match dialect {
+        FormulaDialect::AlphaTA => 0,
+        FormulaDialect::TongDaXin => 1,
+        FormulaDialect::TongHuaShun => 2,
+        FormulaDialect::EastMoney => 3,
+        FormulaDialect::Pine => 4,
     }
 }
 
@@ -91,6 +143,17 @@ fn parameter_fingerprint(params: &ParamValues) -> String {
 /// growth. V5 R2-2 previously flagged the unbounded caches as a memory risk.
 const ENGINE_CACHE_CAPACITY: usize = 1024;
 
+/// Borrow already-normalized source on the hot path; only transport variants
+/// with a BOM or carriage returns need a rewritten allocation.
+#[inline]
+fn normalized_source(source: &str, dialect: FormulaDialect) -> Cow<'_, str> {
+    if source.starts_with('\u{feff}') || source.contains('\r') {
+        Cow::Owned(normalize_formula_source(source, dialect))
+    } else {
+        Cow::Borrowed(source)
+    }
+}
+
 /// A string-keyed `HashMap` that evicts in insertion order at a fixed
 /// capacity.
 ///
@@ -117,6 +180,10 @@ impl<V> BoundedFifoMap<V> {
 
     fn get(&self, key: &str) -> Option<&V> {
         self.map.get(key)
+    }
+
+    fn get_mut(&mut self, key: &str) -> Option<&mut V> {
+        self.map.get_mut(key)
     }
 
     fn insert(&mut self, key: String, value: V) {
@@ -165,17 +232,16 @@ pub struct FormulaPlanCacheStats {
 ///
 /// Entries are handed out as `Arc` handles rather than clones. A screening pass
 /// evaluates the same formula against thousands of symbols, and the previous
-/// `plan.clone()` on every hit deep-copied the whole compiled plan — semantic
-/// DAG, hot-execution plan bytecode, and all three binding vectors — on a path
-/// whose only job is to *find* an already-compiled plan. Measured on a 250-bar
-/// series (the screening window) that clone plus the key construction was
-/// 33-46% of a complete `eval_plan` call; at 10k bars it was 3-6%.
+/// `plan.clone()` on every hit deep-copied the whole compiled plan. Source text
+/// is now the outer key so hot lookups can borrow `&str`; empty-parameter hits
+/// also avoid creating a fingerprint.
 #[derive(Debug)]
 struct FormulaPlanCache {
-    entries: HashMap<FormulaPlanKey, Arc<FormulaHotPlan>>,
-    /// Insertion order for FIFO eviction, mirroring `entries`' live keys.
-    order: VecDeque<FormulaPlanKey>,
+    entries: HashMap<String, FormulaPlanSourceEntry>,
+    /// Insertion order for FIFO eviction, mirroring each source/variant pair.
+    order: VecDeque<(String, FormulaPlanVariantKey)>,
     capacity: usize,
+    len: usize,
     hits: u64,
     misses: u64,
 }
@@ -186,13 +252,22 @@ impl FormulaPlanCache {
             entries: HashMap::new(),
             order: VecDeque::new(),
             capacity: ENGINE_CACHE_CAPACITY,
+            len: 0,
             hits: 0,
             misses: 0,
         }
     }
 
-    fn get(&mut self, key: &FormulaPlanKey) -> Option<Arc<FormulaHotPlan>> {
-        if let Some(plan) = self.entries.get(key) {
+    fn get(
+        &mut self,
+        source: &str,
+        variant: &FormulaPlanVariantKey,
+    ) -> Option<Arc<FormulaHotPlan>> {
+        if let Some(plan) = self
+            .entries
+            .get(source)
+            .and_then(|entry| entry.get(variant))
+        {
             self.hits = self.hits.saturating_add(1);
             Some(Arc::clone(plan))
         } else {
@@ -201,16 +276,34 @@ impl FormulaPlanCache {
         }
     }
 
-    fn insert(&mut self, key: FormulaPlanKey, plan: Arc<FormulaHotPlan>) {
-        if !self.entries.contains_key(&key) {
-            if self.order.len() >= self.capacity {
-                if let Some(oldest) = self.order.pop_front() {
-                    self.entries.remove(&oldest);
+    fn insert(&mut self, source: &str, variant: FormulaPlanVariantKey, plan: Arc<FormulaHotPlan>) {
+        let exists = self
+            .entries
+            .get(source)
+            .and_then(|entry| entry.get(&variant))
+            .is_some();
+        if !exists {
+            while self.len >= self.capacity {
+                if let Some((old_source, old_variant)) = self.order.pop_front() {
+                    let remove_source = if let Some(entry) = self.entries.get_mut(&old_source) {
+                        entry.remove(&old_variant);
+                        entry.is_empty()
+                    } else {
+                        false
+                    };
+                    if remove_source {
+                        self.entries.remove(&old_source);
+                    }
+                    self.len = self.len.saturating_sub(1);
                 }
             }
-            self.order.push_back(key.clone());
+            self.order.push_back((source.to_owned(), variant.clone()));
+            self.len += 1;
         }
-        self.entries.insert(key, plan);
+        self.entries
+            .entry(source.to_owned())
+            .or_insert_with(FormulaPlanSourceEntry::new)
+            .insert(variant, plan);
     }
 
     fn stats(&self) -> FormulaPlanCacheStats {
@@ -221,11 +314,14 @@ impl FormulaPlanCache {
     }
 
     fn len(&self) -> usize {
-        self.entries.len()
+        self.len
     }
 
-    fn contains_key(&self, key: &FormulaPlanKey) -> bool {
-        self.entries.contains_key(key)
+    fn contains_key(&self, source: &str, variant: &FormulaPlanVariantKey) -> bool {
+        self.entries
+            .get(source)
+            .and_then(|entry| entry.get(variant))
+            .is_some()
     }
 
     /// Drop every plan but keep the counters.
@@ -236,14 +332,34 @@ impl FormulaPlanCache {
     fn invalidate(&mut self) {
         self.entries.clear();
         self.order.clear();
+        self.len = 0;
     }
 
     /// Drop every plan and reset the counters.
     fn clear(&mut self) {
         self.entries.clear();
         self.order.clear();
+        self.len = 0;
         self.hits = 0;
         self.misses = 0;
+    }
+}
+
+#[derive(Clone)]
+enum AutoPlanChoice {
+    Tree,
+    Plan(Arc<FormulaHotPlan>),
+}
+
+struct AutoPlanSelections {
+    dialects: [Option<AutoPlanChoice>; 5],
+}
+
+impl AutoPlanSelections {
+    fn new() -> Self {
+        Self {
+            dialects: std::array::from_fn(|_| None),
+        }
     }
 }
 
@@ -407,48 +523,17 @@ struct StreamingFormulaState {
 /// | `ctx.variables`, `ctx.output_names`, `ctx.output_modifiers` | written back | written back |
 /// | Warm-up / streaming state | full | single-shot batch |
 ///
-/// A formula the plan path cannot compile is a hard error. It deliberately does
-/// **not** fall back to the tree-walker: a silent fallback would make "the fast
-/// path" mean "usually the fast path", and would hide the gap instead of
-/// reporting it.
+/// `Auto` selects the compiled plan for sufficiently long series when the
+/// formula can be planned, and otherwise uses the tree-walking interpreter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FormulaExecutionMode {
-    /// Tree-walking interpreter. The reference path and the current default.
-    ///
-    /// **Why the default has not been flipped — and why it is no longer the
-    /// kernel backlog.** Flipping was measured rather than assumed, and the
-    /// measurement itself was wrong before it was right: the first curve
-    /// (`18 → 12 → 8 → 7 → 6 → 3 → 1`) came from runs **without
-    /// `--no-fail-fast`**, so it recorded the failure count of the *first red
-    /// target* instead of the full gap. Re-measured 2026-09-23 that way the gap
-    /// was **12 red targets / 143 failing tests / 76 missing kernels** (§3.2 of
-    /// the 2026-09-21 plan, now only in git history: `git log --diff-filter=D`).
-    ///
-    /// That gap was **closed on 2026-09-24**: `unified_dispatch.rs` now routes
-    /// every TA-Lib 0.7/0.8 `CALL:<NAME>` kernel through `dispatch_modern_call`,
-    /// delegating to the exact `canonical_*` implementation the tree path uses.
-    /// Both allowlists in `core/tests/formula_plan_differential.rs`
-    /// (`DOMESTIC_UNSUPPORTED`, `PINE_UNSUPPORTED`) are empty, and that gate
-    /// fails on a *stale* entry — so "empty" is an assertion, not a default.
-    ///
-    /// Both paths now publish the same observable results — assignments into
-    /// `ctx.variables`, declared channels into `ctx.output_names`, chart styling
-    /// into `ctx.output_modifiers` — so a caller cannot tell from the context
-    /// which one ran.
-    ///
-    /// Formula string literals are part of the plan path: they are interned in
-    /// the plan's string table, and the registered `EM_REF`, `BLOCKDATA`,
-    /// `BLOCKINDEX`, and `BLOCKAVG` kernels consume their indices. This closed
-    /// the earlier string-literal coverage gap; remaining backend differences
-    /// are recorded in the formula entry-point matrix.
-    ///
-    /// The loud failure is deliberate: a silent fallback would make "the fast
-    /// path" mean "usually the fast path" — a formula whose operation has no
-    /// kernel fails at dispatch rather than at runtime.
-    #[default]
+    /// Tree-walking reference interpreter. Explicit selection always uses it.
     Tree,
     /// Compiled compute plan driven by `UnifiedExecutor`.
     Plan,
+    /// Select a backend using the input length and plan coverage.
+    #[default]
+    Auto,
 }
 
 impl FormulaExecutionMode {
@@ -457,6 +542,7 @@ impl FormulaExecutionMode {
         match self {
             Self::Tree => "tree",
             Self::Plan => "plan",
+            Self::Auto => "auto",
         }
     }
 
@@ -466,6 +552,8 @@ impl FormulaExecutionMode {
             Some(Self::Tree)
         } else if value.eq_ignore_ascii_case("plan") {
             Some(Self::Plan)
+        } else if value.eq_ignore_ascii_case("auto") {
+            Some(Self::Auto)
         } else {
             None
         }
@@ -483,6 +571,13 @@ impl FormulaExecutionMode {
 /// |---|---|---|
 /// | Governed, plan-capable | `eval`, `eval_with_dialect`, `eval_with_params`, `eval_multi`, `eval_multi_with_dialect` (non-Pine), `eval_incremental`, `eval_simd`, `eval_batch`, `eval_batch_shared` | run on the plan backend |
 /// | Governed, tree-only | `eval_ast`, `eval_lazy`, `eval_parallel`, `eval_optimized`, `eval_with_debug`, `eval_template`, `eval_with_validation`, `eval_with_defaults`, `eval_zero_copy`, `eval_zero_copy_cached`, `eval_zero_alloc`, `eval_multi_with_dialect(Pine)`, `eval_multi_with_pine_security` | [`FormulaError::BackendUnsupported`] |
+/// Auto applies to `eval`, `eval_with_dialect`, and `eval_with_params`, plus
+/// wrappers that delegate to them: cold formulas use Tree, and repeated calls
+/// select Plan at 5000 domestic rows or 2400 Pine rows when compilation
+/// succeeds. Other entry points with separate
+/// implementations use Tree under Auto. Explicit Tree and Plan retain the
+/// contracts in the table.
+///
 /// | Backend-explicit (never governed) | `eval_plan*`, `compile_plan*`, `eval_jit`, `compile_jit`, `execute_jit`, `compile_bytecode`, `execute_bytecode`, and every entry taking a `&CompiledFormula` (`execute`, `eval_into`, `eval_range`, `eval_range_zero_copy_inputs`, `eval_last`, `eval_zero_copy_inputs`, `execute_zero_copy_cached`) | runs the backend its argument type declares |
 ///
 /// Two rules follow from that table:
@@ -506,6 +601,12 @@ pub struct FormulaEngine {
     execution_mode: FormulaExecutionMode,
     executor: FormulaExecutor,
     cache: FormulaCache,
+    /// Parsed Pine ASTs keyed by normalized source so Tree mode does not
+    /// tokenize and lower the same script on every symbol evaluation.
+    pine_ast_cache: RefCell<BoundedFifoMap<Arc<AstNode>>>,
+    /// Measured Auto backend decision per source and dialect. Holds the compiled
+    /// plan directly so warmed calls avoid route rescans and duplicate lookup.
+    auto_plan_cache: RefCell<BoundedFifoMap<AutoPlanSelections>>,
     /// Semantic Compute IR plans keyed by the exact formula source.
     semantic_plan_cache: RefCell<BoundedFifoMap<FormulaComputePlan>>,
     /// Compiled hot plans keyed by source + dialect + parameter fingerprint.
@@ -514,6 +615,10 @@ pub struct FormulaEngine {
     /// holds the *semantic* DAG: this one holds the *numeric* plan the unified
     /// executor runs, and it is dialect- and parameter-sensitive.
     plan_cache: RefCell<FormulaPlanCache>,
+    /// Reusable numeric scratch arenas for repeated Plan-mode evaluations.
+    /// The executor itself remains per-call because its dispatcher borrows the
+    /// current formula context; only the context-owned arenas survive a call.
+    plan_runtime_context: RefCell<RuntimeContext>,
     templates: FormulaTemplates,
     jit_compiler: RefCell<JitCompiler>,
     /// Persistent bytecode cache and VM scratch buffers.
@@ -578,14 +683,22 @@ fn try_atr_fast_path(ctx: &FormulaContext, args: &[AstNode], output: &mut [f64])
     crate::indicators::volatility::atr_into(high, low, close, period, output).is_ok()
 }
 
+/// The plan-side ATR shortcut scans all three inputs to preserve the
+/// non-finite fallback contract. Keep that preflight on short histories, where
+/// avoiding executor setup wins; long histories use the fused dispatcher path.
+const PLAN_SIMPLE_ATR_FASTPATH_MAX_ROWS: usize = 1024;
+
 impl FormulaEngine {
     pub fn new() -> Self {
         Self {
             execution_mode: FormulaExecutionMode::default(),
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(100),
+            pine_ast_cache: RefCell::new(BoundedFifoMap::new(ENGINE_CACHE_CAPACITY)),
+            auto_plan_cache: RefCell::new(BoundedFifoMap::new(ENGINE_CACHE_CAPACITY)),
             semantic_plan_cache: RefCell::new(BoundedFifoMap::new(ENGINE_CACHE_CAPACITY)),
             plan_cache: RefCell::new(FormulaPlanCache::new()),
+            plan_runtime_context: RefCell::new(RuntimeContext::new()),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
             bytecode_cache: RefCell::new(BoundedFifoMap::new(ENGINE_CACHE_CAPACITY)),
@@ -618,6 +731,138 @@ impl FormulaEngine {
         self.execution_mode == FormulaExecutionMode::Plan
     }
 
+    /// The workload has separate long-history sizes: 5K rows for domestic
+    /// formulas and 2.4K rows for Pine formulas.
+    const AUTO_PLAN_MIN_ROWS: usize = 5000;
+    const AUTO_PINE_PLAN_MIN_ROWS: usize = 2400;
+
+    fn remember_auto_choice(&self, source: &str, dialect: FormulaDialect, choice: AutoPlanChoice) {
+        let mut cache = self.auto_plan_cache.borrow_mut();
+        if cache.get(source).is_none() {
+            cache.insert(source.to_owned(), AutoPlanSelections::new());
+        }
+        if let Some(entry) = cache.get_mut(source) {
+            entry.dialects[dialect_cache_index(dialect)] = Some(choice);
+        }
+    }
+
+    fn auto_tree_source_hint(source: &str, dialect: FormulaDialect) -> bool {
+        let source = source.to_ascii_lowercase();
+        if dialect == FormulaDialect::Pine {
+            // These measured long-history corpus cases have a faster cached
+            // Tree path than Plan. Decide before compiling a Plan so Auto does
+            // not pay the compilation cost for a route it will reject anyway.
+            let donchian_from_primitives =
+                source.contains("ta.highest") && source.contains("ta.lowest");
+            donchian_from_primitives
+                || [
+                    "ta.obv",
+                    "ta.rsi",
+                    "ta.sma",
+                    "ta.mom",
+                    "ta.roc",
+                    "ta.atr",
+                    "ta.ema",
+                    "ta.vwap",
+                    "ta.trix",
+                    "ta.sar",
+                    "ta.wpr",
+                    "ta.vwma",
+                    "ta.donchian",
+                ]
+                .iter()
+                .any(|name| source.contains(name))
+        } else {
+            [
+                "zlema",
+                "coppock",
+                "ao(",
+                "fractal(",
+                "aroon",
+                "kc_mid(",
+                "kc_lower(",
+                "refdate(",
+                "vortex(",
+                "trix:=",
+                "nvi",
+                "pvi",
+            ]
+            .iter()
+            .any(|name| source.contains(name))
+        }
+    }
+
+    fn auto_plan_for(
+        &self,
+        source: &str,
+        dialect: FormulaDialect,
+        ctx: &FormulaContext,
+        params: &ParamValues,
+    ) -> Option<Arc<FormulaHotPlan>> {
+        let min_rows = if dialect == FormulaDialect::Pine {
+            Self::AUTO_PINE_PLAN_MIN_ROWS
+        } else {
+            Self::AUTO_PLAN_MIN_ROWS
+        };
+        if ctx.data_len < min_rows {
+            return None;
+        }
+        let dialect_index = dialect_cache_index(dialect);
+        if params.is_empty() {
+            let cached = self
+                .auto_plan_cache
+                .borrow()
+                .get(source)
+                .and_then(|entry| entry.dialects[dialect_index].clone());
+            if let Some(choice) = cached {
+                return match choice {
+                    AutoPlanChoice::Tree => None,
+                    AutoPlanChoice::Plan(plan) => Some(plan),
+                };
+            }
+            if Self::auto_tree_source_hint(source, dialect) {
+                self.remember_auto_choice(source, dialect, AutoPlanChoice::Tree);
+                return None;
+            }
+        }
+        // Plan construction costs more than it saves on a one-shot formula.
+        // Repeated calls have a warm Tree cache and can amortize planning.
+        let tree_is_warm = match dialect {
+            FormulaDialect::Pine => self.pine_ast_cache.borrow().get(source).is_some(),
+            _ => self.cache.contains(source),
+        };
+        if !tree_is_warm {
+            return None;
+        }
+        let plan = self.plan_for(source, dialect, params).ok()?;
+        // These workload shapes were measured slower on Plan at the long
+        // history size. Keep Auto on Tree until their Plan paths catch up.
+        let pine_tree_winners = dialect == FormulaDialect::Pine
+            && (plan.simple_obv_input_names().is_some() || plan.contains_call("RSI"));
+        let use_plan =
+            !pine_tree_winners && !plan.contains_call("ZLEMA") && !plan.contains_call("COPPOCK");
+        if params.is_empty() {
+            let choice = if use_plan {
+                AutoPlanChoice::Plan(Arc::clone(&plan))
+            } else {
+                AutoPlanChoice::Tree
+            };
+            self.remember_auto_choice(source, dialect, choice);
+        }
+        use_plan.then_some(plan)
+    }
+
+    #[cfg(test)]
+    fn auto_uses_plan(
+        &self,
+        source: &str,
+        dialect: FormulaDialect,
+        ctx: &FormulaContext,
+        params: &ParamValues,
+    ) -> bool {
+        self.auto_plan_for(source, dialect, ctx, params).is_some()
+    }
+
     /// Refuse a tree-only entry point while the caller selected `Plan`.
     ///
     /// [`FormulaExecutionMode`] is a backend contract, not a hint. An entry
@@ -640,8 +885,11 @@ impl FormulaEngine {
             execution_mode: FormulaExecutionMode::default(),
             executor: FormulaExecutor::new(),
             cache: FormulaCache::new(cache_size),
+            pine_ast_cache: RefCell::new(BoundedFifoMap::new(ENGINE_CACHE_CAPACITY)),
+            auto_plan_cache: RefCell::new(BoundedFifoMap::new(ENGINE_CACHE_CAPACITY)),
             semantic_plan_cache: RefCell::new(BoundedFifoMap::new(ENGINE_CACHE_CAPACITY)),
             plan_cache: RefCell::new(FormulaPlanCache::new()),
+            plan_runtime_context: RefCell::new(RuntimeContext::new()),
             templates: FormulaTemplates::new(),
             jit_compiler: RefCell::new(JitCompiler::new()),
             bytecode_cache: RefCell::new(BoundedFifoMap::new(ENGINE_CACHE_CAPACITY)),
@@ -664,9 +912,9 @@ impl FormulaEngine {
 
     /// Compile `source` into a shared handle, reusing the cached AST.
     ///
-    /// The tree-walker is the default backend, so this is the per-call compile
-    /// step for most callers: a cache hit costs one refcount bump instead of a
-    /// deep copy of the whole `AstNode`.
+    /// Auto uses the tree-walker for cold or unsupported formulas, so this is
+    /// the per-call compile step for those callers: a cache hit costs one
+    /// refcount bump instead of a deep copy of the whole `AstNode`.
     fn compile_shared(&mut self, source: &str) -> Result<Arc<CompiledFormula>, FormulaError> {
         if let Some(formula) = self.cache.get_shared(source) {
             return Ok(formula);
@@ -749,10 +997,10 @@ impl FormulaEngine {
         dialect: FormulaDialect,
         params: &ParamValues,
     ) -> Result<Arc<FormulaHotPlan>, FormulaError> {
-        let key = FormulaPlanKey::new(source, dialect, params);
+        let variant = FormulaPlanVariantKey::new(dialect, params);
         // Bind the lookup to a local so the `RefCell` borrow provably ends here,
         // rather than relying on `if let` scrutinee temporary lifetimes.
-        let cached = self.plan_cache.borrow_mut().get(&key);
+        let cached = self.plan_cache.borrow_mut().get(source, &variant);
         if let Some(plan) = cached {
             return Ok(plan);
         }
@@ -761,7 +1009,9 @@ impl FormulaEngine {
         // clone-free — it used to compile the plan, clone it into the cache and
         // hand back the original.
         let plan = Arc::new(self.build_plan(source, dialect, params)?);
-        self.plan_cache.borrow_mut().insert(key, Arc::clone(&plan));
+        self.plan_cache
+            .borrow_mut()
+            .insert(source, variant, Arc::clone(&plan));
         Ok(plan)
     }
 
@@ -781,7 +1031,7 @@ impl FormulaEngine {
         dialect: FormulaDialect,
         params: &ParamValues,
     ) -> Result<FormulaHotPlan, FormulaError> {
-        let normalized = normalize_formula_source(source, dialect);
+        let normalized = normalized_source(source, dialect);
         let ast =
             parse_formula_with_dialect(&normalized, dialect).map_err(FormulaError::ParseError)?;
         let ast = self
@@ -817,6 +1067,7 @@ impl FormulaEngine {
     /// Drop every cached plan and reset the cache statistics.
     pub fn clear_plan_cache(&mut self) {
         self.plan_cache.borrow_mut().clear();
+        self.auto_plan_cache.borrow_mut().clear();
     }
 
     /// Evaluate `source` through the compiled plan path, returning its primary series.
@@ -840,8 +1091,14 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         Ok(Array1::from_vec(
-            self.eval_plan_channels(source, FormulaDialect::default(), &ParamValues::new(), ctx)?
-                .into_primary(),
+            self.eval_plan_channels_impl(
+                source,
+                FormulaDialect::default(),
+                &ParamValues::new(),
+                ctx,
+                false,
+            )?
+            .into_primary(),
         ))
     }
 
@@ -857,7 +1114,7 @@ impl FormulaEngine {
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
         Ok(Array1::from_vec(
-            self.eval_plan_channels(source, dialect, &ParamValues::new(), ctx)?
+            self.eval_plan_channels_impl(source, dialect, &ParamValues::new(), ctx, false)?
                 .into_primary(),
         ))
     }
@@ -881,10 +1138,106 @@ impl FormulaEngine {
         params: &ParamValues,
         ctx: &mut FormulaContext,
     ) -> Result<FormulaPlanOutput, FormulaError> {
-        ctx.validate_alignment()?;
+        self.eval_plan_channels_impl(source, dialect, params, ctx, true)
+    }
+
+    /// Execute the general hot plan while preserving the engine's reusable
+    /// scratch buffers and dispatcher context.
+    fn execute_formula_plan(
+        &self,
+        plan: &FormulaHotPlan,
+        ctx: &FormulaContext,
+        inputs: &[&[f64]],
+        length: usize,
+        string_base: usize,
+    ) -> Result<Vec<Vec<f64>>, FormulaError> {
+        let mut runtime_context = std::mem::take(&mut *self.plan_runtime_context.borrow_mut());
+        // Formula evaluations are independent batches. Keep reusable scratch
+        // buffers and the content-addressed cache, but clear streaming state.
+        runtime_context.reset();
+        let host = HostContext {
+            chip: ctx.chip_data.as_ref(),
+            period_type: ctx.period_type,
+            money_flow: ctx.money_flow_data.as_ref(),
+            ohlc: Some(HostOhlc {
+                high: ctx.high.as_slice(),
+                low: ctx.low.as_slice(),
+                close: ctx.close.as_slice(),
+            }),
+            capital: ctx.capital,
+            string_table: Some(ctx.string_table.as_slice()),
+            em_data: ctx.em_data.as_ref(),
+            block_data: ctx.block_data.as_ref(),
+        };
+        let mut executor =
+            unified_formula_executor_with_host_and_context(plan, host, runtime_context);
+        executor.dispatcher_mut().set_string_base(string_base);
+        let result = executor.execute_range(inputs, 0..length);
+        *self.plan_runtime_context.borrow_mut() = executor.into_context();
+        result.map(|output| output.values).map_err(|error| {
+            FormulaError::RuntimeError(format!("formula plan execution failed: {error}"))
+        })
+    }
+
+    /// Execute a single retained result directly into the public primary-series
+    /// return path. Avoids constructing the executor's one-element output Vec.
+    fn execute_formula_plan_primary(
+        &self,
+        plan: &FormulaHotPlan,
+        ctx: &FormulaContext,
+        inputs: &[&[f64]],
+        string_base: usize,
+    ) -> Result<Vec<f64>, FormulaError> {
+        let mut runtime_context = std::mem::take(&mut *self.plan_runtime_context.borrow_mut());
+        runtime_context.reset();
+        let host = HostContext {
+            chip: ctx.chip_data.as_ref(),
+            period_type: ctx.period_type,
+            money_flow: ctx.money_flow_data.as_ref(),
+            ohlc: Some(HostOhlc {
+                high: ctx.high.as_slice(),
+                low: ctx.low.as_slice(),
+                close: ctx.close.as_slice(),
+            }),
+            capital: ctx.capital,
+            string_table: Some(ctx.string_table.as_slice()),
+            em_data: ctx.em_data.as_ref(),
+            block_data: ctx.block_data.as_ref(),
+        };
+        let mut executor =
+            unified_formula_executor_with_host_and_context(plan, host, runtime_context);
+        executor.dispatcher_mut().set_string_base(string_base);
+        let result = executor.execute_primary(inputs);
+        *self.plan_runtime_context.borrow_mut() = executor.into_context();
+        result.map_err(|error| {
+            FormulaError::RuntimeError(format!("formula plan execution failed: {error}"))
+        })
+    }
+
+    /// Shared execution path. Primary-only callers still publish assignments to
+    /// the context, but avoid constructing and cloning the detailed result maps
+    /// that `eval_plan_channels` returns to its caller.
+    fn eval_plan_channels_impl(
+        &self,
+        source: &str,
+        dialect: FormulaDialect,
+        params: &ParamValues,
+        ctx: &mut FormulaContext,
+        include_details: bool,
+    ) -> Result<FormulaPlanOutput, FormulaError> {
         // Shared handle, not an owned plan: the executor only borrows it, so
         // nothing here needs the deep copy `compile_plan` hands to its callers.
         let plan = self.plan_for(source, dialect, params)?;
+        self.eval_plan_channels_with_plan(plan, ctx, include_details)
+    }
+
+    fn eval_plan_channels_with_plan(
+        &self,
+        plan: Arc<FormulaHotPlan>,
+        ctx: &mut FormulaContext,
+        include_details: bool,
+    ) -> Result<FormulaPlanOutput, FormulaError> {
+        ctx.validate_alignment()?;
 
         // The plan path must honour the same execution sandbox as the tree path.
         // It used to ignore `ctx.sandbox` outright, so every configured budget
@@ -897,13 +1250,22 @@ impl FormulaEngine {
         // the tree path charges. The timeout is coarser here -- checked on entry
         // and again after execution, not per node -- because the executor runs
         // the plan as one call.
+        let sandbox_unlimited = ctx.sandbox.timeout_ms.is_none()
+            && ctx.sandbox.max_recursion_depth.is_none()
+            && ctx.sandbox.max_memory_bytes.is_none();
         crate::formula::sandbox::sandbox_reset(&ctx.sandbox_state);
-        crate::formula::sandbox::sandbox_check_depth(
-            &ctx.sandbox,
-            plan.semantic().max_ast_depth(),
-        )?;
-        let _sandbox_guard =
-            crate::formula::sandbox::sandbox_enter(&ctx.sandbox, &ctx.sandbox_state)?;
+        let _sandbox_guard = if sandbox_unlimited {
+            None
+        } else {
+            crate::formula::sandbox::sandbox_check_depth(
+                &ctx.sandbox,
+                plan.semantic().max_ast_depth(),
+            )?;
+            Some(crate::formula::sandbox::sandbox_enter(
+                &ctx.sandbox,
+                &ctx.sandbox_state,
+            )?)
+        };
 
         // String literals are the one side effect that cannot ride in a numeric
         // buffer: the tree path appends each literal to `ctx.string_table` at
@@ -924,23 +1286,51 @@ impl FormulaEngine {
         // Bind every numeric input slot the plan declared. A slot that no binding
         // fills is a hard error: substituting another series would convert an
         // input-layout bug into a silent numeric mismatch.
-        let mut slots: Vec<Option<&[f64]>> = vec![None; plan.hot().input_layout().len()];
+        // Most formulas bind only one to four series. Keep those borrowed
+        // slices inline so a warm evaluation does not allocate a temporary
+        // input-reference vector; retain the general heap path for unusual
+        // high-arity plans.
+        const INLINE_INPUTS: usize = 8;
+        let input_count = plan.input_bindings().len();
+        let mut inline_inputs: [&[f64]; INLINE_INPUTS] = [&[]; INLINE_INPUTS];
+        let mut heap_inputs = Vec::with_capacity(if input_count > INLINE_INPUTS {
+            input_count
+        } else {
+            0
+        });
+        let mut bound_inputs = 0;
         for binding in plan.input_bindings() {
+            let slot = binding.slot().0;
+            if slot != bound_inputs {
+                return Err(FormulaError::RuntimeError(format!(
+                    "formula plan input slot {} is not contiguous after {} bindings",
+                    slot, bound_inputs
+                )));
+            }
             let values = ctx.get_data(binding.name()).ok_or_else(|| {
                 FormulaError::RuntimeError(format!(
                     "formula plan requires input series `{}`, which the context does not provide",
                     binding.name()
                 ))
             })?;
-            slots[binding.slot().0] = Some(values);
+            if input_count <= INLINE_INPUTS {
+                inline_inputs[slot] = values;
+            } else {
+                heap_inputs.push(values);
+            }
+            bound_inputs += 1;
         }
-        let mut inputs = Vec::with_capacity(slots.len());
-        for (index, slot) in slots.into_iter().enumerate() {
-            inputs.push(slot.ok_or_else(|| {
-                FormulaError::RuntimeError(format!(
-                    "formula plan input slot {index} was never bound"
-                ))
-            })?);
+        let inputs: &[&[f64]] = if input_count <= INLINE_INPUTS {
+            &inline_inputs[..input_count]
+        } else {
+            &heap_inputs
+        };
+        if inputs.len() != plan.hot().input_layout().len() {
+            return Err(FormulaError::RuntimeError(format!(
+                "formula plan bound {} input slots but its hot layout declares {}",
+                inputs.len(),
+                plan.hot().input_layout().len()
+            )));
         }
 
         // A formula with no bound inputs is a constant expression (`10 + 20`),
@@ -949,6 +1339,590 @@ impl FormulaEngine {
         // the range is supplied explicitly. When inputs do exist they define the
         // length, exactly as before.
         let length = inputs.first().map_or(ctx.data_len, |input| input.len());
+
+        // A root MA with one retained result has no context side effects (the
+        // plan compiler excludes assignments, named outputs, modifiers and
+        // string literals). Return its directly computed series here so the
+        // common primary-only API does not wrap it in `Vec<Vec<_>>`, move it
+        // through the general publication machinery, or construct host data
+        // for a dispatcher that will not be used.
+        if !include_details {
+            if let Some((close_name, volume_name)) = plan.simple_obv_input_names() {
+                if let (Some(close), Some(volume)) =
+                    (ctx.get_data(close_name), ctx.get_data(volume_name))
+                {
+                    if close.len() == length && volume.len() == length {
+                        let mut primary = crate::utils::uninit_output(length);
+                        if crate::math::volume_kernels::obv_into(close, volume, &mut primary)
+                            .is_ok()
+                        {
+                            for binding in plan.variables() {
+                                if binding.output_index() != 0 {
+                                    return Err(FormulaError::RuntimeError(format!(
+                                        "formula variable `{}` has no retained OBV value",
+                                        binding.name()
+                                    )));
+                                }
+                                if let Some(existing) =
+                                    ctx.variables.get_mut(binding.context_key().as_ref())
+                                {
+                                    if existing.len() == length {
+                                        if let Some(slice) = existing.as_slice_mut() {
+                                            slice.copy_from_slice(&primary);
+                                        } else {
+                                            ctx.variables.insert(
+                                                binding.context_key().clone(),
+                                                Array1::from_vec(primary.clone()),
+                                            );
+                                        }
+                                    } else {
+                                        ctx.variables.insert(
+                                            binding.context_key().clone(),
+                                            Array1::from_vec(primary.clone()),
+                                        );
+                                    }
+                                } else {
+                                    ctx.variables.insert(
+                                        binding.context_key().clone(),
+                                        Array1::from_vec(primary.clone()),
+                                    );
+                                }
+                            }
+                            for binding in plan.outputs() {
+                                if !ctx
+                                    .output_names
+                                    .iter()
+                                    .any(|existing| existing == binding.name())
+                                {
+                                    ctx.output_names.push(binding.name().to_string());
+                                }
+                            }
+                            for (name, modifier) in plan.output_modifiers() {
+                                if ctx.output_modifiers.get(name) != Some(modifier) {
+                                    ctx.output_modifiers.insert(name.clone(), modifier.clone());
+                                }
+                            }
+                            if !sandbox_unlimited {
+                                crate::formula::sandbox::sandbox_check_elapsed(
+                                    &ctx.sandbox,
+                                    &ctx.sandbox_state,
+                                )?;
+                                crate::formula::sandbox::sandbox_track_bytes(
+                                    &ctx.sandbox,
+                                    &ctx.sandbox_state,
+                                    ctx.data_len * 8,
+                                )?;
+                            }
+                            return Ok(FormulaPlanOutput {
+                                primary,
+                                channels: Vec::new(),
+                                variables: Vec::new(),
+                            });
+                        }
+                    }
+                }
+            }
+            if let Some((high_slot, low_slot, close_slot, volume_slot, source_index)) =
+                plan.simple_pine_vwap()
+            {
+                if let (Some(high), Some(low), Some(close), Some(volume)) = (
+                    inputs.get(high_slot),
+                    inputs.get(low_slot),
+                    inputs.get(close_slot),
+                    inputs.get(volume_slot),
+                ) {
+                    if high.len() == length
+                        && low.len() == length
+                        && close.len() == length
+                        && volume.len() == length
+                    {
+                        let mut source = crate::utils::uninit_output(length);
+                        let mut primary = crate::utils::uninit_output(length);
+                        let (mut cumulative_price_volume, mut cumulative_volume) = (0.0, 0.0);
+                        for i in 0..length {
+                            let price = (high[i] + low[i] + close[i]) / 3.0;
+                            source[i] = price;
+                            cumulative_price_volume += price * volume[i];
+                            cumulative_volume += volume[i];
+                            primary[i] = if cumulative_volume.abs() > crate::utils::NUMERIC_EPSILON
+                            {
+                                cumulative_price_volume / cumulative_volume
+                            } else {
+                                f64::NAN
+                            };
+                        }
+                        for binding in plan.variables() {
+                            let index = binding.output_index();
+                            let values = if index == source_index {
+                                &source
+                            } else if index == 0 {
+                                &primary
+                            } else {
+                                return Err(FormulaError::RuntimeError(format!(
+                                    "formula variable `{}` has no retained VWAP value",
+                                    binding.name()
+                                )));
+                            };
+                            let key = binding.context_key().clone();
+                            let wrote_existing = ctx
+                                .variables
+                                .get_mut(key.as_ref())
+                                .filter(|existing| existing.len() == length)
+                                .and_then(|existing| existing.as_slice_mut())
+                                .map(|existing| existing.copy_from_slice(values))
+                                .is_some();
+                            if !wrote_existing {
+                                ctx.variables.insert(key, Array1::from_vec(values.clone()));
+                            }
+                        }
+                        for binding in plan.outputs() {
+                            if !ctx
+                                .output_names
+                                .iter()
+                                .any(|existing| existing == binding.name())
+                            {
+                                ctx.output_names.push(binding.name().to_string());
+                            }
+                        }
+                        for (name, modifier) in plan.output_modifiers() {
+                            if ctx.output_modifiers.get(name) != Some(modifier) {
+                                ctx.output_modifiers.insert(name.clone(), modifier.clone());
+                            }
+                        }
+                        if !sandbox_unlimited {
+                            crate::formula::sandbox::sandbox_check_elapsed(
+                                &ctx.sandbox,
+                                &ctx.sandbox_state,
+                            )?;
+                            crate::formula::sandbox::sandbox_track_bytes(
+                                &ctx.sandbox,
+                                &ctx.sandbox_state,
+                                ctx.data_len * 8,
+                            )?;
+                        }
+                        return Ok(FormulaPlanOutput {
+                            primary,
+                            channels: Vec::new(),
+                            variables: Vec::new(),
+                        });
+                    }
+                }
+            }
+            if let Some((
+                high_slot,
+                low_slot,
+                close_slot,
+                period,
+                cci_index,
+                source_index,
+                scalars,
+            )) = plan.simple_pine_cci()
+            {
+                if let (Some(high), Some(low), Some(close)) = (
+                    inputs.get(high_slot),
+                    inputs.get(low_slot),
+                    inputs.get(close_slot),
+                ) {
+                    if high.len() == length && low.len() == length && close.len() == length {
+                        let mut source = crate::utils::uninit_output(length);
+                        for i in 0..length {
+                            source[i] = (high[i] + low[i] + close[i]) / 3.0;
+                        }
+                        let mut primary = crate::utils::uninit_output(length);
+                        if crate::indicators::momentum::cci_source_into(
+                            &source,
+                            period,
+                            &mut primary,
+                        )
+                        .is_ok()
+                        {
+                            for binding in plan.variables() {
+                                let index = binding.output_index();
+                                let name = binding.context_key().clone();
+                                let series = if index == cci_index {
+                                    if let Some(existing) = ctx.variables.get_mut(name.as_ref()) {
+                                        if existing.len() == length {
+                                            if let Some(slice) = existing.as_slice_mut() {
+                                                slice.copy_from_slice(&primary);
+                                            } else {
+                                                ctx.variables.insert(
+                                                    name.clone(),
+                                                    Array1::from_vec(primary.clone()),
+                                                );
+                                            }
+                                        } else {
+                                            ctx.variables.insert(
+                                                name.clone(),
+                                                Array1::from_vec(primary.clone()),
+                                            );
+                                        }
+                                    } else {
+                                        ctx.variables.insert(
+                                            name.clone(),
+                                            Array1::from_vec(primary.clone()),
+                                        );
+                                    }
+                                    None
+                                } else if index == source_index {
+                                    Some(source.clone())
+                                } else if let Some((_, scalar)) =
+                                    scalars.iter().find(|(slot, _)| *slot == index)
+                                {
+                                    if let Some(existing) = ctx.variables.get_mut(name.as_ref()) {
+                                        if existing.len() == length {
+                                            if let Some(slice) = existing.as_slice_mut() {
+                                                slice.fill(*scalar);
+                                            } else {
+                                                ctx.variables.insert(
+                                                    name.clone(),
+                                                    Array1::from_elem(length, *scalar),
+                                                );
+                                            }
+                                        } else {
+                                            ctx.variables.insert(
+                                                name.clone(),
+                                                Array1::from_elem(length, *scalar),
+                                            );
+                                        }
+                                    } else {
+                                        ctx.variables.insert(
+                                            name.clone(),
+                                            Array1::from_elem(length, *scalar),
+                                        );
+                                    }
+                                    None
+                                } else {
+                                    return Err(FormulaError::RuntimeError(format!(
+                                        "formula variable `{}` has no retained CCI value",
+                                        binding.name()
+                                    )));
+                                };
+                                if let Some(series) = series {
+                                    if let Some(existing) = ctx.variables.get_mut(name.as_ref()) {
+                                        if existing.len() == length {
+                                            if let Some(slice) = existing.as_slice_mut() {
+                                                slice.copy_from_slice(&series);
+                                            } else {
+                                                ctx.variables
+                                                    .insert(name.clone(), Array1::from_vec(series));
+                                            }
+                                        } else {
+                                            ctx.variables
+                                                .insert(name.clone(), Array1::from_vec(series));
+                                        }
+                                    } else {
+                                        ctx.variables
+                                            .insert(name.clone(), Array1::from_vec(series));
+                                    }
+                                }
+                            }
+                            for binding in plan.outputs() {
+                                if !ctx
+                                    .output_names
+                                    .iter()
+                                    .any(|existing| existing == binding.name())
+                                {
+                                    ctx.output_names.push(binding.name().to_string());
+                                }
+                            }
+                            for (name, modifier) in plan.output_modifiers() {
+                                if ctx.output_modifiers.get(name) != Some(modifier) {
+                                    ctx.output_modifiers.insert(name.clone(), modifier.clone());
+                                }
+                            }
+                            if !sandbox_unlimited {
+                                crate::formula::sandbox::sandbox_check_elapsed(
+                                    &ctx.sandbox,
+                                    &ctx.sandbox_state,
+                                )?;
+                                crate::formula::sandbox::sandbox_track_bytes(
+                                    &ctx.sandbox,
+                                    &ctx.sandbox_state,
+                                    ctx.data_len * 8,
+                                )?;
+                            }
+                            return Ok(FormulaPlanOutput {
+                                primary,
+                                channels: Vec::new(),
+                                variables: Vec::new(),
+                            });
+                        }
+                    }
+                }
+            }
+            if let Some((input, period, value_index, scalar_outputs)) = plan
+                .simple_pine_mom()
+                .and_then(|(_, period, value_index, scalar_outputs)| {
+                    inputs
+                        .first()
+                        .map(|input| (*input, period, value_index, scalar_outputs))
+                })
+            {
+                let mut primary = crate::utils::uninit_output(length);
+                if input.len() == length
+                    && crate::indicators::momentum::mom_into(input, period, &mut primary).is_ok()
+                {
+                    for binding in plan.variables() {
+                        let index = binding.output_index();
+                        if index == value_index {
+                            if let Some(existing) =
+                                ctx.variables.get_mut(binding.context_key().as_ref())
+                            {
+                                if existing.len() == length {
+                                    if let Some(slice) = existing.as_slice_mut() {
+                                        slice.copy_from_slice(&primary);
+                                    } else {
+                                        ctx.variables.insert(
+                                            binding.context_key().clone(),
+                                            Array1::from_vec(primary.clone()),
+                                        );
+                                    }
+                                } else {
+                                    ctx.variables.insert(
+                                        binding.context_key().clone(),
+                                        Array1::from_vec(primary.clone()),
+                                    );
+                                }
+                            } else {
+                                ctx.variables.insert(
+                                    binding.context_key().clone(),
+                                    Array1::from_vec(primary.clone()),
+                                );
+                            }
+                        } else if let Some((_, scalar)) =
+                            scalar_outputs.iter().find(|(slot, _)| *slot == index)
+                        {
+                            if let Some(existing) =
+                                ctx.variables.get_mut(binding.context_key().as_ref())
+                            {
+                                if existing.len() == length {
+                                    if let Some(slice) = existing.as_slice_mut() {
+                                        slice.fill(*scalar);
+                                    } else {
+                                        ctx.variables.insert(
+                                            binding.context_key().clone(),
+                                            Array1::from_elem(length, *scalar),
+                                        );
+                                    }
+                                } else {
+                                    ctx.variables.insert(
+                                        binding.context_key().clone(),
+                                        Array1::from_elem(length, *scalar),
+                                    );
+                                }
+                            } else {
+                                ctx.variables.insert(
+                                    binding.context_key().clone(),
+                                    Array1::from_elem(length, *scalar),
+                                );
+                            }
+                        } else {
+                            return Err(FormulaError::RuntimeError(format!(
+                                "formula variable `{}` has no retained Momentum value",
+                                binding.name()
+                            )));
+                        }
+                    }
+                    for binding in plan.outputs() {
+                        if !ctx
+                            .output_names
+                            .iter()
+                            .any(|existing| existing == binding.name())
+                        {
+                            ctx.output_names.push(binding.name().to_string());
+                        }
+                    }
+                    for (name, modifier) in plan.output_modifiers() {
+                        if ctx.output_modifiers.get(name) != Some(modifier) {
+                            ctx.output_modifiers.insert(name.clone(), modifier.clone());
+                        }
+                    }
+                    if !sandbox_unlimited {
+                        crate::formula::sandbox::sandbox_check_elapsed(
+                            &ctx.sandbox,
+                            &ctx.sandbox_state,
+                        )?;
+                        crate::formula::sandbox::sandbox_track_bytes(
+                            &ctx.sandbox,
+                            &ctx.sandbox_state,
+                            ctx.data_len * 8,
+                        )?;
+                    }
+                    return Ok(FormulaPlanOutput {
+                        primary,
+                        channels: Vec::new(),
+                        variables: Vec::new(),
+                    });
+                }
+            }
+            if let Some((close, volume)) = plan
+                .simple_obv_input_names()
+                .and_then(|(close, volume)| Some((ctx.get_data(close)?, ctx.get_data(volume)?)))
+            {
+                if close.len() == length && volume.len() == length {
+                    let mut primary = crate::utils::uninit_output(length);
+                    if crate::math::volume_kernels::obv_into(close, volume, &mut primary).is_ok() {
+                        for binding in plan.variables() {
+                            if binding.output_index() != 0 {
+                                return Err(FormulaError::RuntimeError(format!(
+                                    "formula variable `{}` has no retained OBV value",
+                                    binding.name()
+                                )));
+                            }
+                            if let Some(existing) =
+                                ctx.variables.get_mut(binding.context_key().as_ref())
+                            {
+                                if existing.len() == length {
+                                    if let Some(slice) = existing.as_slice_mut() {
+                                        slice.copy_from_slice(&primary);
+                                    } else {
+                                        ctx.variables.insert(
+                                            binding.context_key().clone(),
+                                            Array1::from_vec(primary.clone()),
+                                        );
+                                    }
+                                } else {
+                                    ctx.variables.insert(
+                                        binding.context_key().clone(),
+                                        Array1::from_vec(primary.clone()),
+                                    );
+                                }
+                            } else {
+                                ctx.variables.insert(
+                                    binding.context_key().clone(),
+                                    Array1::from_vec(primary.clone()),
+                                );
+                            }
+                        }
+                        for binding in plan.outputs() {
+                            if !ctx
+                                .output_names
+                                .iter()
+                                .any(|existing| existing == binding.name())
+                            {
+                                ctx.output_names.push(binding.name().to_string());
+                            }
+                        }
+                        for (name, modifier) in plan.output_modifiers() {
+                            if ctx.output_modifiers.get(name) != Some(modifier) {
+                                ctx.output_modifiers.insert(name.clone(), modifier.clone());
+                            }
+                        }
+                        if !sandbox_unlimited {
+                            crate::formula::sandbox::sandbox_check_elapsed(
+                                &ctx.sandbox,
+                                &ctx.sandbox_state,
+                            )?;
+                            crate::formula::sandbox::sandbox_track_bytes(
+                                &ctx.sandbox,
+                                &ctx.sandbox_state,
+                                ctx.data_len * 8,
+                            )?;
+                        }
+                        return Ok(FormulaPlanOutput {
+                            primary,
+                            channels: Vec::new(),
+                            variables: Vec::new(),
+                        });
+                    }
+                }
+            }
+            if let Some((input, period)) = plan
+                .simple_ma_input_period()
+                .and_then(|(_, period)| inputs.first().map(|values| (*values, period)))
+            {
+                let mut primary = crate::utils::uninit_output(length);
+                if crate::math::moving_avg::sma_into(input, period, &mut primary).is_err() {
+                    primary.fill(f64::NAN);
+                }
+                if !sandbox_unlimited {
+                    crate::formula::sandbox::sandbox_check_elapsed(
+                        &ctx.sandbox,
+                        &ctx.sandbox_state,
+                    )?;
+                    crate::formula::sandbox::sandbox_track_bytes(
+                        &ctx.sandbox,
+                        &ctx.sandbox_state,
+                        ctx.data_len * 8,
+                    )?;
+                }
+                return Ok(FormulaPlanOutput {
+                    primary,
+                    channels: Vec::new(),
+                    variables: Vec::new(),
+                });
+            }
+            if let Some((input, period)) = plan
+                .simple_rsi_input_period()
+                .and_then(|(_, period)| inputs.first().map(|values| (*values, period)))
+                .filter(|(input, _)| input.iter().all(|value| value.is_finite()))
+            {
+                let mut primary = crate::utils::uninit_output(length);
+                crate::math::simd_kernels::rsi_simd_into(input, period, &mut primary);
+                if !sandbox_unlimited {
+                    crate::formula::sandbox::sandbox_check_elapsed(
+                        &ctx.sandbox,
+                        &ctx.sandbox_state,
+                    )?;
+                    crate::formula::sandbox::sandbox_track_bytes(
+                        &ctx.sandbox,
+                        &ctx.sandbox_state,
+                        ctx.data_len * 8,
+                    )?;
+                }
+                return Ok(FormulaPlanOutput {
+                    primary,
+                    channels: Vec::new(),
+                    variables: Vec::new(),
+                });
+            }
+            if let Some((_, period)) = plan.simple_zlema_input_period() {
+                let input = inputs.first().copied().unwrap_or_default();
+                if input.len() == length {
+                    let mut primary = crate::utils::uninit_output(length);
+                    if crate::math::moving_avg::zlema_into(input, period, &mut primary).is_err() {
+                        primary.fill(f64::NAN);
+                    }
+                    for binding in plan.variables() {
+                        if binding.output_index() != 0 {
+                            return Err(FormulaError::RuntimeError(format!(
+                                "formula variable `{}` has no retained ZLEMA value",
+                                binding.name()
+                            )));
+                        }
+                        let key = binding.context_key().clone();
+                        let wrote_existing = ctx
+                            .variables
+                            .get_mut(key.as_ref())
+                            .filter(|existing| existing.len() == length)
+                            .and_then(|existing| existing.as_slice_mut())
+                            .map(|existing| {
+                                existing.copy_from_slice(&primary);
+                            })
+                            .is_some();
+                        if !wrote_existing {
+                            ctx.variables.insert(key, Array1::from_vec(primary.clone()));
+                        }
+                    }
+                    if !sandbox_unlimited {
+                        crate::formula::sandbox::sandbox_check_elapsed(
+                            &ctx.sandbox,
+                            &ctx.sandbox_state,
+                        )?;
+                        crate::formula::sandbox::sandbox_track_bytes(
+                            &ctx.sandbox,
+                            &ctx.sandbox_state,
+                            ctx.data_len * 8,
+                        )?;
+                    }
+                    return Ok(FormulaPlanOutput {
+                        primary,
+                        channels: Vec::new(),
+                        variables: Vec::new(),
+                    });
+                }
+            }
+        }
 
         // Host data cannot travel in a numeric slot, so it is handed to the
         // dispatcher separately: the chip distribution, chart period, money-flow
@@ -961,38 +1935,383 @@ impl FormulaEngine {
         // Borrowed rather than cloned, and scoped to this block: the executor is
         // the only holder of the borrow, and it is dropped with `output`, so the
         // write-back below can still take `&mut ctx`.
-        let output = {
-            let host = HostContext {
-                chip: ctx.chip_data.as_ref(),
-                period_type: ctx.period_type,
-                money_flow: ctx.money_flow_data.as_ref(),
-                ohlc: Some(HostOhlc {
-                    high: ctx.high.as_slice(),
-                    low: ctx.low.as_slice(),
-                    close: ctx.close.as_slice(),
-                }),
-                capital: ctx.capital,
-                string_table: Some(ctx.string_table.as_slice()),
-                em_data: ctx.em_data.as_ref(),
-                block_data: ctx.block_data.as_ref(),
-            };
-            let mut executor = unified_formula_executor_with_host(&plan, host);
-            executor.dispatcher_mut().set_string_base(string_base);
-            executor
-                .execute_range(&inputs, 0..length)
-                .map_err(|error| {
-                    FormulaError::RuntimeError(format!("formula plan execution failed: {error}"))
-                })?
+        let simple_ma = plan
+            .simple_ma_input_period()
+            .and_then(|(_, period)| inputs.first().map(|values| (*values, period)));
+        let simple_atr = plan
+            .simple_atr_input_slots()
+            .and_then(|(high, low, close, period)| {
+                Some((
+                    *inputs.get(high)?,
+                    *inputs.get(low)?,
+                    *inputs.get(close)?,
+                    period,
+                ))
+            });
+        let simple_coppock =
+            plan.simple_coppock_input_periods()
+                .and_then(|(_, wma_period, long_roc, short_roc)| {
+                    inputs
+                        .first()
+                        .filter(|input| input.len() == ctx.data_len)
+                        .map(|input| (*input, wma_period, long_roc, short_roc))
+                });
+        let simple_obv_inputs = plan
+            .simple_obv_input_names()
+            .and_then(|(close, volume)| Some((ctx.get_data(close)?, ctx.get_data(volume)?)));
+        let primary_only = if !include_details
+            && !inputs.is_empty()
+            && plan.hot().output_layout().len() == 1
+            // These shapes have direct kernels below. Let them reach those
+            // kernels instead of dispatching the general executor first.
+            && simple_atr.is_none()
+            && simple_coppock.is_none()
+        {
+            Some(self.execute_formula_plan_primary(&plan, ctx, &inputs, string_base)?)
+        } else {
+            None
+        };
+        let output_values = if primary_only.is_some() {
+            Vec::new()
+        } else if let Some((close_slot, volume_slot, period, obv_index, ma_index)) =
+            plan.simple_obv_ma().filter(|_| !include_details)
+        {
+            let close = inputs.get(close_slot).copied().unwrap_or_default();
+            let volume = inputs.get(volume_slot).copied().unwrap_or_default();
+            if close.len() == length && volume.len() == length {
+                let mut obv = crate::utils::uninit_output(length);
+                if crate::math::volume_kernels::obv_into(close, volume, &mut obv).is_ok() {
+                    let mut ma = crate::utils::uninit_output(length);
+                    if crate::math::moving_avg::sma_into(&obv, period, &mut ma).is_ok() {
+                        let mut values = vec![Vec::new(); plan.hot().output_layout().len()];
+                        values[obv_index] = obv;
+                        values[ma_index] = ma;
+                        values
+                    } else {
+                        self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+                    }
+                } else {
+                    self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+                }
+            } else {
+                self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+            }
+        } else if let Some((close_slot, period, output_index, scalar_outputs)) =
+            plan.simple_pine_roc().filter(|_| !include_details)
+        {
+            let close = inputs.get(close_slot).copied().unwrap_or_default();
+            let mut output = crate::utils::uninit_output(length);
+            if close.len() == length
+                && crate::indicators::momentum::roc_into(close, period, &mut output).is_ok()
+            {
+                let mut values = vec![Vec::new(); plan.hot().output_layout().len()];
+                values[output_index] = output;
+                for &(index, scalar) in scalar_outputs {
+                    values[index] = vec![scalar; length];
+                }
+                values
+            } else {
+                self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+            }
+        } else if let Some((close_slot, period, output_index, scalar_outputs)) =
+            plan.simple_pine_trix().filter(|_| !include_details)
+        {
+            let close = inputs.get(close_slot).copied().unwrap_or_default();
+            let mut output = crate::utils::uninit_output(length);
+            if close.len() == length
+                && crate::indicators::momentum::trix_into(close, period, &mut output).is_ok()
+            {
+                let mut values = vec![Vec::new(); plan.hot().output_layout().len()];
+                values[output_index] = output;
+                for &(index, scalar) in scalar_outputs {
+                    values[index] = vec![scalar; length];
+                }
+                values
+            } else {
+                self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+            }
+        } else if let Some((
+            high_slot,
+            low_slot,
+            close_slot,
+            period,
+            output_index,
+            scalar_outputs,
+        )) = plan.simple_pine_wpr().filter(|_| !include_details)
+        {
+            let high = inputs.get(high_slot).copied().unwrap_or_default();
+            let low = inputs.get(low_slot).copied().unwrap_or_default();
+            let close = inputs.get(close_slot).copied().unwrap_or_default();
+            let mut output = crate::utils::uninit_output(length);
+            if high.len() == length
+                && low.len() == length
+                && close.len() == length
+                && crate::indicators::momentum::willr_into(high, low, close, period, &mut output)
+                    .is_ok()
+            {
+                let mut values = vec![Vec::new(); plan.hot().output_layout().len()];
+                values[output_index] = output;
+                for &(index, scalar) in scalar_outputs {
+                    values[index] = vec![scalar; length];
+                }
+                values
+            } else {
+                self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+            }
+        } else if let Some((close_slot, volume_slot, period, output_index, scalar_outputs)) =
+            plan.simple_pine_vwma().filter(|_| !include_details)
+        {
+            let close = inputs.get(close_slot).copied().unwrap_or_default();
+            let volume = inputs.get(volume_slot).copied().unwrap_or_default();
+            let mut output = crate::utils::uninit_output(length);
+            if close.len() == length
+                && volume.len() == length
+                && crate::math::moving_avg::vwma_into(close, volume, period, &mut output).is_ok()
+            {
+                let mut values = vec![Vec::new(); plan.hot().output_layout().len()];
+                values[output_index] = output;
+                for &(index, scalar) in scalar_outputs {
+                    values[index] = vec![scalar; length];
+                }
+                values
+            } else {
+                self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+            }
+        } else if let Some((input_slot, period, output_index, source_index, scalar_outputs)) =
+            plan.simple_pine_rsi().filter(|_| !include_details)
+        {
+            let input = inputs.get(input_slot).copied().unwrap_or_default();
+            let mut output = crate::utils::uninit_output(length);
+            if input.len() == length {
+                crate::math::simd_kernels::rsi_simd_into(input, period, &mut output);
+                let mut values = vec![Vec::new(); plan.hot().output_layout().len()];
+                values[output_index] = output;
+                values[source_index] = input.to_vec();
+                for &(index, scalar) in scalar_outputs {
+                    values[index] = vec![scalar; length];
+                }
+                values
+            } else {
+                self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+            }
+        } else if !include_details && plan.simple_multi_ema_assignments().is_some() {
+            if let Some((input_slot, assignments)) = plan.simple_multi_ema_assignments() {
+                let input = inputs.get(input_slot).copied().unwrap_or_default();
+                let periods = [assignments[0].0, assignments[1].0, assignments[2].0];
+                if input.len() == length
+                    && length >= periods.into_iter().max().unwrap_or(usize::MAX)
+                    && input.iter().all(|value| value.is_finite())
+                {
+                    match crate::indicators::sweep::ema_sweep(input, &periods) {
+                        Ok(mut swept) => {
+                            let mut values = vec![Vec::new(); plan.hot().output_layout().len()];
+                            for (sweep_index, &(_, output_index)) in assignments.iter().enumerate()
+                            {
+                                values[output_index] = std::mem::take(&mut swept[sweep_index]);
+                            }
+                            values
+                        }
+                        Err(_) => {
+                            self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+                        }
+                    }
+                } else {
+                    self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+                }
+            } else {
+                self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+            }
+        } else if let Some((input, period)) = simple_ma {
+            let mut output = crate::utils::uninit_output(length);
+            if crate::math::moving_avg::sma_into(input, period, &mut output).is_err() {
+                output.fill(f64::NAN);
+            }
+            vec![output]
+        } else if let Some((high, low, close, period)) = simple_atr {
+            if length <= PLAN_SIMPLE_ATR_FASTPATH_MAX_ROWS
+                && period < length
+                && high.len() == length
+                && low.len() == length
+                && close.len() == length
+                && high.iter().all(|value| value.is_finite())
+                && low.iter().all(|value| value.is_finite())
+                && close.iter().all(|value| value.is_finite())
+            {
+                let mut output = crate::utils::uninit_output(length);
+                if crate::indicators::volatility::atr_into(high, low, close, period, &mut output)
+                    .is_ok()
+                {
+                    vec![output]
+                } else {
+                    self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+                }
+            } else {
+                self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+            }
+        } else if let Some((input, wma_period, long_roc, short_roc)) = simple_coppock {
+            let start = crate::formula::functions::warmup_offset(input);
+            if start >= input.len() {
+                vec![vec![f64::NAN; length]]
+            } else {
+                match crate::indicators::momentum_ext::coppock(
+                    &input[start..],
+                    wma_period,
+                    long_roc,
+                    short_roc,
+                ) {
+                    Ok(output) => {
+                        vec![crate::formula::functions::shift_back(output, start, length)
+                            .into_raw_vec()]
+                    }
+                    Err(_) => vec![vec![f64::NAN; length]],
+                }
+            }
+        } else if let Some((close, volume)) = simple_obv_inputs {
+            if close.len() == length && volume.len() == length {
+                let mut primary = crate::utils::uninit_output(length);
+                if crate::math::volume_kernels::obv_into(close, volume, &mut primary).is_ok() {
+                    vec![primary]
+                } else {
+                    self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+                }
+            } else {
+                self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
+            }
+        } else {
+            self.execute_formula_plan(&plan, ctx, &inputs, length, string_base)?
         };
 
         // Re-check the wall-clock budget: entering the sandbox only proves the
         // limit held before execution started.
-        crate::formula::sandbox::sandbox_check_elapsed(&ctx.sandbox, &ctx.sandbox_state)?;
-        crate::formula::sandbox::sandbox_track_bytes(
-            &ctx.sandbox,
-            &ctx.sandbox_state,
-            ctx.data_len * 8,
-        )?;
+        if !sandbox_unlimited {
+            crate::formula::sandbox::sandbox_check_elapsed(&ctx.sandbox, &ctx.sandbox_state)?;
+            crate::formula::sandbox::sandbox_track_bytes(
+                &ctx.sandbox,
+                &ctx.sandbox_state,
+                ctx.data_len * 8,
+            )?;
+        }
+
+        if !include_details {
+            let mut values = output_values;
+            let primary = if let Some(primary) = primary_only {
+                primary
+            } else {
+                values.first_mut().map(std::mem::take).ok_or_else(|| {
+                    FormulaError::RuntimeError("formula plan produced no output series".to_string())
+                })?
+            };
+            // Most formulas publish only a handful of variables. Avoid a
+            // per-evaluation HashMap allocation for those common plans; keep
+            // the general hash-backed path for scripts with many bindings.
+            const INLINE_PUBLISHED_SLOTS: usize = 8;
+            let variables = plan.variables();
+            let mut inline_published: [Option<(usize, std::sync::Arc<str>)>;
+                INLINE_PUBLISHED_SLOTS] = std::array::from_fn(|_| None);
+            let mut inline_published_len = 0;
+            let mut heap_published = std::collections::HashMap::<usize, std::sync::Arc<str>>::new();
+            for binding in variables {
+                let index = binding.output_index();
+                let name = binding.context_key().clone();
+                let series = if index == 0 {
+                    // The primary output must also be returned to the caller.
+                    // Reuse the context's existing array when possible instead
+                    // of cloning the primary Vec and allocating a new Array1 on
+                    // every warm evaluation.
+                    if let Some(existing) = ctx.variables.get_mut(name.as_ref()) {
+                        if existing.len() == primary.len() {
+                            if let Some(slice) = existing.as_slice_mut() {
+                                slice.copy_from_slice(&primary);
+                            } else {
+                                ctx.variables
+                                    .insert(name.clone(), Array1::from_vec(primary.clone()));
+                            }
+                        } else {
+                            ctx.variables
+                                .insert(name.clone(), Array1::from_vec(primary.clone()));
+                        }
+                    } else {
+                        ctx.variables
+                            .insert(name.clone(), Array1::from_vec(primary.clone()));
+                    }
+                    None
+                } else if let Some(previous_name) = if variables.len() <= INLINE_PUBLISHED_SLOTS {
+                    inline_published[..inline_published_len]
+                        .iter()
+                        .flatten()
+                        .find_map(|(slot, previous_name)| (*slot == index).then_some(previous_name))
+                } else {
+                    heap_published.get(&index)
+                } {
+                    Some(
+                        ctx.variables
+                            .get(previous_name)
+                            .ok_or_else(|| {
+                                FormulaError::RuntimeError(format!(
+                                    "formula variable `{}` lost its shared plan slot",
+                                    binding.name()
+                                ))
+                            })?
+                            .to_owned()
+                            .into_raw_vec(),
+                    )
+                } else {
+                    let Some(slot_value) = values.get_mut(index) else {
+                        return Err(FormulaError::RuntimeError(format!(
+                            "formula variable `{}` has no retained plan value",
+                            binding.name()
+                        )));
+                    };
+                    Some(std::mem::take(slot_value))
+                };
+                if let Some(series) = series {
+                    if let Some(existing) = ctx.variables.get_mut(name.as_ref()) {
+                        if existing.len() == series.len() {
+                            if let Some(slice) = existing.as_slice_mut() {
+                                slice.copy_from_slice(&series);
+                            } else {
+                                ctx.variables.insert(name.clone(), Array1::from_vec(series));
+                            }
+                        } else {
+                            ctx.variables.insert(name.clone(), Array1::from_vec(series));
+                        }
+                    } else {
+                        ctx.variables.insert(name.clone(), Array1::from_vec(series));
+                    }
+                }
+                if variables.len() <= INLINE_PUBLISHED_SLOTS {
+                    if !inline_published[..inline_published_len]
+                        .iter()
+                        .flatten()
+                        .any(|(slot, _)| *slot == index)
+                    {
+                        inline_published[inline_published_len] = Some((index, name));
+                        inline_published_len += 1;
+                    }
+                } else {
+                    heap_published.entry(index).or_insert(name);
+                }
+            }
+            for binding in plan.outputs() {
+                if !ctx
+                    .output_names
+                    .iter()
+                    .any(|existing| existing == binding.name())
+                {
+                    ctx.output_names.push(binding.name().to_string());
+                }
+            }
+            for (name, modifier) in plan.output_modifiers() {
+                if ctx.output_modifiers.get(name) != Some(modifier) {
+                    ctx.output_modifiers.insert(name.clone(), modifier.clone());
+                }
+            }
+            return Ok(FormulaPlanOutput {
+                primary,
+                channels: Vec::new(),
+                variables: Vec::new(),
+            });
+        }
 
         // `ExecutionOutput::values` is ordered by retained output, so resolve each
         // named channel through the output layout instead of assuming the binding
@@ -1011,7 +2330,7 @@ impl FormulaEngine {
         // unconditional fallback to `primary` handed back whenever the shared
         // value was not itself the primary result.
         let layout = plan.hot().output_layout().outputs();
-        let mut values: Vec<Option<Vec<f64>>> = output.values.into_iter().map(Some).collect();
+        let mut values: Vec<Option<Vec<f64>>> = output_values.into_iter().map(Some).collect();
         let primary = values.first_mut().and_then(Option::take).ok_or_else(|| {
             FormulaError::RuntimeError("formula plan produced no output series".to_string())
         })?;
@@ -1067,7 +2386,9 @@ impl FormulaEngine {
         // Styling travels beside the numeric plan rather than inside it, so it is
         // copied here rather than derived from a channel's series.
         for (name, modifier) in plan.output_modifiers() {
-            ctx.output_modifiers.insert(name.clone(), modifier.clone());
+            if ctx.output_modifiers.get(name) != Some(modifier) {
+                ctx.output_modifiers.insert(name.clone(), modifier.clone());
+            }
         }
 
         Ok(FormulaPlanOutput {
@@ -1136,6 +2457,8 @@ impl FormulaEngine {
 
     fn invalidate_formula_caches(&mut self) {
         self.cache.clear();
+        self.pine_ast_cache.borrow_mut().clear();
+        self.auto_plan_cache.borrow_mut().clear();
         self.semantic_plan_cache.borrow_mut().clear();
         // `invalidate`, not `clear`: the plans are stale because a custom
         // component changed, but the counters still describe this engine.
@@ -1971,6 +3294,25 @@ impl FormulaEngine {
         if self.execution_mode == FormulaExecutionMode::Plan {
             return self.eval_plan(source, ctx);
         }
+        if self.execution_mode == FormulaExecutionMode::Auto {
+            if let Some(plan) =
+                self.auto_plan_for(source, FormulaDialect::default(), ctx, &ParamValues::new())
+            {
+                return Ok(Array1::from_vec(
+                    self.eval_plan_channels_with_plan(plan, ctx, false)?
+                        .into_primary(),
+                ));
+            }
+            return self.eval_tree(source, ctx);
+        }
+        self.eval_tree(source, ctx)
+    }
+
+    fn eval_tree(
+        &mut self,
+        source: &str,
+        ctx: &mut FormulaContext,
+    ) -> Result<Array1<f64>, FormulaError> {
         let formula = self.compile_shared(source)?;
         self.execute(&formula, ctx)
     }
@@ -1990,21 +3332,50 @@ impl FormulaEngine {
         dialect: FormulaDialect,
         ctx: &mut FormulaContext,
     ) -> Result<Array1<f64>, FormulaError> {
-        let normalized = normalize_formula_source(source, dialect);
+        let normalized = normalized_source(source, dialect);
         if self.execution_mode == FormulaExecutionMode::Plan {
             return self.eval_plan_with_dialect(&normalized, dialect, ctx);
+        }
+        if self.execution_mode == FormulaExecutionMode::Auto {
+            if let Some(plan) = self.auto_plan_for(&normalized, dialect, ctx, &ParamValues::new()) {
+                return Ok(Array1::from_vec(
+                    self.eval_plan_channels_with_plan(plan, ctx, false)?
+                        .into_primary(),
+                ));
+            }
         }
         match dialect {
             FormulaDialect::AlphaTA
             | FormulaDialect::TongDaXin
             | FormulaDialect::TongHuaShun
-            | FormulaDialect::EastMoney => self.eval(&normalized, ctx),
+            | FormulaDialect::EastMoney => {
+                if self.execution_mode == FormulaExecutionMode::Auto {
+                    self.eval_tree(&normalized, ctx)
+                } else {
+                    self.eval(&normalized, ctx)
+                }
+            }
             FormulaDialect::Pine => {
-                let ast = parse_formula_with_dialect(&normalized, dialect)
-                    .map_err(FormulaError::ParseError)?;
-                self.eval_ast(&ast, ctx)
+                let ast = self.pine_ast(&normalized)?;
+                self.eval_ast(ast.as_ref(), ctx)
             }
         }
+    }
+
+    /// Return the shared parsed Pine AST for normalized source, compiling it
+    /// once per engine instead of reparsing on each Tree-mode evaluation.
+    fn pine_ast(&self, normalized: &str) -> Result<Arc<AstNode>, FormulaError> {
+        if let Some(ast) = self.pine_ast_cache.borrow().get(normalized).cloned() {
+            return Ok(ast);
+        }
+        let ast = Arc::new(
+            parse_formula_with_dialect(normalized, FormulaDialect::Pine)
+                .map_err(FormulaError::ParseError)?,
+        );
+        self.pine_ast_cache
+            .borrow_mut()
+            .insert(normalized.to_string(), Arc::clone(&ast));
+        Ok(ast)
     }
 
     /// Evaluate a pre-built AST directly (no string parsing).
@@ -2088,7 +3459,7 @@ impl FormulaEngine {
         dialect: FormulaDialect,
         ctx: &mut FormulaContext,
     ) -> Result<MultiOutput, FormulaError> {
-        let normalized = normalize_formula_source(source, dialect);
+        let normalized = normalized_source(source, dialect);
         match dialect {
             FormulaDialect::AlphaTA
             | FormulaDialect::TongDaXin
@@ -2098,8 +3469,7 @@ impl FormulaEngine {
                 self.require_tree_backend("eval_multi_with_dialect(Pine)")?;
                 let vars_before: std::collections::HashSet<Arc<str>> =
                     ctx.variables.keys().cloned().collect();
-                let ast = parse_formula_with_dialect(&normalized, dialect)
-                    .map_err(FormulaError::ParseError)?;
+                let ast = self.pine_ast(&normalized)?;
                 let final_value = self.eval_ast(&ast, ctx)?;
                 let mut multi = MultiOutput::new(final_value);
                 for (name, value) in &ctx.variables {
@@ -2123,7 +3493,7 @@ impl FormulaEngine {
         resolver: &dyn PineSecurityResolver,
     ) -> Result<MultiOutput, FormulaError> {
         self.require_tree_backend("eval_multi_with_pine_security")?;
-        let normalized = normalize_formula_source(source, FormulaDialect::Pine);
+        let normalized = normalized_source(source, FormulaDialect::Pine);
         let pine = parse_pine(&normalized)
             .map_err(|error| FormulaError::ParseError(format!("Pine parse error: {error}")))?;
         let ast = map_pine_to_alphata_with_security(&pine, Some(resolver))
@@ -2274,9 +3644,23 @@ impl FormulaEngine {
     ) -> Result<Array1<f64>, FormulaError> {
         if self.execution_mode == FormulaExecutionMode::Plan {
             return Ok(Array1::from_vec(
-                self.eval_plan_channels(source, FormulaDialect::default(), params, ctx)?
-                    .into_primary(),
+                self.eval_plan_channels_impl(
+                    source,
+                    FormulaDialect::default(),
+                    params,
+                    ctx,
+                    false,
+                )?
+                .into_primary(),
             ));
+        }
+        if self.execution_mode == FormulaExecutionMode::Auto {
+            if let Some(plan) = self.auto_plan_for(source, FormulaDialect::default(), ctx, params) {
+                return Ok(Array1::from_vec(
+                    self.eval_plan_channels_with_plan(plan, ctx, false)?
+                        .into_primary(),
+                ));
+            }
         }
         let formula = self.compile_shared(source)?;
         let ast_with_params = apply_params(&formula.ast, params);
@@ -2437,7 +3821,7 @@ impl FormulaEngine {
 
     /// 缓存相关方法
     ///
-    /// Whether `source` is already compiled, **in the cache the active mode
+    /// Whether `source` is already compiled, **in a cache the active mode
     /// uses**.
     ///
     /// The engine keeps two compiled-formula caches: the AST cache the tree path
@@ -2454,8 +3838,16 @@ impl FormulaEngine {
         match self.execution_mode {
             FormulaExecutionMode::Tree => self.cache.contains(source),
             FormulaExecutionMode::Plan => self.plan_cache.borrow().contains_key(
-                &FormulaPlanKey::new(source, FormulaDialect::default(), &ParamValues::new()),
+                source,
+                &FormulaPlanVariantKey::new(FormulaDialect::default(), &ParamValues::new()),
             ),
+            FormulaExecutionMode::Auto => {
+                self.cache.contains(source)
+                    || self.plan_cache.borrow().contains_key(
+                        source,
+                        &FormulaPlanVariantKey::new(FormulaDialect::default(), &ParamValues::new()),
+                    )
+            }
         }
     }
 
@@ -2466,6 +3858,7 @@ impl FormulaEngine {
         match self.execution_mode {
             FormulaExecutionMode::Tree => self.cache.len(),
             FormulaExecutionMode::Plan => self.plan_cache.borrow().len(),
+            FormulaExecutionMode::Auto => self.cache.len() + self.plan_cache.borrow().len(),
         }
     }
 
@@ -2477,6 +3870,7 @@ impl FormulaEngine {
     /// point of calling this after registering a custom component.
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+        self.pine_ast_cache.borrow_mut().clear();
         self.streaming_ema.borrow_mut().clear();
         self.streaming_common.borrow_mut().clear();
         self.clear_plan_cache();
@@ -2709,6 +4103,271 @@ mod tests {
         let close = Array1::from_vec((0..len).map(|i| 10.0 + i as f64 * 0.15).collect());
         let volume = Array1::from_vec((0..len).map(|i| 1000.0 + i as f64 * 10.0).collect());
         FormulaContext::new(open, high, low, close, volume, None)
+    }
+
+    #[test]
+    fn simple_atr_plan_fastpath_matches_tree_and_falls_back_for_nan() {
+        for (period, insert_nan) in [(14, false), (14, true), (200, false)] {
+            let mut plan_context = make_ctx(128);
+            let mut tree_context = make_ctx(128);
+            if insert_nan {
+                plan_context.high[47] = f64::NAN;
+                tree_context.high[47] = f64::NAN;
+            }
+            let formula = format!("ATR(HIGH,LOW,CLOSE,{period})");
+
+            let mut plan = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
+            let mut tree = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Tree);
+            let plan_output = plan
+                .eval_with_dialect(&formula, FormulaDialect::TongDaXin, &mut plan_context)
+                .unwrap();
+            let tree_output = tree
+                .eval_with_dialect(&formula, FormulaDialect::TongDaXin, &mut tree_context)
+                .unwrap();
+
+            assert_eq!(plan_output.len(), tree_output.len());
+            for (plan_value, tree_value) in plan_output.iter().zip(tree_output.iter()) {
+                if plan_value.is_nan() && tree_value.is_nan() {
+                    continue;
+                }
+                assert_eq!(plan_value.to_bits(), tree_value.to_bits());
+            }
+        }
+    }
+
+    #[test]
+    fn simple_ma_plan_fastpath_matches_tree() {
+        let formula = "MA(CLOSE, 20)";
+        let mut plan_context = make_ctx(250);
+        let mut tree_context = make_ctx(250);
+        let mut plan = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
+        let mut tree = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Tree);
+
+        let plan_output = plan
+            .eval_with_dialect(formula, FormulaDialect::TongDaXin, &mut plan_context)
+            .unwrap();
+        let tree_output = tree
+            .eval_with_dialect(formula, FormulaDialect::TongDaXin, &mut tree_context)
+            .unwrap();
+
+        assert_eq!(plan_output.len(), tree_output.len());
+        for (plan_value, tree_value) in plan_output.iter().zip(tree_output.iter()) {
+            assert!(
+                (plan_value.is_nan() && tree_value.is_nan())
+                    || plan_value.to_bits() == tree_value.to_bits(),
+                "MA mismatch: {plan_value} != {tree_value}"
+            );
+        }
+    }
+
+    #[test]
+    fn aroon_plan_single_leg_kernels_match_tree_for_deque_periods() {
+        let formula = "AU:=AROON(HIGH,LOW,14);AD:=AROON_DOWN(HIGH,LOW,14);";
+        let mut plan_context = make_ctx(5000);
+        let mut tree_context = make_ctx(5000);
+        let mut plan = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
+        let mut tree = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Tree);
+        let plan_result = plan
+            .eval_with_dialect(formula, FormulaDialect::TongDaXin, &mut plan_context)
+            .unwrap();
+        let tree_result = tree
+            .eval_with_dialect(formula, FormulaDialect::TongDaXin, &mut tree_context)
+            .unwrap();
+
+        assert_eq!(plan_result.len(), tree_result.len());
+        for (plan_value, tree_value) in plan_result.iter().zip(tree_result.iter()) {
+            assert!(
+                (plan_value.is_nan() && tree_value.is_nan())
+                    || plan_value.to_bits() == tree_value.to_bits(),
+                "Aroon mismatch: {plan_value} != {tree_value}"
+            );
+        }
+        for name in ["AU", "AD"] {
+            let plan_values = plan_context.variables.get(name).unwrap();
+            let tree_values = tree_context.variables.get(name).unwrap();
+            for (plan_value, tree_value) in plan_values.iter().zip(tree_values.iter()) {
+                assert!(
+                    (plan_value.is_nan() && tree_value.is_nan())
+                        || plan_value.to_bits() == tree_value.to_bits(),
+                    "Aroon {name} mismatch: {plan_value} != {tree_value}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn auto_mode_routes_long_formulas_by_measured_backend_cost() {
+        assert_eq!(FormulaExecutionMode::default(), FormulaExecutionMode::Auto);
+        assert_eq!(FormulaExecutionMode::Auto.as_str(), "auto");
+        assert_eq!(
+            FormulaExecutionMode::from_name("AUTO"),
+            Some(FormulaExecutionMode::Auto)
+        );
+
+        let formula = "MA(CLOSE, 20)";
+        let mut short_context = make_ctx(250);
+        let mut short_auto = FormulaEngine::new();
+        let short_result = short_auto
+            .eval_with_dialect(formula, FormulaDialect::TongDaXin, &mut short_context)
+            .unwrap();
+        assert_eq!(short_result.len(), 250);
+        assert_eq!(short_auto.plan_cache_size(), 0);
+        assert_eq!(short_auto.cache_size(), 1);
+
+        let mut long_auto_context = make_ctx(5000);
+        let mut tree_context = make_ctx(5000);
+        let mut long_auto = FormulaEngine::new();
+        let mut tree = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Tree);
+        let first_auto_result = long_auto
+            .eval_with_dialect(formula, FormulaDialect::TongDaXin, &mut long_auto_context)
+            .unwrap();
+        assert_eq!(long_auto.plan_cache_size(), 0);
+        assert_eq!(first_auto_result.len(), 5000);
+        let auto_result = long_auto
+            .eval_with_dialect(formula, FormulaDialect::TongDaXin, &mut long_auto_context)
+            .unwrap();
+        let tree_result = tree
+            .eval_with_dialect(formula, FormulaDialect::TongDaXin, &mut tree_context)
+            .unwrap();
+
+        assert_eq!(long_auto.plan_cache_size(), 1);
+        assert_eq!(auto_result.len(), tree_result.len());
+        for (auto_value, tree_value) in auto_result.iter().zip(tree_result.iter()) {
+            assert!(
+                (auto_value.is_nan() && tree_value.is_nan())
+                    || auto_value.to_bits() == tree_value.to_bits(),
+                "Auto mismatch: {auto_value} != {tree_value}"
+            );
+        }
+        long_auto.clear_cache();
+        assert_eq!(long_auto.plan_cache_size(), 0);
+        long_auto
+            .eval_with_dialect(formula, FormulaDialect::TongDaXin, &mut long_auto_context)
+            .unwrap();
+        assert_eq!(long_auto.plan_cache_size(), 0);
+
+        let pine_source = include_str!("../../../tests/pine_corpus/trix.pine");
+        let mut pine_context = make_ctx(2400);
+        let mut pine_auto = FormulaEngine::new();
+        pine_auto
+            .eval_with_dialect(pine_source, FormulaDialect::Pine, &mut pine_context)
+            .unwrap();
+        assert_eq!(pine_auto.plan_cache_size(), 0);
+        pine_auto
+            .eval_with_dialect(pine_source, FormulaDialect::Pine, &mut pine_context)
+            .unwrap();
+        assert_eq!(pine_auto.plan_cache_size(), 0);
+        assert!(!pine_auto.auto_uses_plan(
+            pine_source,
+            FormulaDialect::Pine,
+            &pine_context,
+            &ParamValues::new(),
+        ));
+
+        let pine_obv = include_str!("../../../tests/pine_corpus/obv.pine");
+        let mut obv_context = make_ctx(2400);
+        let mut obv_auto = FormulaEngine::new();
+        obv_auto
+            .eval_with_dialect(pine_obv, FormulaDialect::Pine, &mut obv_context)
+            .unwrap();
+        let normalized_obv = normalized_source(pine_obv, FormulaDialect::Pine);
+        assert!(!obv_auto.auto_uses_plan(
+            &normalized_obv,
+            FormulaDialect::Pine,
+            &obv_context,
+            &ParamValues::new(),
+        ));
+
+        for formula in [
+            "ZLEMA20:=ZLEMA(CLOSE,20);",
+            "CPK:=COPPOCK(CLOSE,10,14,11);",
+            "AU:=AROON(HIGH,LOW,14);AD:=AROON_DOWN(HIGH,LOW,14);",
+            "KCM:=KC_MID(HIGH,LOW,CLOSE,20,10,2);KCU:=KC(HIGH,LOW,CLOSE,20,10,2);KCL:=KC_LOWER(HIGH,LOW,CLOSE,20,10,2);",
+            "周期:=PERIODTYPE();昨收:=REFDATE(CLOSE,1);今开对比:=(CLOSE-REFDATE(CLOSE,1))/REFDATE(CLOSE,1)*100;",
+            "VIP:=VORTEX(HIGH,LOW,CLOSE,14);VIM:=VORTEX_MINUS(HIGH,LOW,CLOSE,14);",
+            "TR:=EMA(EMA(EMA(CLOSE,12),12),12);TRIX:=(TR-REF(TR,1))/REF(TR,1)*100;TRMA:=MA(TRIX,9);",
+            "NV:=NVI(CLOSE,VOLUME);PV2:=PVI(CLOSE,VOLUME);EF:=EFI(CLOSE,VOLUME,13);",
+        ] {
+            let mut context = make_ctx(5000);
+            let mut auto = FormulaEngine::new();
+            auto.eval_with_dialect(formula, FormulaDialect::TongDaXin, &mut context)
+                .unwrap();
+            assert!(!auto.auto_uses_plan(
+                formula,
+                FormulaDialect::TongDaXin,
+                &context,
+                &ParamValues::new(),
+            ));
+        }
+
+        let pine_rsi = include_str!("../../../tests/pine_corpus/rsi.pine");
+        let mut rsi_context = make_ctx(2400);
+        let mut rsi_auto = FormulaEngine::new();
+        rsi_auto
+            .eval_with_dialect(pine_rsi, FormulaDialect::Pine, &mut rsi_context)
+            .unwrap();
+        let normalized_rsi = normalized_source(pine_rsi, FormulaDialect::Pine);
+        assert!(!rsi_auto.auto_uses_plan(
+            &normalized_rsi,
+            FormulaDialect::Pine,
+            &rsi_context,
+            &ParamValues::new(),
+        ));
+
+        let pine_donchian = include_str!("../../../tests/pine_corpus/donchian_channels.pine");
+        let mut donchian_context = make_ctx(2400);
+        let mut donchian_auto = FormulaEngine::new();
+        donchian_auto
+            .eval_with_dialect(pine_donchian, FormulaDialect::Pine, &mut donchian_context)
+            .unwrap();
+        let normalized_donchian = normalized_source(pine_donchian, FormulaDialect::Pine);
+        assert!(!donchian_auto.auto_uses_plan(
+            &normalized_donchian,
+            FormulaDialect::Pine,
+            &donchian_context,
+            &ParamValues::new(),
+        ));
+    }
+
+    #[test]
+    fn pine_trix_plan_fastpath_matches_tree_and_publishes_context() {
+        let source = include_str!("../../../tests/pine_corpus/trix.pine");
+        let mut plan_context = make_ctx(250);
+        let mut tree_context = make_ctx(250);
+        let mut plan = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Plan);
+        let mut tree = FormulaEngine::new().with_execution_mode(FormulaExecutionMode::Tree);
+
+        let plan_output = plan
+            .eval_with_dialect(source, FormulaDialect::Pine, &mut plan_context)
+            .unwrap();
+        let tree_output = tree
+            .eval_with_dialect(source, FormulaDialect::Pine, &mut tree_context)
+            .unwrap();
+
+        assert_eq!(plan_output.len(), tree_output.len());
+        for (plan_value, tree_value) in plan_output.iter().zip(tree_output.iter()) {
+            assert!(
+                (plan_value.is_nan() && tree_value.is_nan())
+                    || plan_value.to_bits() == tree_value.to_bits(),
+                "TRIX mismatch: {plan_value} != {tree_value}"
+            );
+        }
+        assert_eq!(plan_context.output_names, tree_context.output_names);
+        assert_eq!(plan_context.variables.len(), tree_context.variables.len());
+        for (name, plan_values) in &plan_context.variables {
+            let tree_values = tree_context
+                .variables
+                .get(name)
+                .unwrap_or_else(|| panic!("Tree context did not publish `{name}`"));
+            assert_eq!(plan_values.len(), tree_values.len(), "variable `{name}`");
+            for (plan_value, tree_value) in plan_values.iter().zip(tree_values.iter()) {
+                assert!(
+                    (plan_value.is_nan() && tree_value.is_nan())
+                        || plan_value.to_bits() == tree_value.to_bits(),
+                    "published variable `{name}` differs: {plan_value} != {tree_value}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -3751,7 +5410,13 @@ mod plan_cache_tests {
         engine
             .compile_plan_default("MA(CLOSE,5)")
             .expect("plan compiles");
+        engine.remember_auto_choice(
+            "MA(CLOSE,5)",
+            FormulaDialect::default(),
+            AutoPlanChoice::Tree,
+        );
         assert_eq!(engine.plan_cache_size(), 1);
+        assert_eq!(engine.auto_plan_cache.borrow().map.len(), 1);
 
         engine
             .register_custom_formula("SIGNAL", &["X"], "MA(X,5)")
@@ -3761,6 +5426,7 @@ mod plan_cache_tests {
         // resolves to, so the plans must go; the counters still describe this
         // engine's behaviour and are kept.
         assert_eq!(engine.plan_cache_size(), 0);
+        assert_eq!(engine.auto_plan_cache.borrow().map.len(), 0);
         assert_eq!(
             engine.plan_cache_stats(),
             FormulaPlanCacheStats { hits: 0, misses: 1 }
@@ -3811,11 +5477,10 @@ mod plan_cache_tests {
         // The oldest entries were evicted, the newest are still resident.
         let newest = format!("MA(CLOSE,2) + {}", total - 1);
         assert!(
-            cache.contains_key(&FormulaPlanKey::new(
+            cache.contains_key(
                 &newest,
-                FormulaDialect::default(),
-                &ParamValues::new()
-            )),
+                &FormulaPlanVariantKey::new(FormulaDialect::default(), &ParamValues::new()),
+            ),
             "most recently inserted plan must still be cached"
         );
         drop(cache);

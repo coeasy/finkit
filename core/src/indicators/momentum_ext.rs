@@ -7,7 +7,7 @@ use crate::error::{Result, TaError};
 use crate::indicators::rsi;
 use crate::math::moving_avg::sma;
 use crate::math::statistics::{rolling_max, rolling_min};
-use crate::utils::{init_output, smoothing_factor, true_range, validate_input};
+use crate::utils::{init_output, smoothing_factor, true_range, uninit_output, validate_input};
 use ndarray::Array1;
 fn validate_hl(high: &[f64], low: &[f64]) -> Result<()> {
     if high.len() != low.len() {
@@ -401,6 +401,149 @@ pub fn tsi(input: &[f64], long_period: usize, short_period: usize) -> Result<Arr
 /// Coppock Curve
 ///
 /// Coppock = WMA(ROC(long) + ROC(short), wma_period)
+#[inline]
+fn coppock_value(input: &[f64], index: usize, long_roc: usize, short_roc: usize) -> f64 {
+    let long_base = input[index - long_roc];
+    let short_base = input[index - short_roc];
+    let long_val = if crate::utils::is_zero(long_base) {
+        0.0
+    } else {
+        (input[index] - long_base) / long_base * 100.0
+    };
+    let short_val = if crate::utils::is_zero(short_base) {
+        0.0
+    } else {
+        (input[index] - short_base) / short_base * 100.0
+    };
+    long_val + short_val
+}
+
+/// Large-input Coppock path that keeps only the WMA lookback of combined ROC.
+///
+/// The older batch composition materializes a full combined ROC array and
+/// traverses it again for WMA. A period-sized ring preserves the same rolling
+/// sum and weighted-sum update order while computing each combined ROC only
+/// once, as it enters the window.
+fn coppock_ring(
+    input: &[f64],
+    wma_period: usize,
+    long_roc: usize,
+    short_roc: usize,
+    roc_start: usize,
+) -> Array1<f64> {
+    let len = input.len();
+    let first_output = roc_start + wma_period - 1;
+    let mut output = crate::utils::uninit_output(len);
+    output[..first_output].fill(f64::NAN);
+
+    let mut ring = vec![0.0; wma_period];
+    let mut window_sum = 0.0;
+    let mut weighted_sum = 0.0;
+    for (offset, slot) in ring.iter_mut().enumerate() {
+        let value = coppock_value(input, roc_start + offset, long_roc, short_roc);
+        *slot = value;
+        window_sum += value;
+        weighted_sum += (offset + 1) as f64 * value;
+    }
+
+    let inv_weight_sum = 1.0 / (wma_period * (wma_period + 1) / 2) as f64;
+    let period = wma_period as f64;
+    output[first_output] = weighted_sum * inv_weight_sum;
+    let mut dirty = window_sum.is_nan();
+    let mut head = 0;
+
+    for index in first_output + 1..len {
+        let old = ring[head];
+        let new = coppock_value(input, index, long_roc, short_roc);
+        if dirty || old.is_nan() || new.is_nan() {
+            ring[head] = new;
+            head += 1;
+            if head == wma_period {
+                head = 0;
+            }
+
+            window_sum = 0.0;
+            weighted_sum = 0.0;
+            for offset in 0..wma_period {
+                let value = ring[(head + offset) % wma_period];
+                window_sum += value;
+                weighted_sum += (offset + 1) as f64 * value;
+            }
+            dirty = window_sum.is_nan();
+        } else {
+            weighted_sum += period * new - window_sum;
+            window_sum += new - old;
+            ring[head] = new;
+            head += 1;
+            if head == wma_period {
+                head = 0;
+            }
+        }
+        output[index] = weighted_sum * inv_weight_sum;
+    }
+
+    Array1::from_vec(output)
+}
+
+/// Specialized default-profile path used by the TA-Lib gate. Constant periods
+/// let LLVM fold the two lookback offsets and the 10-slot rolling state. It
+/// preflights finiteness, the zero band, and a conservative magnitude bound in
+/// one pass. The bound proves every ROC and 10-term WMA intermediate finite,
+/// so the hot loop needs no exceptional-value branch.
+fn coppock_ring_fixed<const WMA: usize, const LONG: usize, const SHORT: usize>(
+    input: &[f64],
+) -> Option<Array1<f64>> {
+    let len = input.len();
+    let roc_start = LONG.max(SHORT);
+    let first_output = roc_start + WMA - 1;
+    let denominator_end = len - LONG.min(SHORT);
+    const MAX_SAFE_INPUT: f64 = 1.0e150;
+    if input.iter().enumerate().any(|(index, &value)| {
+        !value.is_finite()
+            || value.abs() > MAX_SAFE_INPUT
+            || (index < denominator_end && crate::utils::is_zero(value))
+    }) {
+        return None;
+    }
+
+    #[inline(always)]
+    fn value<const LONG: usize, const SHORT: usize>(input: &[f64], index: usize) -> f64 {
+        let long_base = input[index - LONG];
+        let short_base = input[index - SHORT];
+        let long_value = (input[index] - long_base) / long_base * 100.0;
+        let short_value = (input[index] - short_base) / short_base * 100.0;
+        long_value + short_value
+    }
+
+    let mut output = Vec::with_capacity(len);
+    output.resize(first_output, f64::NAN);
+    let mut ring = [0.0; WMA];
+    let mut window_sum = 0.0;
+    let mut weighted_sum = 0.0;
+    for (offset, slot) in ring.iter_mut().enumerate() {
+        let combined = value::<LONG, SHORT>(input, roc_start + offset);
+        *slot = combined;
+        window_sum += combined;
+        weighted_sum += (offset + 1) as f64 * combined;
+    }
+    let inv_weight_sum = 1.0 / (WMA * (WMA + 1) / 2) as f64;
+    output.push(weighted_sum * inv_weight_sum);
+    let mut head = 0;
+    for index in first_output + 1..len {
+        let old = ring[head];
+        let new = value::<LONG, SHORT>(input, index);
+        weighted_sum += WMA as f64 * new - window_sum;
+        window_sum += new - old;
+        ring[head] = new;
+        head += 1;
+        if head == WMA {
+            head = 0;
+        }
+        output.push(weighted_sum * inv_weight_sum);
+    }
+    Some(Array1::from_vec(output))
+}
+
 pub fn coppock(
     input: &[f64],
     wma_period: usize,
@@ -415,27 +558,51 @@ pub fn coppock(
     validate_input(input.len(), roc_start + wma_period)?;
 
     let len = input.len();
-    let mut combined = init_output(len);
-    for i in roc_start..len {
-        let long_val = if !crate::utils::is_zero(input[i - long_roc]) {
-            (input[i] - input[i - long_roc]) / input[i - long_roc] * 100.0
-        } else {
-            f64::NAN
-        };
-        let short_val = if !crate::utils::is_zero(input[i - short_roc]) {
-            (input[i] - input[i - short_roc]) / input[i - short_roc] * 100.0
-        } else {
-            f64::NAN
-        };
-        if !long_val.is_nan() && !short_val.is_nan() {
-            combined[i] = long_val + short_val;
+    if (wma_period, long_roc, short_roc) == (10, 11, 14) {
+        if let Some(output) = coppock_ring_fixed::<10, 11, 14>(input) {
+            return Ok(output);
         }
     }
+    const UNINIT_OUTPUT_THRESHOLD: usize = 16_384;
+    if len >= UNINIT_OUTPUT_THRESHOLD {
+        return Ok(coppock_ring(
+            input, wma_period, long_roc, short_roc, roc_start,
+        ));
+    }
+    let use_uninit = len >= UNINIT_OUTPUT_THRESHOLD;
+    let mut combined = if use_uninit {
+        ndarray::Array1::from(crate::utils::uninit_output(len))
+    } else {
+        init_output(len)
+    };
+    if use_uninit {
+        combined.as_slice_mut().unwrap()[..roc_start].fill(f64::NAN);
+    }
+    for i in roc_start..len {
+        let long_val = if crate::utils::is_zero(input[i - long_roc]) {
+            0.0
+        } else {
+            (input[i] - input[i - long_roc]) / input[i - long_roc] * 100.0
+        };
+        let short_val = if crate::utils::is_zero(input[i - short_roc]) {
+            0.0
+        } else {
+            (input[i] - input[i - short_roc]) / input[i - short_roc] * 100.0
+        };
+        combined[i] = long_val + short_val;
+    }
 
-    let mut output = init_output(len);
+    let mut output = if use_uninit {
+        ndarray::Array1::from(crate::utils::uninit_output(len))
+    } else {
+        init_output(len)
+    };
     let inv_weight_sum = 1.0 / (wma_period * (wma_period + 1) / 2) as f64;
     let p = wma_period as f64;
     let wma_first = roc_start + wma_period - 1;
+    if use_uninit {
+        output.as_slice_mut().unwrap()[..wma_first].fill(f64::NAN);
+    }
 
     let combined_slice = combined.as_slice().unwrap();
     let win_start = wma_first + 1 - wma_period;
@@ -1878,8 +2045,13 @@ pub fn vortex(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result
     validate_input(high.len(), period + 1)?;
 
     let len = high.len();
-    let mut vi_plus = vec![f64::NAN; len];
-    let mut vi_minus = vec![f64::NAN; len];
+    // The rolling loop writes every slot from `period` through `len`; only
+    // the lookback prefix needs explicit NaNs. Avoid clearing both complete
+    // result arrays before overwriting almost all of their elements.
+    let mut vi_plus = uninit_output(len);
+    let mut vi_minus = uninit_output(len);
+    vi_plus[..period].fill(f64::NAN);
+    vi_minus[..period].fill(f64::NAN);
 
     let mut vm_plus_sum: f64 = 0.0;
     let mut vm_minus_sum: f64 = 0.0;

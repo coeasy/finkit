@@ -299,13 +299,15 @@ pub fn sum(data: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_window(data, period)?;
 
     let len = data.len();
-    let mut output = init_output(len);
+    let mut output = crate::utils::uninit_output(len);
     if period == 1 {
         for (i, v) in data.iter().enumerate() {
             output[i] = *v;
         }
-        return Ok(output);
+        return Ok(Array1::from(output));
     }
+
+    output[..period - 1].fill(f64::NAN);
 
     // 初始化第一个窗口
     let mut acc: f64 = data[..period].iter().sum();
@@ -316,7 +318,7 @@ pub fn sum(data: &[f64], period: usize) -> Result<Array1<f64>> {
         acc += data[i] - data[i - period];
         output[i] = acc;
     }
-    Ok(output)
+    Ok(Array1::from(output))
 }
 
 /// 滚动窗口内最大值的索引 MAXINDEX
@@ -359,24 +361,40 @@ pub fn maxindex(data: &[f64], period: usize) -> Result<Array1<i64>> {
         return Ok(output);
     }
 
-    let mut candidates = VecDeque::with_capacity(period);
+    // A fixed-size ring avoids VecDeque's per-operation bounds/indexing work.
+    // The queue never contains more than one index per input element in the
+    // active window, so a `period`-sized buffer is sufficient.
+    let mut candidates = vec![0_usize; period];
+    let mut head = 0_usize;
+    let mut count = 0_usize;
     for i in 0..len {
-        while candidates
-            .front()
-            .is_some_and(|&candidate| candidate + period <= i)
-        {
-            candidates.pop_front();
+        if count > 0 && candidates[head] + period <= i {
+            head += 1;
+            if head == period {
+                head = 0;
+            }
+            count -= 1;
         }
-        while candidates
-            .back()
-            .is_some_and(|&candidate| data[candidate] < data[i])
-        {
-            candidates.pop_back();
+        while count > 0 {
+            let mut back = head + count - 1;
+            if back >= period {
+                back -= period;
+            }
+            if data[candidates[back]] < data[i] {
+                count -= 1;
+            } else {
+                break;
+            }
         }
-        candidates.push_back(i);
+        let mut tail = head + count;
+        if tail >= period {
+            tail -= period;
+        }
+        candidates[tail] = i;
+        count += 1;
         if i + 1 >= period {
             let start = i + 1 - period;
-            output[i] = (candidates[0] - start) as i64;
+            output[i] = (candidates[head] - start) as i64;
         }
     }
     Ok(output)
@@ -467,6 +485,20 @@ pub fn minindex(data: &[f64], period: usize) -> Result<Array1<i64>> {
 /// ```
 pub fn minmax(data: &[f64], period: usize) -> Result<(Array1<f64>, Array1<f64>)> {
     validate_window(data, period)?;
+    if period <= 512 {
+        let mut minimum = crate::utils::uninit_output(data.len());
+        let mut maximum = crate::utils::uninit_output(data.len());
+        minimum[..period - 1].fill(f64::NAN);
+        maximum[..period - 1].fill(f64::NAN);
+        if crate::math::statistics::van_herk_minmax_pair_into(
+            data,
+            period,
+            &mut minimum,
+            &mut maximum,
+        ) {
+            return Ok((Array1::from_vec(minimum), Array1::from_vec(maximum)));
+        }
+    }
     Ok((min(data, period)?, max(data, period)?))
 }
 
@@ -491,9 +523,55 @@ pub fn minmax(data: &[f64], period: usize) -> Result<(Array1<f64>, Array1<f64>)>
 /// assert_eq!(max_idx[2], 2); // [3,1,4] -> max 4 at offset 2
 /// ```
 pub fn minmaxindex(data: &[f64], period: usize) -> Result<(Array1<i64>, Array1<i64>)> {
-    let min_idx = minindex(data, period)?;
-    let max_idx = maxindex(data, period)?;
-    Ok((min_idx, max_idx))
+    validate_window(data, period)?;
+    let len = data.len();
+    let mut min_output = vec![-1_i64; len];
+    let mut max_output = vec![-1_i64; len];
+
+    if period == 1 {
+        min_output.fill(0);
+        max_output.fill(0);
+        return Ok((Array1::from_vec(min_output), Array1::from_vec(max_output)));
+    }
+
+    let mut min_candidates = VecDeque::with_capacity(period);
+    let mut max_candidates = VecDeque::with_capacity(period);
+    for i in 0..len {
+        while min_candidates
+            .front()
+            .is_some_and(|&candidate| candidate + period <= i)
+        {
+            min_candidates.pop_front();
+        }
+        while min_candidates
+            .back()
+            .is_some_and(|&candidate| data[candidate] > data[i])
+        {
+            min_candidates.pop_back();
+        }
+        min_candidates.push_back(i);
+
+        while max_candidates
+            .front()
+            .is_some_and(|&candidate| candidate + period <= i)
+        {
+            max_candidates.pop_front();
+        }
+        while max_candidates
+            .back()
+            .is_some_and(|&candidate| data[candidate] < data[i])
+        {
+            max_candidates.pop_back();
+        }
+        max_candidates.push_back(i);
+
+        if i + 1 >= period {
+            let start = i + 1 - period;
+            min_output[i] = (min_candidates[0] - start) as i64;
+            max_output[i] = (max_candidates[0] - start) as i64;
+        }
+    }
+    Ok((Array1::from_vec(min_output), Array1::from_vec(max_output)))
 }
 
 // ---------------------------------------------------------------------------

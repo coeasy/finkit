@@ -94,9 +94,10 @@ pub fn cmf(
     unsafe { output.set_len(len) };
     output[..period - 1].fill(f64::NAN);
 
-    // Each outgoing bar contributes both values together; a paired ring avoids
-    // three allocations and a validity branch on every update.
-    let mut ring = vec![(0.0f64, 0.0f64); period];
+    // Keep only MFV in the ring; the outgoing volume is already available in
+    // the input slice. This halves rolling-state traffic without changing the
+    // sum update order.
+    let mut mfv_ring = vec![0.0f64; period];
     let mut sum_mfv = 0.0;
     let mut sum_vol = 0.0;
     let mut null_run = 0usize;
@@ -108,7 +109,7 @@ pub fn cmf(
         } else {
             0.0
         };
-        ring[i] = (mfv, volume[i]);
+        mfv_ring[i] = mfv;
         sum_mfv += mfv;
         sum_vol += volume[i];
         let zero_volume = usize::from(volume[i] == 0.0);
@@ -123,9 +124,8 @@ pub fn cmf(
 
     let mut ring_index = 0usize;
     for i in period..len {
-        let (leaving_mfv, leaving_volume) = ring[ring_index];
-        sum_mfv -= leaving_mfv;
-        sum_vol -= leaving_volume;
+        sum_mfv -= mfv_ring[ring_index];
+        sum_vol -= volume[i - period];
 
         let range = high[i] - low[i];
         let mfv = if range > 0.0 {
@@ -133,7 +133,7 @@ pub fn cmf(
         } else {
             0.0
         };
-        ring[ring_index] = (mfv, volume[i]);
+        mfv_ring[ring_index] = mfv;
         sum_mfv += mfv;
         sum_vol += volume[i];
         let zero_volume = usize::from(volume[i] == 0.0);
@@ -585,6 +585,7 @@ pub fn pvt(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
     }
     let mut output = Vec::with_capacity(len);
     output.push(0.0);
+    let output_ptr = output.as_mut_ptr();
     let mut acc = 0.0;
     for i in 1..len {
         if close[i].is_nan() || volume[i].is_nan() {
@@ -592,8 +593,14 @@ pub fn pvt(close: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
         }
         let inv_cp = 1.0 / close[i - 1];
         acc += volume[i] * (close[i] - close[i - 1]) * inv_cp;
-        output.push(acc);
+        // The vector has reserved exactly `len` slots and is not reallocated
+        // after taking the pointer. Write each value once, then expose the
+        // initialized length after the loop.
+        unsafe { output_ptr.add(i).write(acc) };
     }
+    // SAFETY: index 0 was initialized by push and every index 1..len above was
+    // initialized before this length is exposed.
+    unsafe { output.set_len(len) };
     Ok(Array1::from_vec(output))
 }
 

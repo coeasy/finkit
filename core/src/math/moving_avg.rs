@@ -2108,6 +2108,16 @@ pub fn mcginley(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// ```
 #[inline]
 pub fn zlema(input: &[f64], period: usize) -> Result<Array1<f64>> {
+    let mut output = crate::utils::uninit_output(input.len());
+    zlema_into(input, period, &mut output)?;
+    Ok(Array1::from_vec(output))
+}
+
+/// Zero-Lag Exponential Moving Average written into a caller-owned output.
+///
+/// The recurrence and seed order match [`zlema`]. Writing into the supplied
+/// slice lets compiled formula plans avoid an intermediate `Array1` allocation.
+pub fn zlema_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> {
     if period == 0 {
         return Err(TaError::InvalidParameter {
             name: "period".to_string(),
@@ -2115,19 +2125,25 @@ pub fn zlema(input: &[f64], period: usize) -> Result<Array1<f64>> {
         });
     }
     validate_input(input.len(), period)?;
+    if output.len() != input.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
 
     let lag = (period - 1) / 2;
     let len = input.len();
     let k = smoothing_factor(period);
     let inv_period = 1.0 / period as f64;
 
-    let mut output = init_output(len);
+    output.fill(f64::NAN);
 
     let adj = |i: usize| -> f64 { 2.0 * input[i] - input[i - lag] };
 
     let ema_start = lag + period - 1;
     if ema_start >= len {
-        return Ok(output);
+        return Ok(());
     }
 
     let mut sum = 0.0;
@@ -2144,7 +2160,7 @@ pub fn zlema(input: &[f64], period: usize) -> Result<Array1<f64>> {
         output[i] = prev;
     }
 
-    Ok(output)
+    Ok(())
 }
 
 /// Variable Index Dynamic Average (VIDYA)
@@ -2232,10 +2248,61 @@ pub fn vidya(input: &[f64], period: usize, cmo_period: usize) -> Result<Array1<f
     Ok(output)
 }
 
-/// Volume Weighted Moving Average (VWMA)
-///
-/// Weights each price by its corresponding volume over the lookback window.
-///
+const VWMA_SINGLE_PASS_MIN_ROWS: usize = 500_000;
+
+/// Rolling VWMA path for very large inputs. It folds NaN tracking into the
+/// rolling pass so clean inputs do not need a separate full-length scan.
+#[inline]
+fn vwma_single_pass_into(input: &[f64], volume: &[f64], period: usize, output: &mut [f64]) {
+    output[..period - 1].fill(f64::NAN);
+    let mut price_volume = 0.0;
+    let mut total_volume = 0.0;
+    let mut dirty = false;
+    for index in 0..period {
+        if input[index].is_nan() || volume[index].is_nan() {
+            dirty = true;
+        }
+        price_volume += input[index] * volume[index];
+        total_volume += volume[index];
+    }
+    output[period - 1] = if !dirty && total_volume.abs() > crate::utils::NUMERIC_EPSILON {
+        price_volume / total_volume
+    } else {
+        f64::NAN
+    };
+
+    for index in period..input.len() {
+        let old_index = index - period;
+        if dirty
+            || input[old_index].is_nan()
+            || volume[old_index].is_nan()
+            || input[index].is_nan()
+            || volume[index].is_nan()
+        {
+            let start = index + 1 - period;
+            price_volume = 0.0;
+            total_volume = 0.0;
+            dirty = false;
+            for cursor in start..=index {
+                if input[cursor].is_nan() || volume[cursor].is_nan() {
+                    dirty = true;
+                    break;
+                }
+                price_volume += input[cursor] * volume[cursor];
+                total_volume += volume[cursor];
+            }
+        } else {
+            price_volume += input[index] * volume[index] - input[old_index] * volume[old_index];
+            total_volume += volume[index] - volume[old_index];
+        }
+        output[index] = if !dirty && total_volume.abs() > crate::utils::NUMERIC_EPSILON {
+            price_volume / total_volume
+        } else {
+            f64::NAN
+        };
+    }
+}
+
 /// VWMA = SUM(Close * Volume, period) / SUM(Volume, period)
 ///
 /// # Examples
@@ -2265,8 +2332,16 @@ pub fn vwma(input: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>>
     validate_input(input.len(), period)?;
 
     let len = input.len();
-    let mut output = Array1::from_elem(len, f64::NAN);
-    let clean = !input.iter().any(|v| v.is_nan()) && !volume.iter().any(|v| v.is_nan());
+    let mut output = crate::utils::uninit_output(len);
+    if len >= VWMA_SINGLE_PASS_MIN_ROWS {
+        vwma_single_pass_into(input, volume, period, &mut output);
+        return Ok(Array1::from_vec(output));
+    }
+    output[..period - 1].fill(f64::NAN);
+    let clean = input
+        .iter()
+        .zip(volume)
+        .all(|(&price, &weight)| !price.is_nan() && !weight.is_nan());
 
     if clean {
         let mut pv_sum = 0.0f64;
@@ -2275,15 +2350,19 @@ pub fn vwma(input: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>>
             pv_sum += input[j] * volume[j];
             vol_sum += volume[j];
         }
-        if vol_sum.abs() > crate::utils::NUMERIC_EPSILON {
-            output[period - 1] = pv_sum / vol_sum;
-        }
+        output[period - 1] = if vol_sum.abs() > crate::utils::NUMERIC_EPSILON {
+            pv_sum / vol_sum
+        } else {
+            f64::NAN
+        };
         for i in period..len {
             pv_sum += input[i] * volume[i] - input[i - period] * volume[i - period];
             vol_sum += volume[i] - volume[i - period];
-            if vol_sum.abs() > crate::utils::NUMERIC_EPSILON {
-                output[i] = pv_sum / vol_sum;
-            }
+            output[i] = if vol_sum.abs() > crate::utils::NUMERIC_EPSILON {
+                pv_sum / vol_sum
+            } else {
+                f64::NAN
+            };
         }
     } else {
         let mut pv_sum = 0.0f64;
@@ -2297,9 +2376,11 @@ pub fn vwma(input: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>>
             pv_sum += input[j] * volume[j];
             vol_sum += volume[j];
         }
-        if !dirty && vol_sum.abs() > crate::utils::NUMERIC_EPSILON {
-            output[period - 1] = pv_sum / vol_sum;
-        }
+        output[period - 1] = if !dirty && vol_sum.abs() > crate::utils::NUMERIC_EPSILON {
+            pv_sum / vol_sum
+        } else {
+            f64::NAN
+        };
 
         for i in period..len {
             let old_v = input[i - period];
@@ -2324,13 +2405,15 @@ pub fn vwma(input: &[f64], volume: &[f64], period: usize) -> Result<Array1<f64>>
                 pv_sum += new_v * new_vol - old_v * old_vol;
                 vol_sum += new_vol - old_vol;
             }
-            if !dirty && vol_sum.abs() > crate::utils::NUMERIC_EPSILON {
-                output[i] = pv_sum / vol_sum;
-            }
+            output[i] = if !dirty && vol_sum.abs() > crate::utils::NUMERIC_EPSILON {
+                pv_sum / vol_sum
+            } else {
+                f64::NAN
+            };
         }
     }
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// Compute VWMA directly into a caller-owned output slice.
@@ -2355,10 +2438,16 @@ pub fn vwma_into(input: &[f64], volume: &[f64], period: usize, output: &mut [f64
     }
     validate_input(input.len(), period)?;
 
-    output.fill(f64::NAN);
+    if input.len() >= VWMA_SINGLE_PASS_MIN_ROWS {
+        vwma_single_pass_into(input, volume, period, output);
+        return Ok(());
+    }
+    output[..period - 1].fill(f64::NAN);
     let len = input.len();
-    let clean =
-        !input.iter().any(|value| value.is_nan()) && !volume.iter().any(|value| value.is_nan());
+    let clean = input
+        .iter()
+        .zip(volume)
+        .all(|(&price, &weight)| !price.is_nan() && !weight.is_nan());
 
     if clean {
         let mut price_volume = 0.0;
@@ -2367,16 +2456,20 @@ pub fn vwma_into(input: &[f64], volume: &[f64], period: usize, output: &mut [f64
             price_volume += input[index] * volume[index];
             total_volume += volume[index];
         }
-        if total_volume.abs() > crate::utils::NUMERIC_EPSILON {
-            output[period - 1] = price_volume / total_volume;
-        }
+        output[period - 1] = if total_volume.abs() > crate::utils::NUMERIC_EPSILON {
+            price_volume / total_volume
+        } else {
+            f64::NAN
+        };
         for index in period..len {
             price_volume +=
                 input[index] * volume[index] - input[index - period] * volume[index - period];
             total_volume += volume[index] - volume[index - period];
-            if total_volume.abs() > crate::utils::NUMERIC_EPSILON {
-                output[index] = price_volume / total_volume;
-            }
+            output[index] = if total_volume.abs() > crate::utils::NUMERIC_EPSILON {
+                price_volume / total_volume
+            } else {
+                f64::NAN
+            };
         }
         return Ok(());
     }
@@ -2394,9 +2487,11 @@ pub fn vwma_into(input: &[f64], volume: &[f64], period: usize, output: &mut [f64
             price_volume += input[j] * volume[j];
             total_volume += volume[j];
         }
-        if valid && total_volume.abs() > crate::utils::NUMERIC_EPSILON {
-            output[index] = price_volume / total_volume;
-        }
+        output[index] = if valid && total_volume.abs() > crate::utils::NUMERIC_EPSILON {
+            price_volume / total_volume
+        } else {
+            f64::NAN
+        };
     }
     Ok(())
 }

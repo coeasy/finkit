@@ -180,8 +180,10 @@ See [formula-runtime.md](formula-runtime.md) and [formula-runtime-contract.md](f
 
 ## 8. Rust Tree and Plan backends
 
-`FormulaEngine` defaults to `FormulaExecutionMode::Tree`. Rust callers can opt in
-to the compiled `Plan` backend explicitly:
+`FormulaEngine` defaults to `FormulaExecutionMode::Auto`: cold, short, or
+unsupported formulas use the reference `Tree` interpreter; measured repeated
+long-history formulas can use the compiled `Plan` backend. Rust callers can
+select either backend explicitly:
 
 ```rust
 use finkit::formula::{FormulaEngine, FormulaExecutionMode};
@@ -191,10 +193,11 @@ engine.set_execution_mode(FormulaExecutionMode::Plan);
 let result = engine.eval("MA(CLOSE, 20)", &mut context)?;
 ```
 
-The two backends agree on the checked-in formula corpus, but their performance
-varies by dialect and workload: Plan is faster for the measured Pine corpus and
-slower for the measured domestic terminal corpus, so Tree remains the default.
-Some explicitly tree-only APIs return `BackendUnsupported` under Plan; see the
+The checked-in corpus has Tree/Plan parity. Auto keeps cold execution on Tree
+and routes eligible warm formulas by measured workload cost. The 60-case
+long-history workload measured Auto about 9% faster than Tree in aggregate.
+Some explicitly tree-only APIs return `BackendUnsupported` under explicit Plan
+mode; see the
 [Tree/Plan entry matrix](architecture/formula-entry-matrix.md) before selecting
 a backend for an API surface.
 

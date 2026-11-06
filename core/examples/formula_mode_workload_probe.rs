@@ -21,15 +21,13 @@
 //! behave very differently, and the reason is worth stating because it is not
 //! obvious from the numbers alone:
 //!
-//! * **Pine** — Plan wins decisively. `FormulaEngine::eval_with_dialect`'s Tree
-//!   branch re-parses and re-maps Pine on *every* call (it does not go through
-//!   the cached `compile_shared` path), so warm Tree Pine is ~4.3x slower and
-//!   ~11x more allocating than warm Plan, which hits `plan_cache` for every
-//!   dialect.
-//! * **Domestic** — Plan is slower warm (roughly 1.5–2.0x) and allocates
-//!   ~1.5x more, because the Tree branch caches its `CompiledFormula` and the
-//!   plan executor's per-node dispatch costs more than an AST walk at these
-//!   sizes.
+//! * **Pine** — Plan used to win decisively because the Tree branch re-parsed
+//!   and re-mapped Pine on every call. Tree mode now retains a bounded cache of
+//!   parsed Pine ASTs by normalized source, so the warm comparison measures
+//!   execution rather than repeated parsing.
+//! * **Domestic** — Tree and Plan are now close on the 5000-row aggregate.
+//!   Tree reuses its compiled formula; Plan avoids some result allocations but
+//!   still has per-node dispatch costs, so individual workloads can differ.
 //!
 //! Run with:
 //!
@@ -493,6 +491,9 @@ struct Outcome {
     plan_warm_ns: f64,
     tree_allocs: usize,
     plan_allocs: usize,
+    auto_cold_ns: f64,
+    auto_warm_ns: f64,
+    auto_allocs: usize,
 }
 
 #[derive(Clone)]
@@ -554,6 +555,8 @@ fn measure_case(case: &Case, scale: usize) -> Outcome {
         time_mode(FormulaExecutionMode::Tree, case, scale);
     let (plan_cold_ns, plan_warm_ns, plan_allocs) =
         time_mode(FormulaExecutionMode::Plan, case, scale);
+    let (auto_cold_ns, auto_warm_ns, auto_allocs) =
+        time_mode(FormulaExecutionMode::Auto, case, scale);
 
     let verdict = match evaluate(FormulaExecutionMode::Tree, case, scale) {
         Err(reason) => Verdict::TreeUnavailable(reason),
@@ -600,6 +603,9 @@ fn measure_case(case: &Case, scale: usize) -> Outcome {
         plan_warm_ns,
         tree_allocs,
         plan_allocs,
+        auto_cold_ns,
+        auto_warm_ns,
+        auto_allocs,
     }
 }
 
@@ -720,11 +726,28 @@ fn report(corpus: &str, outcomes: &[Outcome]) {
         median(&mut plan_cold) / 1000.0,
         median(&mut plan_warm) / 1000.0
     );
+    let mut auto_cold = comparable
+        .iter()
+        .map(|o| o.auto_cold_ns)
+        .collect::<Vec<_>>();
+    let mut auto_warm = comparable
+        .iter()
+        .map(|o| o.auto_warm_ns)
+        .collect::<Vec<_>>();
+    println!(
+        "    {:<12}{:>12.1}{:>14.1}{:>12.1}",
+        "Auto",
+        mean(&auto_cold) / 1000.0,
+        median(&mut auto_cold) / 1000.0,
+        median(&mut auto_warm) / 1000.0
+    );
 
     let total_tree_warm: f64 = comparable.iter().map(|o| o.tree_warm_ns).sum();
     let total_plan_warm: f64 = comparable.iter().map(|o| o.plan_warm_ns).sum();
     let total_tree_cold: f64 = comparable.iter().map(|o| o.tree_cold_ns).sum();
     let total_plan_cold: f64 = comparable.iter().map(|o| o.plan_cold_ns).sum();
+    let total_auto_warm: f64 = comparable.iter().map(|o| o.auto_warm_ns).sum();
+    let total_auto_cold: f64 = comparable.iter().map(|o| o.auto_cold_ns).sum();
     println!("\n  性能汇总 (全部可比用例之和)");
     println!(
         "    cold: Tree {:>10.1} µs   Plan {:>10.1} µs   Plan/Tree = {:.3}x",
@@ -738,14 +761,40 @@ fn report(corpus: &str, outcomes: &[Outcome]) {
         total_plan_warm / 1000.0,
         total_plan_warm / total_tree_warm.max(f64::EPSILON)
     );
+    println!(
+        "    Auto/Tree: cold {:.3}x   warm {:.3}x",
+        total_auto_cold / total_tree_cold.max(f64::EPSILON),
+        total_auto_warm / total_tree_warm.max(f64::EPSILON)
+    );
 
     println!("\n  内存 (每次 warm 执行的分配次数均值)");
-    println!(
-        "    Tree {:>8.1}   Plan {:>8.1}   Plan/Tree = {:.3}x",
-        tree_alloc_mean,
-        plan_alloc_mean,
-        plan_alloc_mean / tree_alloc_mean.max(f64::EPSILON)
+    let auto_alloc_mean = mean(
+        &comparable
+            .iter()
+            .map(|o| o.auto_allocs as f64)
+            .collect::<Vec<_>>(),
     );
+    println!(
+        "    Tree {:>8.1}   Plan {:>8.1}   Auto {:>8.1}",
+        tree_alloc_mean, plan_alloc_mean, auto_alloc_mean
+    );
+
+    for outcome in comparable.iter().filter(|outcome| {
+        outcome.id == "dmi_tdx"
+            || outcome.id == "aroon_cross"
+            || outcome.id == "williams_r"
+            || outcome.id == "momentum"
+    }) {
+        println!(
+            "\n  {} 专项: Tree {:.1} µs / {} allocs; Plan {:.1} µs / {} allocs; Plan/Tree {:.3}x",
+            outcome.id,
+            outcome.tree_warm_ns / 1000.0,
+            outcome.tree_allocs,
+            outcome.plan_warm_ns / 1000.0,
+            outcome.plan_allocs,
+            outcome.plan_warm_ns / outcome.tree_warm_ns.max(f64::EPSILON)
+        );
+    }
 
     // Slowest regressions, so a single bad formula cannot hide in the mean.
     let mut regressions: Vec<(&Outcome, f64)> = comparable
@@ -766,6 +815,25 @@ fn report(corpus: &str, outcomes: &[Outcome]) {
             );
         }
     }
+
+    let mut auto_regressions: Vec<(&Outcome, f64)> = comparable
+        .iter()
+        .map(|o| (*o, o.auto_warm_ns / o.tree_warm_ns.max(f64::EPSILON)))
+        .filter(|(_, ratio)| *ratio > 1.2)
+        .collect();
+    auto_regressions.sort_by(|a, b| b.1.partial_cmp(&a.1).expect("no NaN ratios"));
+    if !auto_regressions.is_empty() {
+        println!("\n  warm 路径 Auto 比 Tree 慢 >1.2x 的用例:");
+        for (outcome, ratio) in auto_regressions.iter().take(10) {
+            println!(
+                "    {:<28} {:>6.2}x   (Tree {:.1} µs / Auto {:.1} µs)",
+                outcome.id,
+                ratio,
+                outcome.tree_warm_ns / 1000.0,
+                outcome.auto_warm_ns / 1000.0
+            );
+        }
+    }
 }
 
 /// Rows in the native fixtures; a `--scaled` pass repeats them to this length.
@@ -780,7 +848,10 @@ fn run_pass(cases: &[Case], scale: usize, label: &str) {
         * scale;
 
     println!("\n\n╔═══════════════════════════════════════════════════════════════╗");
-    println!("║  测量档位: {label}  (每用例 {rows} 行)");
+    println!(
+        "║  测量档位: {label}  (domestic {rows} 行 / Pine {} 行)",
+        120 * scale
+    );
     println!("╚═══════════════════════════════════════════════════════════════╝");
 
     let outcomes: Vec<Outcome> = cases.iter().map(|case| measure_case(case, scale)).collect();
@@ -819,7 +890,7 @@ fn main() {
     cases.extend(load_pine());
 
     println!("═══════════════════════════════════════════════════════════════");
-    println!(" finkit 公式后端 workload 测量 (Tree vs Plan) — 阶段 1.4 证据");
+    println!(" finkit 公式后端 workload 测量 (Tree vs Plan vs Auto)");
     println!("═══════════════════════════════════════════════════════════════");
     println!(
         " 用例总数 {} (domestic {} / pine {})",

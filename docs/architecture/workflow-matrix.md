@@ -8,7 +8,7 @@
 | 工作流 | 入口与主要实现 | 输入 → 输出 | 已有验证面（需当前 SHA 重跑） | 贯通判断与剩余工作 |
 |---|---|---|---|---|
 | Rust 批量指标 | `finkit::indicators`、`BatchIndicator`；`core/src/indicators/` | 序列或 OHLCV → 对齐结果序列 | golden、TA-Lib、API surface、batch/into convergence targets | Rust core 主链路已实现；不同指标的输入合同、NaN/warm-up 和 feature/build 支持仍按家族管理 |
-| Rust/Python/Node 公式执行 | `FormulaEngine::{compile,eval,eval_with_dialect,eval_plan}`；Python `formula_eval` / Node `formulaEval` | 源码 + context → 主结果与命名 channel | formula backend、tree/plan differential、dialect/corpus、runtime convergence、binding consumer tests | Tree 默认路径覆盖最广；Plan 可选，存在登记的 Tree-only 入口。Rust/Python/Node 均可选择并查询 backend；其他绑定的 backend 合同另行确认 |
+| Rust/Python/Node 公式执行 | `FormulaEngine::{compile,eval,eval_with_dialect,eval_plan}`；Python `formula_eval` / Node `formulaEval` | 源码 + context → 主结果与命名 channel | formula backend、tree/plan differential、dialect/corpus、runtime convergence、binding consumer tests | Rust 默认 Auto 按已测成本选择 Tree/Plan；Python/Node 省略 backend 时保持 Tree。仍有登记的 Tree-only 入口，显式 Plan 选择会失败 |
 | Rust Streaming | `finkit::streaming`、`StreamingIndicator` | 有序 bar 更新 → 每次更新值/状态 | batch/streaming parity、repaint、long-run targets | 支持的指标主路径存在；目前不是所有 batch/streaming 都经同一 Runtime。需维持 per-indicator capability roster |
 | Factor / Composite DAG | `FactorProvider`、`FactorGraph`、`ComputePlan`、`FactorPlan`、`UnifiedRuntime` | 有类型的数据引用与 factor DAG → 节点结果/缓存 artifact | graph contract、operation seam、full/range/DirtyRange tests | Rust 内执行链已实现；完整输入来源、artifact 生命周期和各 adapter 的一致性需按 Runtime contract 验证；不等同于交易组合构建 |
 | 特征工程 | `core::features`、`transforms` | 行序列/特征列 → 转换特征、标签、筛选/导出结果 | feature unit tests、future-leakage/label invariants | 模块能力存在；各子模块的时间方向、未来信息使用及导出类型需在用户工作流示例中逐项对齐 |
@@ -17,7 +17,7 @@
 | Factor Study CLI | `cli/src/bin/finkit-factor-study.rs` | JSON 请求或 CSV → JSON 研究响应 | schema/API fixtures、CSV→报告 consumer test | 独立二进制直连研究 crate；与主 CLI 是两个入口。release workflows 已纳入两个二进制，最终 runner 仍需验证 |
 | Python / Node 绑定 | `ffi/python-binding`、`ffi/node-binding`；indicator API 与公式/Factor Research JSON 契约 | ndarray/JS arrays 或版本化 JSON 请求 → Python dict/JS object/JSON 响应 | binding parity、engine contract、factor-study request tests、安装包 consumer workflows | 两个 active binding 都暴露 Factor Study JSON API，指标 parity 比率只覆盖 78 项 indicator。Formula backend 查询/选择现已暴露；其余研究/流式操作仍按各自接口合同判断 |
 | 其他绑定 / 移动端 / WASM | `ffi/{c,go,java,dotnet,ios,android}`、`wasm/` | 各语言数值数组/契约 → 本地结果 | binding-specific CI 与 candidate package jobs | surface 和发行层级不同；当前主接口/研究工作流不统一，不应将 CI candidate 表述为公开分发 |
-| 发布安装闭环 | Cargo/GitHub Release、Python wheels、language packages、CLI binaries | tag + 精确 SHA → crate/wheels/CLI/native & binding artifacts → clean consumer | release workflows、package validators、release checklist | 截至 2026-10-23，GitHub Releases 最新公开版本为 `v0.1.15`；仓库基线存在 `v0.2.0` tag 但不等价于公开发行。其他公共 registry 仍须逐项核验。只有 tag 对应 required jobs 完成、资产和 clean consumer 验证后才算发布闭环 |
+| 发布安装闭环 | Cargo/GitHub Release、Python wheels、language packages、CLI binaries | tag + 精确 SHA → crate/wheels/CLI/native & binding artifacts → clean consumer | release workflows、package validators、release checklist | GitHub 最新公开版本为 `v0.2.0`；`v0.3.0` 是候选。其他公共 registry 仍须逐项核验。只有 tag 对应 required jobs 完成、资产和 clean consumer 验证后才算发布闭环 |
 
 ## 首要闭环缺口
 

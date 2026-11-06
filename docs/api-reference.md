@@ -542,12 +542,12 @@ it is the declared vocabulary (see [Category Slugs](#category-slugs) above).
 ### Installation
 
 Finkit is distributed as Python ABI3 wheels attached to the published GitHub
-`v0.1.15` Release. Download the wheel for your platform and install it locally,
+`v0.2.0` Release. Download the wheel for your platform and install it locally,
 or build the current v0.2.0 workspace from source with `maturin` (see
 [installation.md](installation.md)):
 
 ```bash
-python -m pip install ./finkit-0.1.15-<matching-platform>.whl
+python -m pip install ./finkit-0.2.0-<matching-platform>.whl
 ```
 
 ### Functions

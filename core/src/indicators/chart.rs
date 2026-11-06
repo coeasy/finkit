@@ -37,25 +37,31 @@ pub fn heikin_ashi(
     validate_input(open.len(), 1)?;
 
     let len = open.len();
-    let mut ha_o = Vec::with_capacity(len);
-    let mut ha_h = Vec::with_capacity(len);
-    let mut ha_l = Vec::with_capacity(len);
-    let mut ha_c = Vec::with_capacity(len);
+    // Every candle produces all four values, including NaNs for a bad input
+    // row, so skip four zero-initializing allocations and write each slot once.
+    let mut ha_o = crate::utils::uninit_output(len);
+    let mut ha_h = crate::utils::uninit_output(len);
+    let mut ha_l = crate::utils::uninit_output(len);
+    let mut ha_c = crate::utils::uninit_output(len);
 
     let mut prev_open = f64::NAN;
     let mut prev_close = f64::NAN;
-    for i in 0..len {
-        let o = open[i];
-        let h = high[i];
-        let l = low[i];
-        let c = close[i];
+    for ((((o, h), l), c), (((out_o, out_h), out_l), out_c)) in
+        open.iter().zip(high).zip(low).zip(close).zip(
+            ha_o.iter_mut()
+                .zip(ha_h.iter_mut())
+                .zip(ha_l.iter_mut())
+                .zip(ha_c.iter_mut()),
+        )
+    {
+        let (o, h, l, c) = (*o, *h, *l, *c);
         if o.is_nan() || h.is_nan() || l.is_nan() || c.is_nan() {
             prev_open = f64::NAN;
             prev_close = f64::NAN;
-            ha_o.push(f64::NAN);
-            ha_h.push(f64::NAN);
-            ha_l.push(f64::NAN);
-            ha_c.push(f64::NAN);
+            *out_o = f64::NAN;
+            *out_h = f64::NAN;
+            *out_l = f64::NAN;
+            *out_c = f64::NAN;
             continue;
         }
         let hc = (o + h + l + c) * 0.25;
@@ -64,10 +70,10 @@ pub fn heikin_ashi(
         } else {
             (prev_open + prev_close) * 0.5
         };
-        ha_c.push(hc);
-        ha_o.push(ho);
-        ha_h.push(h.max(ho).max(hc));
-        ha_l.push(l.min(ho).min(hc));
+        *out_c = hc;
+        *out_o = ho;
+        *out_h = h.max(ho).max(hc);
+        *out_l = l.min(ho).min(hc);
         prev_open = ho;
         prev_close = hc;
     }

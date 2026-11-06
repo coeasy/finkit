@@ -220,7 +220,7 @@ TongDaXin / TongHuaShun / EastMoney 下属于 §1.1（plan 可用），只有 Pi
 |---|---|
 | 仅 tree 名册三方一致（engine 守卫 / formula-engine.md / 本页 §1.2 / formula_execution_mode.rs） | `scripts/check_formula_engine_contract.py` |
 | runtime 合同的仅 tree 名册与源码一致 | `scripts/check_formula_engine_contract.py` |
-| 默认后端是 Tree | `formula_execution_mode.rs`；`check_formula_engine_contract.py` |
+| 默认后端是 Auto | `formula_execution_mode.rs`；`check_formula_engine_contract.py` |
 | Plan 可用入口确实填充 plan 缓存 | `formula_execution_mode.rs`（`plan_capable_entries_stay_governed`） |
 | 字符串字面量两路径一致 + 缺口名册 | `formula_string_literals.rs` |
 | 每个 plan 内核都已在 registry SSOT 声明（未声明会退化为 stateful barrier） | `formula_function_ssot.rs`（`every_plan_kernel_is_registered_in_the_ssot`） |
@@ -248,9 +248,10 @@ Rust、Python、Node 均提供 backend 选择和报告：Rust `FormulaEngine` �
 
 ### 5.1 默认切换条件
 
-默认仍为 Tree。Python 与 Node 的 Plan 选择是 opt-in；若所选入口不受 Plan 支持，必须
-显式失败，不允许静默退回 Tree。默认是否切换仍未决定：需要在最终候选 SHA 重测代表性
-workload 与内存分配，并评估所有公开语言面的迁移策略。旧提交测量只用作调查线索。
+Rust `FormulaEngine` 默认使用 Auto：冷公式走 Tree，达到长度门槛的重复公式按实测成本选择
+Plan 或 Tree。60 个公式在原生和长历史档位均保持 Tree/Plan 数值一致；长历史汇总约快 9%。
+Python 与 Node 省略 backend 时仍使用 Tree，以保持既有绑定合同；显式 Plan 对不支持的入口
+必须报错，不允许静默回退。
 
 ### 5.2 错误映射仍需跨 deferred bindings 收敛
 

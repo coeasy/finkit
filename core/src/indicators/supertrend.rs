@@ -3,6 +3,22 @@ use crate::indicators::volatility::atr;
 use crate::streaming::rolling_minmax::{RollingMax, RollingMin};
 use crate::utils::{init_output, validate_input};
 use ndarray::Array1;
+use std::mem::MaybeUninit;
+
+/// Reinterpret a fully initialized `MaybeUninit<T>` vector without copying.
+///
+/// The caller must write every element before calling this function. `T: Copy`
+/// guarantees that `T` has no drop glue, and `MaybeUninit<T>` has the same
+/// size and alignment as `T`.
+fn assume_init_copy_vec<T: Copy>(values: Vec<MaybeUninit<T>>) -> Vec<T> {
+    let ptr = values.as_ptr().cast::<T>();
+    let len = values.len();
+    let capacity = values.capacity();
+    std::mem::forget(values);
+    // SAFETY: the caller guarantees all `len` slots have been initialized;
+    // MaybeUninit<T> and T share the allocation layout, and T is Copy.
+    unsafe { Vec::from_raw_parts(ptr.cast_mut(), len, capacity) }
+}
 
 /// SuperTrend 趋势跟踪指标结果
 ///
@@ -86,9 +102,150 @@ pub fn supertrend_talib_compat(
     atr_period: usize,
     multiplier: f64,
 ) -> Result<(Array1<f64>, Array1<f64>)> {
+    if high.len() != low.len() || high.len() != close.len() {
+        return Err(TaError::InvalidParameter {
+            name: "high, low, close".to_string(),
+            constraint: "must have the same length".to_string(),
+        });
+    }
+    validate_input(high.len(), atr_period.saturating_add(1))?;
+    if multiplier <= 0.0 {
+        return Err(TaError::InvalidParameter {
+            name: "multiplier".to_string(),
+            constraint: "must be greater than 0".to_string(),
+        });
+    }
+    let warmup = crate::math::leading_warmup(high)
+        .max(crate::math::leading_warmup(low))
+        .max(crate::math::leading_warmup(close));
+    if warmup == 0 && atr_period > 0 {
+        return Ok(supertrend_talib_fused(
+            high, low, close, atr_period, multiplier,
+        ));
+    }
     let (direction, trend_line, _, _) =
         supertrend_impl::<f64, false>(high, low, close, atr_period, multiplier)?;
     Ok((trend_line, direction))
+}
+
+/// Tight TA-Lib two-output path for the no-leading-warm-up case. This keeps
+/// the ATR and trend recurrences fused while loading each bar's OHLC values
+/// once and avoids the generic callback's output-mode branches.
+#[inline]
+fn supertrend_talib_fused(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    atr_period: usize,
+    multiplier: f64,
+) -> (Array1<f64>, Array1<f64>) {
+    let len = close.len();
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let close_ptr = close.as_ptr();
+    let mut trend_line = crate::utils::uninit_output(len);
+    let mut direction = crate::utils::uninit_output(len);
+    trend_line[..atr_period].fill(f64::NAN);
+    direction[..atr_period].fill(0.0);
+
+    let inverse_period = 1.0 / atr_period as f64;
+    let mut tr_seed = 0.0;
+    for index in 1..=atr_period {
+        // SAFETY: the caller validates equal slice lengths and at least
+        // `atr_period + 1` rows before entering this helper.
+        let (current_high, current_low, previous_close) = unsafe {
+            (
+                *high_ptr.add(index),
+                *low_ptr.add(index),
+                *close_ptr.add(index - 1),
+            )
+        };
+        tr_seed += (current_high - current_low)
+            .max((current_high - previous_close).abs())
+            .max((current_low - previous_close).abs());
+    }
+    let mut previous_atr = tr_seed / atr_period as f64;
+    let mut final_upper = f64::NAN;
+    let mut final_lower = f64::NAN;
+    let mut current_trend = 1.0;
+    let mut previous_line_valid = false;
+
+    let first = atr_period;
+    // SAFETY: `first == atr_period < len` by the same caller validation.
+    let (current_high, current_low) = unsafe { (*high_ptr.add(first), *low_ptr.add(first)) };
+    let atr_value = previous_atr;
+    if atr_value.is_nan() {
+        trend_line[first] = f64::NAN;
+        direction[first] = 0.0;
+    } else {
+        let midpoint = (current_high + current_low) / 2.0;
+        let basic_upper = midpoint + multiplier * atr_value;
+        let basic_lower = midpoint - multiplier * atr_value;
+        final_upper = basic_upper;
+        final_lower = basic_lower;
+        let line = final_lower;
+        trend_line[first] = line;
+        direction[first] = current_trend;
+        previous_line_valid = !line.is_nan();
+    }
+
+    for i in first + 1..len {
+        // SAFETY: `first + 1..len` and the validated equal lengths keep all
+        // four indexed reads within their respective slices.
+        let (current_high, current_low, current_close, previous_close) = unsafe {
+            (
+                *high_ptr.add(i),
+                *low_ptr.add(i),
+                *close_ptr.add(i),
+                *close_ptr.add(i - 1),
+            )
+        };
+        let true_range = (current_high - current_low)
+            .max((current_high - previous_close).abs())
+            .max((current_low - previous_close).abs());
+        previous_atr += (true_range - previous_atr) * inverse_period;
+        let atr_value = previous_atr;
+
+        if atr_value.is_nan() {
+            trend_line[i] = f64::NAN;
+            direction[i] = 0.0;
+            previous_line_valid = false;
+            continue;
+        }
+
+        let midpoint = (current_high + current_low) / 2.0;
+        let basic_upper = midpoint + multiplier * atr_value;
+        let basic_lower = midpoint - multiplier * atr_value;
+        final_upper =
+            if final_upper.is_nan() || basic_upper < final_upper || previous_close > final_upper {
+                basic_upper
+            } else {
+                final_upper
+            };
+        final_lower =
+            if final_lower.is_nan() || basic_lower > final_lower || previous_close < final_lower {
+                basic_lower
+            } else {
+                final_lower
+            };
+        if previous_line_valid {
+            if current_close > final_upper {
+                current_trend = 1.0;
+            } else if current_close < final_lower {
+                current_trend = -1.0;
+            }
+        }
+        let line = if current_trend == 1.0 {
+            final_lower
+        } else {
+            final_upper
+        };
+        trend_line[i] = line;
+        direction[i] = current_trend;
+        previous_line_valid = !line.is_nan();
+    }
+
+    (Array1::from_vec(trend_line), Array1::from_vec(direction))
 }
 
 fn supertrend_impl<Direction: From<i32> + Copy, const INCLUDE_BANDS: bool>(
@@ -114,16 +271,54 @@ fn supertrend_impl<Direction: From<i32> + Copy, const INCLUDE_BANDS: bool>(
     }
 
     let len = high.len();
+    let warmup = crate::math::leading_warmup(high)
+        .max(crate::math::leading_warmup(low))
+        .max(crate::math::leading_warmup(close));
+    const UNINIT_OUTPUT_THRESHOLD: usize = 16_384;
+    // `warmup == 0` selects the fused loop below, which invokes the callback
+    // for every output index from `atr_period` onward. The callback also writes
+    // explicit fallback values when an interior non-finite value makes ATR NaN,
+    // so the large buffers remain fully initialized without scanning all inputs.
+    let use_uninit = len >= UNINIT_OUTPUT_THRESHOLD && warmup == 0;
 
-    let mut direction = Array1::from_elem(len, Direction::from(0));
-    let mut trend_line = init_output(len);
-    let mut upper_band = if INCLUDE_BANDS {
+    let mut direction = if use_uninit {
+        None
+    } else {
+        Some(Array1::from_elem(len, Direction::from(0)))
+    };
+    let mut direction_uninit = use_uninit.then(|| vec![MaybeUninit::uninit(); len]);
+    if let Some(values) = direction_uninit.as_mut() {
+        for value in &mut values[..atr_period] {
+            value.write(Direction::from(0));
+        }
+    }
+    let mut trend_line = if use_uninit {
+        Array1::from(crate::utils::uninit_output(len))
+    } else {
         init_output(len)
+    };
+    if use_uninit {
+        trend_line.as_slice_mut().unwrap()[..atr_period].fill(f64::NAN);
+    }
+    let mut upper_band = if INCLUDE_BANDS {
+        if use_uninit {
+            let mut output = Array1::from(crate::utils::uninit_output(len));
+            output.as_slice_mut().unwrap()[..atr_period].fill(f64::NAN);
+            output
+        } else {
+            init_output(len)
+        }
     } else {
         Array1::zeros(0)
     };
     let mut lower_band = if INCLUDE_BANDS {
-        init_output(len)
+        if use_uninit {
+            let mut output = Array1::from(crate::utils::uninit_output(len));
+            output.as_slice_mut().unwrap()[..atr_period].fill(f64::NAN);
+            output
+        } else {
+            init_output(len)
+        }
     } else {
         Array1::zeros(0)
     };
@@ -134,6 +329,14 @@ fn supertrend_impl<Direction: From<i32> + Copy, const INCLUDE_BANDS: bool>(
 
     let mut apply_atr = |i: usize, atr_value: f64| {
         if atr_value.is_nan() {
+            if use_uninit {
+                direction_uninit.as_mut().unwrap()[i].write(Direction::from(0));
+                trend_line[i] = f64::NAN;
+                if INCLUDE_BANDS {
+                    upper_band[i] = f64::NAN;
+                    lower_band[i] = f64::NAN;
+                }
+            }
             return;
         }
 
@@ -176,7 +379,11 @@ fn supertrend_impl<Direction: From<i32> + Copy, const INCLUDE_BANDS: bool>(
             }
         }
 
-        direction[i] = Direction::from(current_trend);
+        if let Some(values) = direction_uninit.as_mut() {
+            values[i].write(Direction::from(current_trend));
+        } else {
+            direction.as_mut().unwrap()[i] = Direction::from(current_trend);
+        }
         trend_line[i] = if current_trend == 1 {
             final_lower
         } else {
@@ -187,9 +394,6 @@ fn supertrend_impl<Direction: From<i32> + Copy, const INCLUDE_BANDS: bool>(
     // Fuse Wilder ATR with the trend state machine for ordinary finite input,
     // avoiding an intermediate ATR allocation and reread. Leading warm-up
     // prefixes retain the established ATR path so the seed remains aligned.
-    let warmup = crate::math::leading_warmup(high)
-        .max(crate::math::leading_warmup(low))
-        .max(crate::math::leading_warmup(close));
     if warmup == 0 {
         let inverse_period = 1.0 / atr_period as f64;
         let mut tr_seed = 0.0;
@@ -220,6 +424,12 @@ fn supertrend_impl<Direction: From<i32> + Copy, const INCLUDE_BANDS: bool>(
         }
     }
     drop(apply_atr);
+
+    let direction = if let Some(values) = direction_uninit {
+        Array1::from_vec(assume_init_copy_vec(values))
+    } else {
+        direction.expect("initialized direction output exists on the fallback path")
+    };
 
     Ok((direction, trend_line, upper_band, lower_band))
 }

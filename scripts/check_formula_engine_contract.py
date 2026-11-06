@@ -5,7 +5,7 @@ Why this exists
 ---------------
 `docs/architecture/formula-engine.md` once described a **different engine** from
 the one in the tree: it said "production execution goes through the compiled-plan
-path" while `FormulaExecutionMode::default()` was — and is — `Tree`, and it
+path" while `FormulaExecutionMode::default()` was `Tree` and is now `Auto`, and it
 described the cache as one LRU while the engine actually holds several bounded
 caches (one LRU AST cache plus FIFO plan/semantic/bytecode caches). Nothing
 objected, because prose has no compiler.
@@ -24,7 +24,7 @@ asserts four separate documents agree with it:
      bullet list under "Tree-only 入口" and the "仅 tree" table row);
   3. the `assert_tree_only!("NAME", ..)` roster in
      `core/tests/formula_execution_mode.rs`;
-  4. the enum default (`#[default]` must sit on `Tree`).
+  4. the enum default (`#[default]` must sit on `Auto`).
 
 Document 2 is the one that drifted in practice: its §3.4 table omitted
 `eval_multi_with_dialect(Pine)` while §1.1 of the same file listed it, so the
@@ -113,7 +113,7 @@ ENTRY_MATRIX_ANCHORS = (
 
 REQUIRE_TREE = re.compile(r'require_tree_backend\("([^"]+)"\)')
 ASSERT_TREE = re.compile(r'assert_tree_only!\(\s*"([^"]+)"')
-ENUM_DEFAULT_TREE = re.compile(r"#\[default\]\s*\n\s*Tree,")
+ENUM_DEFAULT_AUTO = re.compile(r"#\[default\]\s*\n\s*Auto,")
 CACHE_CAPACITY = re.compile(r"const ENGINE_CACHE_CAPACITY: usize = (\d+);")
 AST_CACHE_CAPACITY = re.compile(r"FormulaCache::new\((\d+)\)")
 EVAL_TOKEN = re.compile(r"`(eval[^`]*)`")
@@ -304,12 +304,11 @@ def main() -> int:
 
     failures: list[str] = []
 
-    # 1. The enum default must still be Tree.
-    if not ENUM_DEFAULT_TREE.search(engine):
+    # 1. Auto is the measured-cost default; Tree remains the reference mode.
+    if not ENUM_DEFAULT_AUTO.search(engine):
         failures.append(
-            "FormulaExecutionMode's #[default] is no longer on `Tree`; "
-            "flipping the default is a release decision that must update this gate "
-            "and docs/architecture/formula-engine.md together"
+            "FormulaExecutionMode's #[default] is no longer on `Auto`; "
+            "the backend policy and docs/architecture/formula-engine.md must agree"
         )
 
     # 2. Doc + test must agree with the guarded entry set.
@@ -504,7 +503,7 @@ def main() -> int:
         f"OK: {len(code_entries)} tree-only entries agree across the engine guard, "
         f"docs/architecture/formula-engine.md, docs/formula-runtime-contract.md "
         f"(both rosters) and formula_execution_mode.rs; all {len(dispositions)} carry "
-        f"a §1.2.1 disposition; default is Tree; cache capacities match the constants"
+        f"a §1.2.1 disposition; default is Auto; cache capacities match the constants"
     )
     return 0
 

@@ -12,9 +12,69 @@ use crate::formula::bridge_dispatch::{
 };
 use crate::formula::truth;
 use crate::formula::types::HostContext;
+use crate::runtime_context::RuntimeContext;
 use crate::state_arena::StateArena;
 use crate::unified_executor::{KernelCall, KernelDispatchError, KernelDispatcher, UnifiedExecutor};
 use ndarray::Array1;
+
+type FormulaArrayKernel = fn(
+    &crate::formula::types::FormulaContext,
+    &[Array1<f64>],
+) -> std::result::Result<Array1<f64>, crate::error::FormulaError>;
+
+/// Run a canonical formula kernel without copying every input buffer into a
+/// fresh ndarray. The dispatcher owns the plan buffers exclusively during the
+/// call, so unique inputs can be moved into owned arrays and restored after
+/// the synchronous kernel returns. Duplicate input slots keep the old clone
+/// behavior to preserve positional arguments.
+fn dispatch_array_kernel(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+    len: usize,
+    kernel: FormulaArrayKernel,
+) {
+    let has_duplicate_inputs = call.inputs.iter().enumerate().any(|(index, slot)| {
+        call.inputs[..index]
+            .iter()
+            .any(|previous| previous.0 == slot.0)
+    });
+    let ctx = bridge_context(len);
+    let result = if call.inputs.len() <= 8 && !has_duplicate_inputs {
+        // Formula builtins are almost all unary through quaternary. Keep their
+        // argument descriptors on the stack; only high-arity calls need the
+        // heap-backed fallback below.
+        let mut args: [Array1<f64>; 8] = std::array::from_fn(|_| Array1::from(Vec::new()));
+        for (index, slot) in call.inputs.iter().enumerate() {
+            args[index] = Array1::from(std::mem::take(&mut buffers[slot.0]));
+        }
+        let result = kernel(&ctx, &args[..call.inputs.len()]);
+        for (slot, input) in call.inputs.iter().zip(args.into_iter()) {
+            buffers[slot.0] = input.into_raw_vec_and_offset().0;
+        }
+        result
+    } else {
+        let args: Vec<Array1<f64>> = call
+            .inputs
+            .iter()
+            .map(|slot| Array1::from(buffers[slot.0].clone()))
+            .collect();
+        kernel(&ctx, &args)
+    };
+
+    let output_slot = call.output.0;
+    match result {
+        Ok(series) if series.len() == len => {
+            // Canonical kernels return contiguous one-dimensional arrays. Move
+            // their allocation into the plan slot rather than copying every
+            // output element into a second full-length buffer.
+            let _ = series
+                .as_slice()
+                .expect("canonical kernel output is contiguous");
+            buffers[output_slot] = series.into_raw_vec_and_offset().0;
+        }
+        Ok(_) | Err(_) => buffers[output_slot].fill(f64::NAN),
+    }
+}
 
 /// Numeric dispatcher for formula constants and core arithmetic/logical operators.
 ///
@@ -92,6 +152,13 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
         buffers: &mut [Vec<f64>],
         _states: &mut StateArena,
     ) -> Result<(), KernelDispatchError> {
+        if let Some(op) = binary_kernel(call.kernel) {
+            return binary(call, buffers, op);
+        }
+        if let Some(op) = scalar_kernel(call.kernel) {
+            return scalar_binary(call, buffers, op);
+        }
+
         if call.kernel == KernelId::from_static("NUMBER") {
             if !call.inputs.is_empty() {
                 return Err(KernelDispatchError::new(Self::ERR_ARITY));
@@ -102,6 +169,24 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
                 .and_then(|parameter| parameter.as_f64())
                 .ok_or_else(|| KernelDispatchError::new(Self::ERR_PARAMETER))?;
             buffers[call.output.0].fill(value);
+            return Ok(());
+        }
+
+        if call.kernel == KernelId::from_static("SCALAR:NUMBER") {
+            if !call.inputs.is_empty() {
+                return Err(KernelDispatchError::new(Self::ERR_ARITY));
+            }
+            let value = call
+                .parameters
+                .first()
+                .and_then(|parameter| parameter.as_f64())
+                .ok_or_else(|| KernelDispatchError::new(Self::ERR_PARAMETER))?;
+            let output = buffers
+                .get_mut(call.output.0)
+                .ok_or_else(|| KernelDispatchError::new(Self::ERR_PARAMETER))?;
+            if let Some(first) = output.first_mut() {
+                *first = value;
+            }
             return Ok(());
         }
 
@@ -146,6 +231,35 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
         }
         if call.kernel == KernelId::from_static("CALL:DIV") {
             return dispatch_arith_call(call, buffers, ArithKernel::Div);
+        }
+
+        if call.kernel == KernelId::from_static("CALL:MA")
+            || call.kernel == KernelId::from_static("CALL:SMA")
+            || call.kernel == KernelId::from_static("CALL:EMA")
+            || call.kernel == KernelId::from_static("CALL:WMA")
+            || call.kernel == KernelId::from_static("CALL:HMA")
+            || call.kernel == KernelId::from_static("CALL:RMA")
+            || call.kernel == KernelId::from_static("CALL:MEDIAN")
+            || call.kernel == KernelId::from_static("CALL:ROLLING_RANGE")
+            || call.kernel == KernelId::from_static("CALL:KAMA")
+            || call.kernel == KernelId::from_static("CALL:RSI")
+            || call.kernel == KernelId::from_static("CALL:MOM")
+            || call.kernel == KernelId::from_static("CALL:ROC")
+            || call.kernel == KernelId::from_static("CALL:TRIX")
+            || call.kernel == KernelId::from_static("CALL:TRIMA")
+            || call.kernel == KernelId::from_static("CALL:STD")
+            || call.kernel == KernelId::from_static("CALL:STDDEV")
+            || call.kernel == KernelId::from_static("CALL:ZLEMA")
+            || call.kernel == KernelId::from_static("CALL:HHV")
+            || call.kernel == KernelId::from_static("CALL:LLV")
+            || call.kernel == KernelId::from_static("CALL:SUM")
+            || call.kernel == KernelId::from_static("CALL:VAR")
+            || call.kernel == KernelId::from_static("CALL:REF")
+            || call.kernel == KernelId::from_static("CALL:ROCP")
+            || call.kernel == KernelId::from_static("CALL:ROCR")
+            || call.kernel == KernelId::from_static("CALL:ROCR100")
+        {
+            return dispatch_periodic_call(call, buffers);
         }
 
         if call.kernel == KernelId::from_static("CALL:SQRT") {
@@ -290,37 +404,6 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
                 buffers,
                 ReferenceRollingKernel::StdSample,
             );
-        }
-
-        if call.kernel == KernelId::from_static("CALL:MA")
-            || call.kernel == KernelId::from_static("CALL:SMA")
-            || call.kernel == KernelId::from_static("CALL:EMA")
-            || call.kernel == KernelId::from_static("CALL:WMA")
-            || call.kernel == KernelId::from_static("CALL:HMA")
-            || call.kernel == KernelId::from_static("CALL:RMA")
-            || call.kernel == KernelId::from_static("CALL:MEDIAN")
-            || call.kernel == KernelId::from_static("CALL:ROLLING_RANGE")
-            || call.kernel == KernelId::from_static("CALL:KAMA")
-            || call.kernel == KernelId::from_static("CALL:RSI")
-            || call.kernel == KernelId::from_static("CALL:MOM")
-            || call.kernel == KernelId::from_static("CALL:ROC")
-            || call.kernel == KernelId::from_static("CALL:TRIX")
-            || call.kernel == KernelId::from_static("CALL:TRIMA")
-            // `STDDEV` is an alias of `STD` on the formula surface (`fn_std` is
-            // registered under both names), so it shares the branch rather than
-            // getting a kernel of its own.
-            || call.kernel == KernelId::from_static("CALL:STD")
-            || call.kernel == KernelId::from_static("CALL:STDDEV")
-            || call.kernel == KernelId::from_static("CALL:HHV")
-            || call.kernel == KernelId::from_static("CALL:LLV")
-            || call.kernel == KernelId::from_static("CALL:SUM")
-            || call.kernel == KernelId::from_static("CALL:VAR")
-            || call.kernel == KernelId::from_static("CALL:REF")
-            || call.kernel == KernelId::from_static("CALL:ROCP")
-            || call.kernel == KernelId::from_static("CALL:ROCR")
-            || call.kernel == KernelId::from_static("CALL:ROCR100")
-        {
-            return dispatch_periodic_call(call, buffers);
         }
 
         // `CALL:CCI` has two shapes: the domestic four-operand HLC form and the
@@ -544,46 +627,132 @@ impl KernelDispatcher for FormulaKernelDispatcher<'_> {
             return mean_formula_into(call, buffers);
         }
 
-        let op = if call.kernel == KernelId::from_static("BINARY:Add") {
-            BinaryKernel::Add
-        } else if call.kernel == KernelId::from_static("BINARY:Sub") {
-            BinaryKernel::Sub
-        } else if call.kernel == KernelId::from_static("BINARY:Mul") {
-            BinaryKernel::Mul
-        } else if call.kernel == KernelId::from_static("BINARY:Div") {
-            BinaryKernel::Div
-        } else if call.kernel == KernelId::from_static("BINARY:Mod") {
-            BinaryKernel::Mod
-        } else if call.kernel == KernelId::from_static("BINARY:Pow") {
-            BinaryKernel::Pow
-        } else if call.kernel == KernelId::from_static("BINARY:Gt") {
-            BinaryKernel::Gt
-        } else if call.kernel == KernelId::from_static("BINARY:Lt") {
-            BinaryKernel::Lt
-        } else if call.kernel == KernelId::from_static("BINARY:Gte") {
-            BinaryKernel::Gte
-        } else if call.kernel == KernelId::from_static("BINARY:Lte") {
-            BinaryKernel::Lte
-        } else if call.kernel == KernelId::from_static("BINARY:Eq") {
-            BinaryKernel::Eq
-        } else if call.kernel == KernelId::from_static("BINARY:Neq") {
-            BinaryKernel::Neq
-        } else if call.kernel == KernelId::from_static("BINARY:And") {
-            BinaryKernel::And
-        } else if call.kernel == KernelId::from_static("BINARY:Or") {
-            BinaryKernel::Or
-        } else if call.kernel == KernelId::from_static("BINARY:Xor") {
-            BinaryKernel::Xor
-        } else if call.kernel == KernelId::from_static("CALL:MAX") {
-            BinaryKernel::Max
-        } else if call.kernel == KernelId::from_static("CALL:MIN") {
-            BinaryKernel::Min
-        } else {
-            return Err(KernelDispatchError::new(Self::ERR_UNSUPPORTED_KERNEL));
-        };
-        binary(call, buffers, op)
+        Err(KernelDispatchError::new(Self::ERR_UNSUPPORTED_KERNEL))
     }
 }
+
+#[inline]
+fn binary_kernel(kernel: KernelId) -> Option<BinaryKernel> {
+    match kernel {
+        KERNEL_BINARY_ADD => Some(BinaryKernel::Add),
+        KERNEL_BINARY_SUB => Some(BinaryKernel::Sub),
+        KERNEL_BINARY_MUL => Some(BinaryKernel::Mul),
+        KERNEL_BINARY_DIV => Some(BinaryKernel::Div),
+        KERNEL_BINARY_MOD => Some(BinaryKernel::Mod),
+        KERNEL_BINARY_POW => Some(BinaryKernel::Pow),
+        KERNEL_BINARY_GT => Some(BinaryKernel::Gt),
+        KERNEL_BINARY_LT => Some(BinaryKernel::Lt),
+        KERNEL_BINARY_GTE => Some(BinaryKernel::Gte),
+        KERNEL_BINARY_LTE => Some(BinaryKernel::Lte),
+        KERNEL_BINARY_EQ => Some(BinaryKernel::Eq),
+        KERNEL_BINARY_NEQ => Some(BinaryKernel::Neq),
+        KERNEL_BINARY_AND => Some(BinaryKernel::And),
+        KERNEL_BINARY_OR => Some(BinaryKernel::Or),
+        KERNEL_BINARY_XOR => Some(BinaryKernel::Xor),
+        KERNEL_CALL_MAX => Some(BinaryKernel::Max),
+        KERNEL_CALL_MIN => Some(BinaryKernel::Min),
+        _ => None,
+    }
+}
+
+#[derive(Clone, Copy)]
+enum ScalarKernel {
+    Add,
+    SubLeft,
+    SubRight,
+    Mul,
+    DivLeft,
+    DivRight,
+}
+
+#[inline]
+fn scalar_kernel(kernel: KernelId) -> Option<ScalarKernel> {
+    match kernel {
+        SCALAR_ADD => Some(ScalarKernel::Add),
+        SCALAR_SUB_LEFT => Some(ScalarKernel::SubLeft),
+        SCALAR_SUB_RIGHT => Some(ScalarKernel::SubRight),
+        SCALAR_MUL => Some(ScalarKernel::Mul),
+        SCALAR_DIV_LEFT => Some(ScalarKernel::DivLeft),
+        SCALAR_DIV_RIGHT => Some(ScalarKernel::DivRight),
+        _ => None,
+    }
+}
+
+const SCALAR_ADD: KernelId = KernelId::from_static("Scalar:Add");
+const SCALAR_SUB_LEFT: KernelId = KernelId::from_static("Scalar:SubLeft");
+const SCALAR_SUB_RIGHT: KernelId = KernelId::from_static("Scalar:SubRight");
+const SCALAR_MUL: KernelId = KernelId::from_static("Scalar:Mul");
+const SCALAR_DIV_LEFT: KernelId = KernelId::from_static("Scalar:DivLeft");
+const SCALAR_DIV_RIGHT: KernelId = KernelId::from_static("Scalar:DivRight");
+
+#[inline]
+fn scalar_binary(
+    call: KernelCall<'_>,
+    buffers: &mut [Vec<f64>],
+    op: ScalarKernel,
+) -> Result<(), KernelDispatchError> {
+    if call.inputs.len() != 1 {
+        return Err(KernelDispatchError::new(FormulaKernelDispatcher::ERR_ARITY));
+    }
+    let scalar = call
+        .parameters
+        .first()
+        .and_then(|parameter| parameter.as_f64())
+        .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+    let input = call.inputs[0].0;
+    let output = call.output.0;
+    let len = buffers[output].len();
+    let input_ptr = buffers[input].as_ptr();
+    let output_ptr = buffers[output].as_mut_ptr();
+
+    // The plan's lifetime layout guarantees input/output lanes do not overlap.
+    // Keep this as a single scalar pass without first expanding the literal to
+    // a full-length numeric buffer.
+    unsafe {
+        for index in 0..len {
+            let value = *input_ptr.add(index);
+            *output_ptr.add(index) = match op {
+                ScalarKernel::Add => value + scalar,
+                ScalarKernel::SubLeft => scalar - value,
+                ScalarKernel::SubRight => value - scalar,
+                ScalarKernel::Mul => value * scalar,
+                ScalarKernel::DivLeft => {
+                    if value.abs() < crate::utils::NUMERIC_EPSILON {
+                        f64::NAN
+                    } else {
+                        scalar / value
+                    }
+                }
+                ScalarKernel::DivRight => {
+                    if scalar.abs() < crate::utils::NUMERIC_EPSILON {
+                        f64::NAN
+                    } else {
+                        value / scalar
+                    }
+                }
+            };
+        }
+    }
+    Ok(())
+}
+
+const KERNEL_BINARY_ADD: KernelId = KernelId::from_static("BINARY:Add");
+const KERNEL_BINARY_SUB: KernelId = KernelId::from_static("BINARY:Sub");
+const KERNEL_BINARY_MUL: KernelId = KernelId::from_static("BINARY:Mul");
+const KERNEL_BINARY_DIV: KernelId = KernelId::from_static("BINARY:Div");
+const KERNEL_BINARY_MOD: KernelId = KernelId::from_static("BINARY:Mod");
+const KERNEL_BINARY_POW: KernelId = KernelId::from_static("BINARY:Pow");
+const KERNEL_BINARY_GT: KernelId = KernelId::from_static("BINARY:Gt");
+const KERNEL_BINARY_LT: KernelId = KernelId::from_static("BINARY:Lt");
+const KERNEL_BINARY_GTE: KernelId = KernelId::from_static("BINARY:Gte");
+const KERNEL_BINARY_LTE: KernelId = KernelId::from_static("BINARY:Lte");
+const KERNEL_BINARY_EQ: KernelId = KernelId::from_static("BINARY:Eq");
+const KERNEL_BINARY_NEQ: KernelId = KernelId::from_static("BINARY:Neq");
+const KERNEL_BINARY_AND: KernelId = KernelId::from_static("BINARY:And");
+const KERNEL_BINARY_OR: KernelId = KernelId::from_static("BINARY:Or");
+const KERNEL_BINARY_XOR: KernelId = KernelId::from_static("BINARY:Xor");
+const KERNEL_CALL_MAX: KernelId = KernelId::from_static("CALL:MAX");
+const KERNEL_CALL_MIN: KernelId = KernelId::from_static("CALL:MIN");
 
 /// Execute a one-series formula function directly into the plan-owned output.
 ///
@@ -724,24 +893,28 @@ fn dispatch_arith_call(
     let rhs = call.inputs[1].0;
     let out = call.output.0;
     let length = buffers[out].len();
-    for index in 0..length {
-        // Read both operands before writing: element-wise, so a single index is
-        // all that is needed, which keeps this correct even if the allocator
-        // aliased the output onto an operand.
-        let a = buffers[lhs][index];
-        let b = buffers[rhs][index];
-        buffers[out][index] = match op {
-            ArithKernel::Add => a + b,
-            ArithKernel::Sub => a - b,
-            ArithKernel::Mul => a * b,
-            ArithKernel::Div => {
-                if b == 0.0 {
-                    f64::NAN
-                } else {
-                    a / b
+    let lhs_ptr = buffers[lhs].as_ptr();
+    let rhs_ptr = buffers[rhs].as_ptr();
+    let out_ptr = buffers[out].as_mut_ptr();
+    // UnifiedExecutor sizes every lane to the same logical length and keeps
+    // the arena fixed during dispatch. Load both operands before storing so
+    // in-place aliases remain valid.
+    macro_rules! run_arith {
+        ($a:ident, $b:ident, $expression:expr) => {{
+            unsafe {
+                for index in 0..length {
+                    let $a = *lhs_ptr.add(index);
+                    let $b = *rhs_ptr.add(index);
+                    *out_ptr.add(index) = $expression;
                 }
             }
-        };
+        }};
+    }
+    match op {
+        ArithKernel::Add => run_arith!(a, b, a + b),
+        ArithKernel::Sub => run_arith!(a, b, a - b),
+        ArithKernel::Mul => run_arith!(a, b, a * b),
+        ArithKernel::Div => run_arith!(a, b, if b == 0.0 { f64::NAN } else { a / b }),
     }
     Ok(())
 }
@@ -1376,6 +1549,9 @@ fn dispatch_periodic_call(
         return ref_formula_into(input, period, output)
             .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER));
     }
+    if call.kernel == KernelId::from_static("CALL:ZLEMA") {
+        return absorb_kernel_failure(zlema_formula_into(input, period, output), output);
+    }
     // Rate-of-change ratio variants. These delegate to the *same* canonical
     // functions the tree path calls (`fn_rocp`/`fn_rocr`/`fn_rocr100`), and on
     // error they mirror the tree path by emitting NaN instead of failing, so
@@ -1444,6 +1620,28 @@ fn dispatch_periodic_call(
     // reference path's all-NaN series rather than failing the evaluation -- see
     // `absorb_kernel_failure`.
     absorb_kernel_failure(result, output)
+}
+
+/// Apply the canonical formula bridge's leading-warmup and short-tail rules,
+/// then write ZLEMA directly into the plan-owned output slot.
+fn zlema_formula_into(
+    input: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> crate::error::Result<()> {
+    if input.len() != output.len() {
+        return Err(crate::error::TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    let start = crate::math::leading_warmup(input);
+    if start == input.len() || input.len() - start < period {
+        output.fill(f64::NAN);
+        return Ok(());
+    }
+    output[..start].fill(f64::NAN);
+    crate::math::moving_avg::zlema_into(&input[start..], period, &mut output[start..])
 }
 
 /// Rolling operators whose numeric contract is pinned to an **external
@@ -1658,20 +1856,28 @@ fn sum_formula_into(input: &[f64], period: usize, output: &mut [f64]) -> crate::
             constraint: "period must be > 0 and input/output lengths must match".to_string(),
         });
     }
-    output.fill(f64::NAN);
     // See `math::leading_warmup`: a leading non-finite run is the warm-up prefix
     // of an upstream rolling indicator, not data. The running total below is an
     // incremental accumulator, so feeding it that run would make it `NaN` for
     // the whole series -- and `SUM` has no math-layer counterpart, so the rule
     // has to be applied here and in `functions_legacy::fn_sum`.
     let start = crate::math::leading_warmup(input);
+    let Some(first_valid) = start
+        .checked_add(period - 1)
+        .filter(|&index| index < input.len())
+    else {
+        output.fill(f64::NAN);
+        return Ok(());
+    };
+    output[..first_valid].fill(f64::NAN);
+
     let mut running = 0.0;
     for (index, &current) in input.iter().enumerate().skip(start) {
         running += current;
-        if index >= start + period {
+        if index > first_valid {
             running -= input[index - period];
             output[index] = running;
-        } else if index == start + period - 1 {
+        } else if index == first_valid {
             output[index] = running;
         }
     }
@@ -1686,7 +1892,7 @@ fn ref_formula_into(input: &[f64], period: usize, output: &mut [f64]) -> crate::
             constraint: "period must be > 0 and input/output lengths must match".to_string(),
         });
     }
-    output.fill(f64::NAN);
+    output[..period.min(input.len())].fill(f64::NAN);
     for index in period..input.len() {
         output[index] = input[index - period];
     }
@@ -2573,13 +2779,9 @@ fn dispatch_volume_call(
 
 /// Execute `AROON_UP` / `AROON_DN` into the plan-owned output.
 ///
-/// Both legs delegate to `indicators::momentum::aroon`, which is the *same*
-/// function the tree path calls from `fn_aroon_up` / `fn_aroon_dn`. That is
-/// deliberate: `momentum::aroon_into` is a separately optimised implementation
-/// (monotonic-queue rather than a window rescan), and routing this kernel to it
-/// would let the two paths disagree the moment the variants drift. Correctness
-/// first — the extra allocation can go once an equivalence test pins the fast
-/// variant to the reference.
+/// A formula call requests only one leg. Use the shared cached-extreme tracker
+/// for that input and write directly to the plan-owned output, so we neither
+/// compute nor allocate the unused AROON column.
 fn dispatch_aroon_call(
     call: KernelCall<'_>,
     buffers: &mut [Vec<f64>],
@@ -2607,27 +2809,23 @@ fn dispatch_aroon_call(
         ));
     }
 
-    // Scoped so the immutable borrows end before the output is borrowed mutably.
-    let result = {
-        let high = &buffers[high_slot];
-        let low = &buffers[low_slot];
-        crate::indicators::momentum::aroon(high, low, period)
-            .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?
-    };
-    let source = if call.kernel == KernelId::from_static("CALL:AROON_UP") {
-        result.aroon_up
-    } else {
-        result.aroon_down
-    };
-    let output = buffers
-        .get_mut(output_slot)
+    let is_up = call.kernel == KernelId::from_static("CALL:AROON_UP");
+    let values_slot = if is_up { high_slot } else { low_slot };
+    let (before_output, output_and_after) = buffers.split_at_mut(output_slot);
+    let (output, after_output) = output_and_after
+        .split_first_mut()
         .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
-    if output.len() != source.len() {
-        return Err(KernelDispatchError::new(
-            FormulaKernelDispatcher::ERR_PARAMETER,
-        ));
+    let values = if values_slot < output_slot {
+        &before_output[values_slot]
+    } else {
+        &after_output[values_slot - output_slot - 1]
+    };
+    if is_up {
+        crate::indicators::momentum::aroon_leg_into::<true>(values, period, output)
+    } else {
+        crate::indicators::momentum::aroon_leg_into::<false>(values, period, output)
     }
-    output.copy_from_slice(source.as_slice().unwrap());
+    .map_err(|_| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
     Ok(())
 }
 
@@ -2672,6 +2870,44 @@ fn dispatch_dmi_call(
         ));
     }
 
+    // The four-argument forms produce one series. Write that result directly
+    // into the plan-owned output instead of allocating a temporary Vec and
+    // copying the full column after dispatch. The earlier alias check makes
+    // the output slot disjoint from all four inputs; split the buffer table at
+    // that slot so Rust can keep the borrows safe without raw pointers.
+    if call.inputs.len() == 4 {
+        let (before_output, output_and_after) = buffers.split_at_mut(output_slot);
+        let (output, after_output) = output_and_after
+            .split_first_mut()
+            .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
+        let input = |slot: usize| {
+            if slot < output_slot {
+                &before_output[slot]
+            } else {
+                &after_output[slot - output_slot - 1]
+            }
+        };
+        let high = input(high_slot);
+        let low = input(low_slot);
+        let close = input(close_slot);
+        let invalid = || KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER);
+        if call.kernel == KernelId::from_static("CALL:PLUS_DI") {
+            crate::indicators::momentum::directional_di_into::<true, true>(
+                high, low, close, period, output,
+            )
+            .map_err(|_| invalid())?;
+        } else if call.kernel == KernelId::from_static("CALL:MINUS_DI") {
+            crate::indicators::momentum::directional_di_into::<false, true>(
+                high, low, close, period, output,
+            )
+            .map_err(|_| invalid())?;
+        } else {
+            crate::indicators::momentum::adx_into(high, low, close, period, output)
+                .map_err(|_| invalid())?;
+        }
+        return Ok(());
+    }
+
     // Scoped so the immutable borrows end before the output is borrowed mutably.
     let result = {
         let high = &buffers[high_slot];
@@ -2684,10 +2920,6 @@ fn dispatch_dmi_call(
                 .to_vec()
         } else if call.kernel == KernelId::from_static("CALL:MINUS_DI") {
             crate::indicators::momentum::minus_di(high, low, close, period)
-                .map_err(|_| invalid())?
-                .to_vec()
-        } else if call.inputs.len() == 4 {
-            crate::indicators::momentum::adx(high, low, close, period)
                 .map_err(|_| invalid())?
                 .to_vec()
         } else {
@@ -2722,9 +2954,8 @@ fn dispatch_dmi_call(
 
 /// Execute `WILLR` into the plan-owned output.
 ///
-/// Delegates to `momentum::willr_into`, which is what `momentum::willr` calls
-/// and therefore what `fn_willr` now resolves to on the tree path. Both paths
-/// share the TA-Lib-golden extrema lifecycle instead of keeping a third copy.
+/// Delegates to `momentum::willr_into`, writing directly to the plan-owned
+/// output so the common path avoids a temporary full-series vector and copy.
 fn dispatch_willr_call(
     call: KernelCall<'_>,
     buffers: &mut [Vec<f64>],
@@ -2756,28 +2987,24 @@ fn dispatch_willr_call(
         ));
     }
 
-    // Scoped so the immutable borrows end before the output is borrowed mutably.
-    let result = {
-        let high = &buffers[high_slot];
-        let low = &buffers[low_slot];
-        let close = &buffers[close_slot];
-        let mut willr = vec![f64::NAN; len];
-        if crate::indicators::momentum::willr_into(high, low, close, period, &mut willr).is_err() {
-            // Degenerate period: the tree path yields an all-NaN series.
-            willr.fill(f64::NAN);
-        }
-        willr
-    };
-
-    let output = buffers
-        .get_mut(output_slot)
+    let (before_output, output_and_after) = buffers.split_at_mut(output_slot);
+    let (output, after_output) = output_and_after
+        .split_first_mut()
         .ok_or_else(|| KernelDispatchError::new(FormulaKernelDispatcher::ERR_PARAMETER))?;
-    if output.len() != result.len() {
-        return Err(KernelDispatchError::new(
-            FormulaKernelDispatcher::ERR_PARAMETER,
-        ));
+    let input = |slot: usize| {
+        if slot < output_slot {
+            &before_output[slot]
+        } else {
+            &after_output[slot - output_slot - 1]
+        }
+    };
+    let high = input(high_slot);
+    let low = input(low_slot);
+    let close = input(close_slot);
+    if crate::indicators::momentum::willr_into(high, low, close, period, output).is_err() {
+        // Degenerate period: the tree path yields an all-NaN series.
+        output.fill(f64::NAN);
     }
-    output.copy_from_slice(&result);
     Ok(())
 }
 
@@ -2977,183 +3204,198 @@ fn dispatch_modern_call(
     // output — zero divergence by construction; `formula_plan_differential`
     // remains the independent safety net.
     const TALIB_081_KERNELS: &[(
-        &str,
+        KernelId,
         fn(
             &crate::formula::types::FormulaContext,
             &[Array1<f64>],
         ) -> std::result::Result<Array1<f64>, crate::error::FormulaError>,
     )] = &[
-        ("CALL:AC", crate::formula::functions_talib_081::canonical_ac),
         (
-            "CALL:ACCBANDS",
+            KernelId::from_static("CALL:AC"),
+            crate::formula::functions_talib_081::canonical_ac,
+        ),
+        (
+            KernelId::from_static("CALL:ACCBANDS"),
             crate::formula::functions_talib_081::canonical_accbands,
         ),
         (
-            "CALL:ACCBANDS_MID",
+            KernelId::from_static("CALL:ACCBANDS_MID"),
             crate::formula::functions_talib_081::canonical_accbands_mid,
         ),
         (
-            "CALL:ACCBANDS_LOWER",
+            KernelId::from_static("CALL:ACCBANDS_LOWER"),
             crate::formula::functions_talib_081::canonical_accbands_lower,
         ),
         (
-            "CALL:ADR",
+            KernelId::from_static("CALL:ADR"),
             crate::formula::functions_talib_081::canonical_adr,
         ),
-        ("CALL:AO", crate::formula::functions_talib_081::canonical_ao),
         (
-            "CALL:AROON",
+            KernelId::from_static("CALL:AO"),
+            crate::formula::functions_talib_081::canonical_ao,
+        ),
+        (
+            KernelId::from_static("CALL:AROON"),
             crate::formula::functions_talib_081::canonical_aroon,
         ),
         (
-            "CALL:AROON_DOWN",
+            KernelId::from_static("CALL:AROON_DOWN"),
             crate::formula::functions_talib_081::canonical_aroon_down,
         ),
         (
-            "CALL:CMOU",
+            KernelId::from_static("CALL:CMOU"),
             crate::formula::functions_talib_081::canonical_cmou,
         ),
         (
-            "CALL:COPPOCK",
+            KernelId::from_static("CALL:COPPOCK"),
             crate::formula::functions_talib_081::canonical_coppock,
         ),
         (
-            "CALL:CVI",
+            KernelId::from_static("CALL:CVI"),
             crate::formula::functions_talib_081::canonical_cvi,
         ),
         (
-            "CALL:EFI",
+            KernelId::from_static("CALL:EFI"),
             crate::formula::functions_talib_081::canonical_efi,
         ),
-        ("CALL:ER", crate::formula::functions_talib_081::canonical_er),
         (
-            "CALL:ERI",
+            KernelId::from_static("CALL:ER"),
+            crate::formula::functions_talib_081::canonical_er,
+        ),
+        (
+            KernelId::from_static("CALL:ERI"),
             crate::formula::functions_talib_081::canonical_eri,
         ),
         (
-            "CALL:ERI_BEAR",
+            KernelId::from_static("CALL:ERI_BEAR"),
             crate::formula::functions_talib_081::canonical_eri_bear,
         ),
         (
-            "CALL:FOSC",
+            KernelId::from_static("CALL:FOSC"),
             crate::formula::functions_talib_081::canonical_fosc,
         ),
         (
-            "CALL:FRACTAL",
+            KernelId::from_static("CALL:FRACTAL"),
             crate::formula::functions_talib_081::canonical_fractal,
         ),
         (
-            "CALL:FRACTAL_LOW",
+            KernelId::from_static("CALL:FRACTAL_LOW"),
             crate::formula::functions_talib_081::canonical_fractal_low,
         ),
-        ("CALL:HA", crate::formula::functions_talib_081::canonical_ha),
         (
-            "CALL:HA_OPEN",
+            KernelId::from_static("CALL:HA"),
+            crate::formula::functions_talib_081::canonical_ha,
+        ),
+        (
+            KernelId::from_static("CALL:HA_OPEN"),
             crate::formula::functions_talib_081::canonical_ha_open,
         ),
         (
-            "CALL:HA_HIGH",
+            KernelId::from_static("CALL:HA_HIGH"),
             crate::formula::functions_talib_081::canonical_ha_high,
         ),
         (
-            "CALL:HA_LOW",
+            KernelId::from_static("CALL:HA_LOW"),
             crate::formula::functions_talib_081::canonical_ha_low,
         ),
-        ("CALL:KC", crate::formula::functions_talib_081::canonical_kc),
         (
-            "CALL:KC_MID",
+            KernelId::from_static("CALL:KC"),
+            crate::formula::functions_talib_081::canonical_kc,
+        ),
+        (
+            KernelId::from_static("CALL:KC_MID"),
             crate::formula::functions_talib_081::canonical_kc_mid,
         ),
         (
-            "CALL:KC_LOWER",
+            KernelId::from_static("CALL:KC_LOWER"),
             crate::formula::functions_talib_081::canonical_kc_lower,
         ),
         (
-            "CALL:MAMA",
+            KernelId::from_static("CALL:MAMA"),
             crate::formula::functions_talib_081::canonical_mama,
         ),
         (
-            "CALL:MAMA_FAMA",
+            KernelId::from_static("CALL:MAMA_FAMA"),
             crate::formula::functions_talib_081::canonical_mama_fama,
         ),
         (
-            "CALL:MARKETFI",
+            KernelId::from_static("CALL:MARKETFI"),
             crate::formula::functions_talib_081::canonical_marketfi,
         ),
         (
-            "CALL:MASSI",
+            KernelId::from_static("CALL:MASSI"),
             crate::formula::functions_talib_081::canonical_massi,
         ),
         (
-            "CALL:NVI",
+            KernelId::from_static("CALL:NVI"),
             crate::formula::functions_talib_081::canonical_nvi,
         ),
         (
-            "CALL:PERCENTRANK",
+            KernelId::from_static("CALL:PERCENTRANK"),
             crate::formula::functions_talib_081::canonical_percentrank,
         ),
         (
-            "CALL:PVI",
+            KernelId::from_static("CALL:PVI"),
             crate::formula::functions_talib_081::canonical_pvi,
         ),
         (
-            "CALL:PVO",
+            KernelId::from_static("CALL:PVO"),
             crate::formula::functions_talib_081::canonical_pvo,
         ),
         (
-            "CALL:PVT",
+            KernelId::from_static("CALL:PVT"),
             crate::formula::functions_talib_081::canonical_pvt,
         ),
         (
-            "CALL:QSTICK",
+            KernelId::from_static("CALL:QSTICK"),
             crate::formula::functions_talib_081::canonical_qstick,
         ),
         (
-            "CALL:RVI",
+            KernelId::from_static("CALL:RVI"),
             crate::formula::functions_talib_081::canonical_rvi,
         ),
         (
-            "CALL:RVOL",
+            KernelId::from_static("CALL:RVOL"),
             crate::formula::functions_talib_081::canonical_rvol,
         ),
         (
-            "CALL:SMI",
+            KernelId::from_static("CALL:SMI"),
             crate::formula::functions_talib_081::canonical_smi,
         ),
         (
-            "CALL:SMI_SIGNAL",
+            KernelId::from_static("CALL:SMI_SIGNAL"),
             crate::formula::functions_talib_081::canonical_smi_signal,
         ),
         (
-            "CALL:VHF",
+            KernelId::from_static("CALL:VHF"),
             crate::formula::functions_talib_081::canonical_vhf,
         ),
         (
-            "CALL:VORTEX",
+            KernelId::from_static("CALL:VORTEX"),
             crate::formula::functions_talib_081::canonical_vortex,
         ),
         (
-            "CALL:VORTEX_MINUS",
+            KernelId::from_static("CALL:VORTEX_MINUS"),
             crate::formula::functions_talib_081::canonical_vortex_minus,
         ),
         (
-            "CALL:WAD",
+            KernelId::from_static("CALL:WAD"),
             crate::formula::functions_talib_081::canonical_wad,
         ),
         (
-            "CALL:ZLEMA",
+            KernelId::from_static("CALL:ZLEMA"),
             crate::formula::functions_talib_081::canonical_zlema,
         ),
     ];
-    for &(name, kernel) in TALIB_081_KERNELS {
-        if is(name) {
+    for &(kernel_id, kernel) in TALIB_081_KERNELS {
+        if call.kernel == kernel_id {
             let output_slot = call.output.0;
             let len = match buffers.get(output_slot) {
                 Some(buf) if !buf.is_empty() => buf.len(),
                 _ => {
                     return Err(KernelDispatchError::new(
                         FormulaKernelDispatcher::ERR_PARAMETER,
-                    ))
+                    ));
                 }
             };
             for input in call.inputs {
@@ -3167,25 +3409,7 @@ fn dispatch_modern_call(
                     ));
                 }
             }
-            let args: Vec<Array1<f64>> = call
-                .inputs
-                .iter()
-                .map(|slot| Array1::from(buffers[slot.0].clone()))
-                .collect();
-            let ctx = bridge_context(len);
-            match kernel(&ctx, &args) {
-                Ok(series) => {
-                    let out = &mut buffers[output_slot];
-                    if series.len() == out.len() {
-                        out.copy_from_slice(series.as_slice().unwrap());
-                    } else {
-                        out.fill(f64::NAN);
-                    }
-                }
-                Err(_) => {
-                    buffers[output_slot].fill(f64::NAN);
-                }
-            }
+            dispatch_array_kernel(call, buffers, len, kernel);
             return Ok(());
         }
     }
@@ -3201,63 +3425,66 @@ fn dispatch_modern_call(
     // in `tests/formula_function_ssot.rs` is what pins the pair together: it
     // asks the dispatcher itself which `CALL:` names it handles.
     const SCREENING_DELEGATES: &[(
-        &str,
+        KernelId,
         fn(
             &crate::formula::types::FormulaContext,
             &[Array1<f64>],
         ) -> std::result::Result<Array1<f64>, crate::error::FormulaError>,
     )] = &[
         (
-            "CALL:BARSLAST",
+            KernelId::from_static("CALL:BARSLAST"),
             crate::formula::functions_legacy::fn_barslast,
         ),
         (
-            "CALL:BREAKDOWN",
+            KernelId::from_static("CALL:BREAKDOWN"),
             crate::formula::functions::canonical_breakdown,
         ),
         (
-            "CALL:BREAKOUT",
+            KernelId::from_static("CALL:BREAKOUT"),
             crate::formula::functions::canonical_breakout,
         ),
-        ("CALL:COUNT", crate::formula::functions_legacy::fn_count),
         (
-            "CALL:DEAD_CROSS",
+            KernelId::from_static("CALL:COUNT"),
+            crate::formula::functions_legacy::fn_count,
+        ),
+        (
+            KernelId::from_static("CALL:DEAD_CROSS"),
             crate::formula::functions::canonical_dead_cross,
         ),
         (
-            "CALL:GAP_SIGNAL",
+            KernelId::from_static("CALL:GAP_SIGNAL"),
             crate::formula::functions::canonical_gap_signal,
         ),
         (
-            "CALL:GOLDEN_CROSS",
+            KernelId::from_static("CALL:GOLDEN_CROSS"),
             crate::formula::functions::canonical_golden_cross,
         ),
         (
-            "CALL:MA_ALIGN",
+            KernelId::from_static("CALL:MA_ALIGN"),
             crate::formula::functions::canonical_ma_align,
         ),
         (
-            "CALL:RELATIVE_STRENGTH",
+            KernelId::from_static("CALL:RELATIVE_STRENGTH"),
             crate::formula::functions::canonical_relative_strength,
         ),
         (
-            "CALL:TREND_BREAKOUT",
+            KernelId::from_static("CALL:TREND_BREAKOUT"),
             crate::formula::functions::canonical_trend_breakout,
         ),
         (
-            "CALL:VOLUME_SURGE",
+            KernelId::from_static("CALL:VOLUME_SURGE"),
             crate::formula::functions::canonical_volume_surge,
         ),
     ];
-    for &(name, kernel) in SCREENING_DELEGATES {
-        if is(name) {
+    for &(kernel_id, kernel) in SCREENING_DELEGATES {
+        if call.kernel == kernel_id {
             let output_slot = call.output.0;
             let len = match buffers.get(output_slot) {
                 Some(buf) if !buf.is_empty() => buf.len(),
                 _ => {
                     return Err(KernelDispatchError::new(
                         FormulaKernelDispatcher::ERR_PARAMETER,
-                    ))
+                    ));
                 }
             };
             for input in call.inputs {
@@ -3271,25 +3498,7 @@ fn dispatch_modern_call(
                     ));
                 }
             }
-            let args: Vec<Array1<f64>> = call
-                .inputs
-                .iter()
-                .map(|slot| Array1::from(buffers[slot.0].clone()))
-                .collect();
-            let ctx = bridge_context(len);
-            match kernel(&ctx, &args) {
-                Ok(series) => {
-                    let out = &mut buffers[output_slot];
-                    if series.len() == out.len() {
-                        out.copy_from_slice(series.as_slice().unwrap());
-                    } else {
-                        out.fill(f64::NAN);
-                    }
-                }
-                Err(_) => {
-                    buffers[output_slot].fill(f64::NAN);
-                }
-            }
+            dispatch_array_kernel(call, buffers, len, kernel);
             return Ok(());
         }
     }
@@ -3697,9 +3906,16 @@ fn unary(
     let input = call.inputs[0].0;
     let output = call.output.0;
     let len = buffers[output].len();
-    for index in 0..len {
-        let value = buffers[input][index];
-        buffers[output][index] = op(value);
+    let input_ptr = buffers[input].as_ptr();
+    let output_ptr = buffers[output].as_mut_ptr();
+    // The executor keeps every numeric lane at the same length and does not
+    // resize buffers during dispatch. Read before writing so this also remains
+    // correct if an in-place plan aliases its input and output lane.
+    unsafe {
+        for index in 0..len {
+            let value = *input_ptr.add(index);
+            *output_ptr.add(index) = op(value);
+        }
     }
     Ok(())
 }
@@ -3716,43 +3932,71 @@ fn binary(
     let right = call.inputs[1].0;
     let output = call.output.0;
     let len = buffers[output].len();
-    for index in 0..len {
-        let lhs = buffers[left][index];
-        let rhs = buffers[right][index];
-        buffers[output][index] = apply_binary(op, lhs, rhs);
+    let left_ptr = buffers[left].as_ptr();
+    let right_ptr = buffers[right].as_ptr();
+    let output_ptr = buffers[output].as_mut_ptr();
+    macro_rules! run_binary {
+        ($lhs:ident, $rhs:ident, $expression:expr) => {{
+            // Inputs and output can share a lane, so load both values before
+            // storing the result for this index. The executor validates lane
+            // IDs and lengths before dispatch and keeps the buffers alive and
+            // fixed-size for the duration of this call.
+            unsafe {
+                for index in 0..len {
+                    let $lhs = *left_ptr.add(index);
+                    let $rhs = *right_ptr.add(index);
+                    *output_ptr.add(index) = $expression;
+                }
+            }
+        }};
     }
-    Ok(())
-}
 
-#[inline]
-fn apply_binary(op: BinaryKernel, lhs: f64, rhs: f64) -> f64 {
     match op {
-        BinaryKernel::Add => lhs + rhs,
-        BinaryKernel::Sub => lhs - rhs,
-        BinaryKernel::Mul => lhs * rhs,
-        BinaryKernel::Div => {
+        BinaryKernel::Add => run_binary!(lhs, rhs, lhs + rhs),
+        BinaryKernel::Sub => run_binary!(lhs, rhs, lhs - rhs),
+        BinaryKernel::Mul => run_binary!(lhs, rhs, lhs * rhs),
+        BinaryKernel::Div => run_binary!(
+            lhs,
+            rhs,
             if rhs.abs() < crate::utils::NUMERIC_EPSILON {
                 f64::NAN
             } else {
                 lhs / rhs
             }
-        }
-        BinaryKernel::Mod => crate::math::floor_remainder(lhs, rhs),
-        BinaryKernel::Pow => lhs.powf(rhs),
+        ),
+        BinaryKernel::Mod => run_binary!(lhs, rhs, crate::math::floor_remainder(lhs, rhs)),
+        BinaryKernel::Pow => run_binary!(lhs, rhs, lhs.powf(rhs)),
         // `f64::max`/`f64::min` return the non-NaN operand when exactly one side
         // is NaN, matching the reference `MAX`/`MIN` implementations.
-        BinaryKernel::Max => lhs.max(rhs),
-        BinaryKernel::Min => lhs.min(rhs),
-        BinaryKernel::Gt => bool_value(lhs > rhs),
-        BinaryKernel::Lt => bool_value(lhs < rhs),
-        BinaryKernel::Gte => bool_value(lhs >= rhs),
-        BinaryKernel::Lte => bool_value(lhs <= rhs),
-        BinaryKernel::Eq => bool_value(crate::math::nearly_equal(lhs, rhs)),
-        BinaryKernel::Neq => bool_value(crate::math::nearly_not_equal(lhs, rhs)),
-        BinaryKernel::And => bool_value(truth::is_logical_true(lhs) && truth::is_logical_true(rhs)),
-        BinaryKernel::Or => bool_value(truth::is_logical_true(lhs) || truth::is_logical_true(rhs)),
-        BinaryKernel::Xor => bool_value(truth::is_logical_true(lhs) != truth::is_logical_true(rhs)),
+        BinaryKernel::Max => run_binary!(lhs, rhs, lhs.max(rhs)),
+        BinaryKernel::Min => run_binary!(lhs, rhs, lhs.min(rhs)),
+        BinaryKernel::Gt => run_binary!(lhs, rhs, bool_value(lhs > rhs)),
+        BinaryKernel::Lt => run_binary!(lhs, rhs, bool_value(lhs < rhs)),
+        BinaryKernel::Gte => run_binary!(lhs, rhs, bool_value(lhs >= rhs)),
+        BinaryKernel::Lte => run_binary!(lhs, rhs, bool_value(lhs <= rhs)),
+        BinaryKernel::Eq => run_binary!(lhs, rhs, bool_value(crate::math::nearly_equal(lhs, rhs))),
+        BinaryKernel::Neq => run_binary!(
+            lhs,
+            rhs,
+            bool_value(crate::math::nearly_not_equal(lhs, rhs))
+        ),
+        BinaryKernel::And => run_binary!(
+            lhs,
+            rhs,
+            bool_value(truth::is_logical_true(lhs) && truth::is_logical_true(rhs))
+        ),
+        BinaryKernel::Or => run_binary!(
+            lhs,
+            rhs,
+            bool_value(truth::is_logical_true(lhs) || truth::is_logical_true(rhs))
+        ),
+        BinaryKernel::Xor => run_binary!(
+            lhs,
+            rhs,
+            bool_value(truth::is_logical_true(lhs) != truth::is_logical_true(rhs))
+        ),
     }
+    Ok(())
 }
 
 #[inline]
@@ -3768,7 +4012,11 @@ const fn bool_value(value: bool) -> f64 {
 pub fn unified_formula_executor(
     plan: &super::hot_plan::FormulaHotPlan,
 ) -> UnifiedExecutor<FormulaKernelDispatcher<'static>> {
-    UnifiedExecutor::new(plan.hot().clone(), FormulaKernelDispatcher::new())
+    UnifiedExecutor::with_shared_context(
+        plan.shared_hot(),
+        FormulaKernelDispatcher::new(),
+        RuntimeContext::new(),
+    )
 }
 
 /// [`unified_formula_executor`] carrying host data.
@@ -3781,7 +4029,24 @@ pub fn unified_formula_executor_with_host<'a>(
     plan: &super::hot_plan::FormulaHotPlan,
     host: HostContext<'a>,
 ) -> UnifiedExecutor<FormulaKernelDispatcher<'a>> {
-    UnifiedExecutor::new(plan.hot().clone(), FormulaKernelDispatcher::with_host(host))
+    UnifiedExecutor::with_shared_context(
+        plan.shared_hot(),
+        FormulaKernelDispatcher::with_host(host),
+        RuntimeContext::new(),
+    )
+}
+
+/// [`unified_formula_executor_with_host`] using caller-retained scratch arenas.
+pub(crate) fn unified_formula_executor_with_host_and_context<'a>(
+    plan: &super::hot_plan::FormulaHotPlan,
+    host: HostContext<'a>,
+    context: RuntimeContext,
+) -> UnifiedExecutor<FormulaKernelDispatcher<'a>> {
+    UnifiedExecutor::with_shared_context(
+        plan.shared_hot(),
+        FormulaKernelDispatcher::with_host(host),
+        context,
+    )
 }
 
 #[cfg(test)]

@@ -368,20 +368,87 @@ pub fn accbands(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Resu
     validate_input(close.len(), period)?;
 
     let len = close.len();
-    let mut upper_raw = Vec::with_capacity(len);
-    let mut lower_raw = Vec::with_capacity(len);
-    for i in 0..len {
-        let sum = high[i] + low[i];
-        if sum != 0.0 {
-            let factor = 4.0 * (high[i] - low[i]) / sum;
-            upper_raw.push(high[i] * (1.0 + factor));
-            lower_raw.push(low[i] * (1.0 - factor));
-        } else {
-            upper_raw.push(high[i]);
-            lower_raw.push(low[i]);
+    // The ring setup costs more than it saves for short calls. Keep the
+    // allocation-and-SMA composition there; the streaming path pays off once
+    // the avoided full-series temporaries dominate.
+    if len < 16_384 {
+        return accbands_reference(high, low, close, period);
+    }
+
+    // Keep only one lookback-sized ring for the transformed bands. The old
+    // composition held two full raw series alongside the three SMA outputs;
+    // here each transformed value is consumed once and evicted when it leaves
+    // the rolling window. If a derived band is non-finite, retain the original
+    // SMA validation and leading-warmup behavior via the reference path.
+    let mut upper = Array1::from(crate::utils::uninit_output(len));
+    let mut lower = Array1::from(crate::utils::uninit_output(len));
+    upper.as_slice_mut().unwrap()[..period - 1].fill(f64::NAN);
+    lower.as_slice_mut().unwrap()[..period - 1].fill(f64::NAN);
+    let mut upper_window = vec![0.0; period];
+    let mut lower_window = vec![0.0; period];
+    for i in 0..period {
+        let (upper_value, lower_value) = accbands_raw_at(high[i], low[i]);
+        if !upper_value.is_finite() || !lower_value.is_finite() {
+            return accbands_reference(high, low, close, period);
+        }
+        upper_window[i] = upper_value;
+        lower_window[i] = lower_value;
+    }
+    let mut upper_sum = moving_avg::simd_horizontal_sum(&upper_window);
+    let mut lower_sum = moving_avg::simd_horizontal_sum(&lower_window);
+    let inverse_period = 1.0 / period as f64;
+    upper[period - 1] = upper_sum * inverse_period;
+    lower[period - 1] = lower_sum * inverse_period;
+
+    let mut window_index = 0usize;
+    for i in period..len {
+        let (upper_value, lower_value) = accbands_raw_at(high[i], low[i]);
+        if !upper_value.is_finite() || !lower_value.is_finite() {
+            return accbands_reference(high, low, close, period);
+        }
+        upper_sum += upper_value - upper_window[window_index];
+        lower_sum += lower_value - lower_window[window_index];
+        upper_window[window_index] = upper_value;
+        lower_window[window_index] = lower_value;
+        upper[i] = upper_sum * inverse_period;
+        lower[i] = lower_sum * inverse_period;
+        window_index += 1;
+        if window_index == period {
+            window_index = 0;
         }
     }
 
+    Ok(BbandsResult {
+        upper,
+        middle: moving_avg::sma(close, period)?,
+        lower,
+    })
+}
+
+#[inline]
+fn accbands_raw_at(high: f64, low: f64) -> (f64, f64) {
+    let sum = high + low;
+    if sum != 0.0 {
+        let factor = 4.0 * (high - low) / sum;
+        (high * (1.0 + factor), low * (1.0 - factor))
+    } else {
+        (high, low)
+    }
+}
+
+fn accbands_reference(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+) -> Result<BbandsResult> {
+    let mut upper_raw = Vec::with_capacity(high.len());
+    let mut lower_raw = Vec::with_capacity(high.len());
+    for (&high, &low) in high.iter().zip(low) {
+        let (upper, lower) = accbands_raw_at(high, low);
+        upper_raw.push(upper);
+        lower_raw.push(lower);
+    }
     Ok(BbandsResult {
         upper: moving_avg::sma(&upper_raw, period)?,
         middle: moving_avg::sma(close, period)?,

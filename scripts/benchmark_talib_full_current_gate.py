@@ -117,7 +117,10 @@ def cases(o, h, l, c, v):
         ("AD", lambda: finkit.ad(h, l, c, v), lambda: talib.AD(h, l, c, v)),
         ("ADOSC", lambda: finkit.adosc(h, l, c, v, fastperiod=3, slowperiod=10), lambda: talib.ADOSC(h, l, c, v, fastperiod=3, slowperiod=10)),
         ("ADX", lambda: finkit.adx(h, l, c, timeperiod=14), lambda: talib.ADX(h, l, c, timeperiod=14)),
-        ("APO", lambda: finkit.apo(c, fastperiod=12, slowperiod=26), lambda: talib.APO(c, fastperiod=12, slowperiod=26)),
+        # Finkit's wrapper defaults to EMA (matype=1), while TA-Lib defaults
+        # to SMA (matype=0). Pin the same mode on both sides for a valid parity
+        # and timing comparison.
+        ("APO", lambda: finkit.apo(c, fastperiod=12, slowperiod=26, matype=0), lambda: talib.APO(c, fastperiod=12, slowperiod=26, matype=0)),
         ("AROON", lambda: talib_aroon_order(finkit.aroon(h, l, timeperiod=14)), lambda: talib.AROON(h, l, timeperiod=14)),
         ("ATR", lambda: finkit.atr(h, l, c, timeperiod=14), lambda: talib.ATR(h, l, c, timeperiod=14)),
         ("AVGPRICE", lambda: finkit.avgprice(o, h, l, c), lambda: talib.AVGPRICE(o, h, l, c)),

@@ -1,9 +1,9 @@
 # 实现现状矩阵
 
-> **当前重构工作树（2026-10-23）**：审查基线仓库提交 `5252c15b`（`main` / `origin/main`，tag `v0.2.0`）；当前工作树包含尚未提交的方案实施修改，最终 SHA 尚未产生。以下本轮实际复验：coverage matcher 4/4、batch registry 235/235（214 exact + 21 aliases）、streaming registry 声明 144/144（136 exact + 8 aliases）、公式函数提取 452、streaming metadata registry 合同通过、依赖方向 30 条生产边通过、feature matrix 4 supported 构建通过/6 known-broken 仍失败、Tree-only engine 合同通过。`cargo test --workspace --locked --no-fail-fast` 在本轮工作树退出码 0；Node 消费者 16/16，Python engine contract 函数 3/3（以直接调用方式执行，解释器未安装 pytest）。
+> **当前发布候选（2026-11-06）**：公开 GitHub Release 为 `v0.2.0`；当前工作树目标 `v0.3.0`，最终提交和 same-SHA release readiness 尚待完成。下方 2026-10-18 至 2026-10-23 的证据表保留各自历史基线，不代表本次候选 SHA。
 >
 > 本机验证不表示 GitHub Actions 当前 SHA 已通过，也不证明 Linux/macOS/移动端构建、干净安装包消费者或公开 registry 发布。因子研究不是回测产品，用户明确排除回测实现。
-> 截至 2026-10-23，GitHub Releases 页面显示最新公开发行仍为 `v0.1.15`；`v0.2.0` 是仓库 tag/源码版本，不等同于公开 Release。
+> 截至 2026-10-23 的历史记录写入时，GitHub Releases 页面显示最新公开发行仍为 `v0.2.0`。
 
 - 当前工作流入口：[核心工作流矩阵](workflow-matrix.md)
 - 当前方案进度与后续阶段：[项目功能、架构与重构审查](../PROJECT_FUNCTIONALITY_ARCHITECTURE_REVIEW_2026-10-23.md) §9
@@ -63,7 +63,7 @@
 | 面 | 源码入口 | 可编译 | 专项测试 | parity / 一致性 | CI target | 发行状态 |
 |---|---|---|---|---|---|---|
 | 批量指标 / 数值核 | `core/src/indicators/`、`core/src/math/` | ✅ | `golden_tests.rs`、`golden_talib_tests.rs`、`talib_coverage_matrix.rs`、`adx_nan_golden.rs`、`indicator_api_surface.rs` | TA-Lib golden；`allocating == into`（`runtime_convergence.rs`） | `test` | 源码 + v0.1.15 `.crate` |
-| 公式 tree 后端（默认） | `core/src/formula/engine.rs` `eval*` | ✅ | `formula_execution_mode.rs`、`formula_differential_tests.rs`、`formula_input_bounds.rs` | `tree == plan`（rostered，`formula_plan_differential.rs`） | `test` | 源码 + v0.1.15 |
+| 公式 Auto 后端（Rust 默认策略） | `core/src/formula/engine.rs` `eval*` | ✅ | `formula_execution_mode.rs`、`formula_differential_tests.rs`、`formula_input_bounds.rs` | `tree == plan`（rostered，`formula_plan_differential.rs`） | `test` | 源码 + v0.3.0 候选 |
 | 公式 plan 后端（opt-in） | `formula/compute_ir.rs`、`executor.rs`、`bridge_dispatch.rs`、`unified_dispatch.rs` | ✅ | `formula_plan_differential.rs`、`formula_string_literals.rs` | 同上；tree-only 入口 `BackendUnsupported` 明确失败 | `test` | 源码（默认关闭） |
 | streaming | `core/src/streaming/` | ✅ | `runtime_convergence.rs`、`repaint_tests.rs`、`long_run_stability.rs` | `batch == streaming`；注册表双向门禁 | `test` | 源码 + v0.1.15 |
 | 因子图 / 统一运行时 / DirtyRange | `semantic_graph.rs`、`unified_runtime.rs`、`compute.rs` | ✅ | `factor_graph_contract.rs`、`unified_operation_seam.rs`、`runtime_convergence.rs` | `full == range`；增量保守回退 | `runtime-integration-tests` | next-release（非 v0.1.15） |
@@ -101,7 +101,7 @@
 
 | 断言 | 门禁 / 测试 |
 |---|---|
-| 公式默认后端是 Tree | `formula_execution_mode.rs`；`check_formula_engine_contract.py` |
+| 公式默认后端是 Auto | `formula_execution_mode.rs`；`check_formula_engine_contract.py` |
 | tree-only 入口矩阵无空白（四份名册一致） | `check_formula_engine_contract.py`（engine 守卫 / formula-engine.md / runtime 合同两处名册 / 测试） |
 | 批量 == 流式 == range == into == tree/plan == FFI | `runtime_convergence.rs`（五条边 rostered） |
 | 字符串字面量两路径一致 + 缺口名册 | `formula_string_literals.rs` |
@@ -140,11 +140,11 @@
 
 | 核验 | 命令 | 结果 |
 |---|---|---|
-| 公式后端契约 | `cargo test -p finkit --locked --test formula_execution_mode` | **13/13 通过**（默认 Tree；13 个 tree-only 守卫；plan 可用入口填充 plan 缓存） |
+| 公式后端契约 | `cargo test -p finkit --locked --test formula_execution_mode` | **14/14 通过**（默认 Auto；13 个 tree-only 守卫；plan 可用入口填充 plan 缓存） |
 | 公式差分 | `cargo test -p finkit --locked --test formula_plan_differential` | **4/4 通过**（国内/Pine 语料 tree==plan） |
 | 字符串字面量 | `cargo test -p finkit --locked --test formula_string_literals` | **6/6 通过**（两路径 `string_table` 一致；`string_base` 偏移；4 个消费下标的函数在 Plan 下运行且与 tree 逐值一致；参数边界保留 Tree 既有兼容行为） |
 | 相邻公式面 | `cargo test -p finkit --locked --test dzh_compat_tests --test em_compat_tests --test formula_dialect_coverage --test formula_corpus --test formula_terminal_contract --test runtime_convergence` | **94/94 通过**（43+21+2+10+1+17） |
-| 公式引擎合同 | `python scripts/check_formula_engine_contract.py` | 通过（13 项 tree-only 在 **四份**名册一致；默认 Tree；缓存容量一致） |
+| 公式引擎合同 | `python scripts/check_formula_engine_contract.py` | 通过（13 项 tree-only 在 **四份**名册一致；默认 Auto；缓存容量一致） |
 | feature 组合 | `python scripts/check_feature_matrix.py` | 通过（**4** 个受支持组合构建成功；**6** 个 known-broken 仍按记录失败） |
 | 依赖方向 | `python scripts/check_dependency_direction.py` | 通过（30 条 shipped 边全部向下；1 条 dev-only 边已记录） |
 | 绑定 parity | `python scripts/audit_binding_parity.py --check` | 通过（8 个绑定基线一致；iOS/Android 15/78 属 ratchet 基线） |

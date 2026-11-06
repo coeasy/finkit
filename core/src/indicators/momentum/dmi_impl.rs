@@ -628,7 +628,10 @@ pub fn dx_into(
         });
     }
     validate_input(close.len(), period * 2)?;
-    output.fill(f64::NAN);
+    // Only the lookback prefix remains undefined. The recurrence writes every
+    // later slot below, so clearing the full output first doubles the memory
+    // traffic on long inputs.
+    output[..period].fill(f64::NAN);
 
     let p = period as f64;
     let mut smooth_plus_dm = 0.0;
@@ -681,11 +684,12 @@ pub fn dx_into(
         smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / p + mdm;
         smooth_tr = smooth_tr - smooth_tr / p + tr;
         if !crate::utils::is_zero(smooth_tr) {
-            let pdi = smooth_plus_dm / smooth_tr * 100.0;
-            let mdi = smooth_minus_dm / smooth_tr * 100.0;
-            let sum = pdi + mdi;
+            // Both directional indicators share the same positive smoothed
+            // true-range divisor and the same factor of 100. Canceling those
+            // common terms saves two divisions per bar in a DX-only request.
+            let sum = smooth_plus_dm + smooth_minus_dm;
             output[i] = if !crate::utils::is_zero(sum) {
-                (pdi - mdi).abs() / sum * 100.0
+                (smooth_plus_dm - smooth_minus_dm).abs() / sum * 100.0
             } else {
                 0.0
             };
@@ -854,48 +858,67 @@ pub(crate) fn directional_movement_with_period<const PLUS: bool>(
     validate_input(high.len(), period)?;
 
     let len = high.len();
-    let mut output = init_output(len);
     let lookback = period - 1;
+    let mut output = Array1::from(crate::utils::uninit_output(len));
+    let output_slice = output.as_slice_mut().expect("owned Array1 is contiguous");
+    output_slice[..lookback].fill(f64::NAN);
     let mut smoothed = 0.0;
 
     // TA-Lib seeds the Wilder accumulator with the period-1 movement values
     // at bars 1..=period-1 and publishes the first result at period-1.
-    for i in 1..=lookback {
-        smoothed += directional_movement_value::<PLUS>(high, low, i);
+    let high_ptr = high.as_ptr();
+    let low_ptr = low.as_ptr();
+    let output_ptr = output_slice.as_mut_ptr();
+    // SAFETY: validation above guarantees all slices have `len` elements;
+    // the seed loop indexes `1..period`, and the scan indexes `period..len`.
+    let mut index = 1;
+    while index <= lookback {
+        let up_move = unsafe { *high_ptr.add(index) - *high_ptr.add(index - 1) };
+        let down_move = unsafe { *low_ptr.add(index - 1) - *low_ptr.add(index) };
+        let movement = if PLUS {
+            if up_move > 0.0 && up_move > down_move {
+                up_move
+            } else {
+                0.0
+            }
+        } else if down_move > 0.0 && down_move > up_move {
+            down_move
+        } else {
+            0.0
+        };
+        smoothed += movement;
+        index += 1;
     }
-    output[lookback] = smoothed;
+    unsafe { *output_ptr.add(lookback) = smoothed };
 
     let p = period as f64;
-    for i in period..len {
-        let movement = directional_movement_value::<PLUS>(high, low, i);
-        smoothed = smoothed - smoothed / p + movement;
-        output[i] = smoothed;
+    // The reciprocal removes a floating-point divide from every bar; its
+    // roundoff remains within the TA-Lib parity tolerance (see the probe log).
+    let inv_period = 1.0 / p;
+    index = period;
+    while index < len {
+        let up_move = unsafe { *high_ptr.add(index) - *high_ptr.add(index - 1) };
+        let down_move = unsafe { *low_ptr.add(index - 1) - *low_ptr.add(index) };
+        let movement = if PLUS {
+            if up_move > 0.0 && up_move > down_move {
+                up_move
+            } else {
+                0.0
+            }
+        } else if down_move > 0.0 && down_move > up_move {
+            down_move
+        } else {
+            0.0
+        };
+        smoothed = smoothed - smoothed * inv_period + movement;
+        unsafe { *output_ptr.add(index) = smoothed };
+        index += 1;
     }
 
     Ok(output)
 }
 
 #[inline]
-pub(crate) fn directional_movement_value<const PLUS: bool>(
-    high: &[f64],
-    low: &[f64],
-    index: usize,
-) -> f64 {
-    let up_move = high[index] - high[index - 1];
-    let down_move = low[index - 1] - low[index];
-    if PLUS {
-        if up_move > 0.0 && up_move > down_move {
-            up_move
-        } else {
-            0.0
-        }
-    } else if down_move > 0.0 && down_move > up_move {
-        down_move
-    } else {
-        0.0
-    }
-}
-
 /// Average Directional Movement Index Rating (ADXR)
 ///
 /// ADXR = (ADX_today + ADX_n_periods_ago) / 2
@@ -965,8 +988,10 @@ pub fn adxr_into(
 /// TA-Lib-compat path) used `f64::max` true range (which *absorbs* NaN,
 /// matching TA-Lib's `fmax`). On OHLC containing NaN the two gave different
 /// answers — the exact "one policy, two implementations" drift this batch
-/// removes. The public kernel now drives the canonical `AdxState` directly:
-/// one kernel, batch == streaming == TA-Lib-compat path by construction.
+/// removes. The public batch kernel preserves the canonical `AdxState`
+/// recurrence while specializing the ADX-only output path: it computes only
+/// the smoothed DM/TR and DX values needed for ADX, without materializing the
+/// full `AdxOutput` family for every bar.
 ///
 /// Output layout is unchanged: the first value lands at index `2*period-1`
 /// (`AdxState` seeds `period-1` DMI movements from index 1, emits its first
@@ -999,14 +1024,78 @@ pub fn adx_into(
         });
     }
 
-    output.fill(f64::NAN);
-    let mut state = crate::math::kernels::AdxState::new(period);
-    for index in 0..close.len() {
-        if let Some(family) = state.update(high[index], low[index], close[index]) {
-            if let Some(adx) = family.adx {
-                output[index] = adx;
-            }
+    // `AdxState` emits no ADX before its lookback and writes one on every
+    // subsequent bar, including bars whose OHLC contain NaN (the canonical
+    // true-range helper follows TA-Lib's NaN-absorbing `fmax` semantics).
+    // Initialize only the warm-up prefix instead of writing NaN across the
+    // entire output and then overwriting all but these first slots.
+    let lookback = 2 * period - 1;
+    output[..lookback].fill(f64::NAN);
+
+    // ADX consumes only DX, not the complete ATR/+DI/-DI family returned by
+    // `AdxState`. Keep this batch path specialized: seed the same Wilder DM/TR
+    // sums, then advance directly into the output without constructing an
+    // `Option<DirectionalIndex>` and `Option<AdxOutput>` for every bar.
+    let mut smooth_plus_dm = 0.0;
+    let mut smooth_minus_dm = 0.0;
+    let mut smooth_tr = 0.0;
+    for index in 1..period {
+        let up_move = high[index] - high[index - 1];
+        let down_move = low[index - 1] - low[index];
+        smooth_tr += crate::utils::true_range(high[index], low[index], close[index - 1]);
+        if up_move > down_move && up_move > 0.0 {
+            smooth_plus_dm += up_move;
         }
+        if down_move > up_move && down_move > 0.0 {
+            smooth_minus_dm += down_move;
+        }
+    }
+
+    let mut next_dx = |index: usize| {
+        let up_move = high[index] - high[index - 1];
+        let down_move = low[index - 1] - low[index];
+        let plus_dm = if up_move > down_move && up_move > 0.0 {
+            up_move
+        } else {
+            0.0
+        };
+        let minus_dm = if down_move > up_move && down_move > 0.0 {
+            down_move
+        } else {
+            0.0
+        };
+        let tr = crate::utils::true_range(high[index], low[index], close[index - 1]);
+        smooth_plus_dm = smooth_plus_dm - smooth_plus_dm / period as f64 + plus_dm;
+        smooth_minus_dm = smooth_minus_dm - smooth_minus_dm / period as f64 + minus_dm;
+        smooth_tr = smooth_tr - smooth_tr / period as f64 + tr;
+
+        // Match the canonical DMI path's operation order as well as its
+        // zero-band behavior; algebraically canceling the shared scale changes
+        // a few results by one ULP.
+        if crate::utils::is_zero(smooth_tr) {
+            return 0.0;
+        }
+        let plus_di = 100.0 * smooth_plus_dm / smooth_tr;
+        let minus_di = 100.0 * smooth_minus_dm / smooth_tr;
+        let denominator = plus_di + minus_di;
+        if crate::utils::is_zero(denominator) {
+            0.0
+        } else {
+            100.0 * (plus_di - minus_di).abs() / denominator
+        }
+    };
+
+    let lookback = 2 * period - 1;
+    let mut dx_seed_sum = 0.0;
+    for index in period..=lookback {
+        dx_seed_sum += next_dx(index);
+    }
+    let mut adx = dx_seed_sum / period as f64;
+    output[lookback] = adx;
+    for index in (lookback + 1)..close.len() {
+        let dx = next_dx(index);
+        adx += (dx - adx) / period as f64;
+        output[index] = adx;
     }
     Ok(())
 }
