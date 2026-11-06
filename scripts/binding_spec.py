@@ -519,7 +519,7 @@ TRANGE_CANONICAL = '''fn fast_trange<'py>(
     let len = high.len();
     let output = unsafe { PyArray1::new(py, [len], false) };
     let output_addr = output.data() as usize;
-    py.detach(|| unsafe {
+    run_native_kernel(py, len, || unsafe {
         let output_ptr = output_addr as *mut f64;
         indicators::trange_into(
             high,
