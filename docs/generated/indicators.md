@@ -250,8 +250,8 @@ Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: 
 | `ultosc` |
 | `ultosc_into` |
 | `willr` |
-| `willr_into` |
 | `willr14_into` |
+| `willr_into` |
 
 ## momentum_ext
 
@@ -296,11 +296,11 @@ Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: 
 | `mama_into` |
 | `mavp_with_ma_type` |
 | `midpoint` |
-| `midpoint_into` |
 | `midpoint14_into` |
+| `midpoint_into` |
 | `midprice` |
-| `midprice_into` |
 | `midprice14_into` |
+| `midprice_into` |
 | `sar` |
 | `sar_with_factors_into` |
 | `sarext` |
