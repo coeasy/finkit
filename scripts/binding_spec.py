@@ -403,7 +403,7 @@ ADOSC_CANONICAL = '''pub fn adosc(
     }
     validate_input(high.len(), slow_period)?;
 
-    let mut output = Array1::<f64>::zeros(high.len());
+    let mut output = Array1::from(crate::utils::uninit_output(high.len()));
     crate::math::volume_kernels::adosc_into(
         high,
         low,
@@ -463,7 +463,7 @@ CANONICAL_FUNCTIONS: tuple[CanonicalFunction, ...] = (
         # and could never match a canonical body for `adosc` alone.
         next_doc="/// ADOSC zero-copy variant",
         canonical=ADOSC_CANONICAL,
-        forbidden=("simd_ad_line", "cumulative = vec!"),
+        forbidden=("simd_ad_line", "cumulative = vec!", "Array1::<f64>::zeros"),
     ),
     CanonicalFunction(
         label="volume.rs public OBV",
