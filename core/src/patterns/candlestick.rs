@@ -1012,23 +1012,30 @@ pub fn morning_doji_star(
     validate_input(open.len(), 12)?;
 
     let len = open.len();
-    let mut output = Array1::zeros(len);
+    let mut output = crate::utils::uninit_output_i32(len);
+    output[..12].fill(0);
     let mut body_long = RollingAverage::<10>::new();
     let mut body_doji = RollingAverage::<10>::new();
     let mut body_short = RollingAverage::<10>::new();
 
-    for i in 0..len {
-        if i >= 3 {
-            body_long.push(body(open[i - 3], close[i - 3]));
-        }
-        if i >= 2 {
-            body_doji.push(high[i - 2] - low[i - 2]);
-        }
-        if i >= 3 {
-            body_short.push(body(open[i - 1], close[i - 1]));
-        }
-        if i < 12 {
-            continue;
+    for i in 0..9 {
+        body_long.push(body(open[i], close[i]));
+    }
+    for i in 0..10 {
+        body_doji.push(high[i] - low[i]);
+    }
+    for i in 2..11 {
+        body_short.push(body(open[i], close[i]));
+    }
+    body_long.push(body(open[9], close[9]));
+    body_doji.push(high[10] - low[10]);
+    body_short.push(body(open[11], close[11]));
+
+    for i in 12..len {
+        if i > 12 {
+            body_long.push_full(body(open[i - 3], close[i - 3]));
+            body_doji.push_full(high[i - 2] - low[i - 2]);
+            body_short.push_full(body(open[i - 1], close[i - 1]));
         }
 
         let first_body = body(open[i - 2], close[i - 2]);
@@ -1038,7 +1045,7 @@ pub fn morning_doji_star(
         let current_white = close[i] >= open[i];
         let gap_down = open[i - 1].max(close[i - 1]) < open[i - 2].min(close[i - 2]);
 
-        if first_black
+        output[i] = if first_black
             && gap_down
             && current_white
             && first_body > body_long.average()
@@ -1046,11 +1053,13 @@ pub fn morning_doji_star(
             && third_body > body_short.average()
             && close[i] > close[i - 2] + first_body * 0.3
         {
-            output[i] = 100;
-        }
+            100
+        } else {
+            0
+        };
     }
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// Evening Doji Star (EVENINGDOJISTAR)
@@ -1072,10 +1081,12 @@ pub fn evening_doji_star(
     validate_input(open.len(), 12)?;
 
     let len = open.len();
-    let mut output = Array1::zeros(len);
+    let mut output = crate::utils::uninit_output_i32(len);
     if len == 12 {
-        return Ok(output);
+        output.fill(0);
+        return Ok(Array1::from_vec(output));
     }
+    output[..12].fill(0);
     let mut body_long = RollingAverage::<10>::new();
     let mut body_doji = RollingAverage::<10>::new();
     let mut body_short = RollingAverage::<10>::new();
@@ -1098,24 +1109,13 @@ pub fn evening_doji_star(
     body_long.push(body(open[9], close[9]));
     body_doji.push(high[10] - low[10]);
     body_short.push(body(open[11], close[11]));
-    classify_evening_doji_star(
-        output.as_slice_mut().unwrap(),
-        12,
-        open,
-        close,
-        body_long.average_full(),
-        body_doji.average_full(),
-        body_short.average_full(),
-        doji_pct,
-    );
-
-    for i in 13..len {
-        body_long.push_full(body(open[i - 3], close[i - 3]));
-        body_doji.push_full(high[i - 2] - low[i - 2]);
-        body_short.push_full(body(open[i - 1], close[i - 1]));
-
-        classify_evening_doji_star(
-            output.as_slice_mut().unwrap(),
+    for i in 12..len {
+        if i > 12 {
+            body_long.push_full(body(open[i - 3], close[i - 3]));
+            body_doji.push_full(high[i - 2] - low[i - 2]);
+            body_short.push_full(body(open[i - 1], close[i - 1]));
+        }
+        output[i] = classify_evening_doji_star(
             i,
             open,
             close,
@@ -1126,12 +1126,11 @@ pub fn evening_doji_star(
         );
     }
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 #[inline(always)]
 fn classify_evening_doji_star(
-    output: &mut [i32],
     i: usize,
     open: &[f64],
     close: &[f64],
@@ -1139,7 +1138,7 @@ fn classify_evening_doji_star(
     body_doji_average: f64,
     body_short_average: f64,
     doji_pct: f64,
-) {
+) -> i32 {
     let first_body = body(open[i - 2], close[i - 2]);
     let second_body = body(open[i - 1], close[i - 1]);
     let third_body = body(open[i], close[i]);
@@ -1155,7 +1154,9 @@ fn classify_evening_doji_star(
         && third_body > body_short_average
         && close[i] < close[i - 2] - first_body * 0.3
     {
-        output[i] = -100;
+        -100
+    } else {
+        0
     }
 }
 

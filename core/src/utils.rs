@@ -181,6 +181,19 @@ pub(crate) fn uninit_output(len: usize) -> Vec<f64> {
     output
 }
 
+/// Allocate an output buffer of `len` uninitialized `i32` values.
+///
+/// **Contract: the caller must write every slot before reading it.**
+#[inline]
+#[expect(clippy::uninit_vec)]
+pub(crate) fn uninit_output_i32(len: usize) -> Vec<i32> {
+    let mut output = Vec::with_capacity(len);
+    // SAFETY: the allocation has capacity for `len` elements, and every i32 bit
+    // pattern is valid. Callers must initialize every slot before reading.
+    unsafe { output.set_len(len) };
+    output
+}
+
 /// SIMD-accelerated NaN fill: writes `f64::NAN` to every element of `buf`.
 ///
 /// On x86_64 with AVX2, fills 4 f64s per iteration. Falls back to a scalar
