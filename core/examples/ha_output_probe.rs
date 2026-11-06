@@ -63,7 +63,6 @@ fn data(len: usize) -> (Vec<f64>, Vec<f64>, Vec<f64>, Vec<f64>) {
     (open, high, low, close)
 }
 
-#[expect(clippy::uninit_vec)]
 fn indexed(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> HeikinAshiResult {
     let len = open.len();
     let mut ha_open = Vec::with_capacity(len);
@@ -115,7 +114,6 @@ fn indexed(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> HeikinAshi
     }
 }
 
-#[expect(clippy::uninit_vec)]
 fn iterated(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> HeikinAshiResult {
     let len = open.len();
     let mut ha_open = Vec::with_capacity(len);
@@ -171,7 +169,6 @@ fn iterated(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> HeikinAsh
     }
 }
 
-#[expect(clippy::uninit_vec)]
 fn pointer_path(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> HeikinAshiResult {
     let len = open.len();
     let mut ha_open = Vec::<f64>::with_capacity(len);

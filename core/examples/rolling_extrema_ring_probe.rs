@@ -4,6 +4,7 @@ use std::collections::VecDeque;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
+#[expect(clippy::uninit_vec)]
 fn rolling_extreme_ring<const WANT_MAX: bool>(input: &[f64], window: usize) -> Array1<f64> {
     let len = input.len();
     let warm_at = input
