@@ -308,7 +308,7 @@ pub fn sma20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
 /// assert_eq!(result[2], 2.0);
 /// ```
 pub fn rma(input: &[f64], period: usize) -> Result<Array1<f64>> {
-    let mut output = Array1::from_elem(input.len(), f64::NAN);
+    let mut output = Array1::from(crate::utils::uninit_output(input.len()));
     rma_into(
         input,
         period,
@@ -335,13 +335,13 @@ pub fn rma_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
         });
     }
 
-    output.fill(f64::NAN);
     let mut seed_sum = 0.0;
     let mut seed_count = 0usize;
     let mut previous: Option<f64> = None;
 
     for (index, &value) in input.iter().enumerate() {
         if value.is_nan() {
+            output[index] = f64::NAN;
             continue;
         }
         if let Some(prev) = previous {
@@ -355,6 +355,8 @@ pub fn rma_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
                 let current = seed_sum / period as f64;
                 output[index] = current;
                 previous = Some(current);
+            } else {
+                output[index] = f64::NAN;
             }
         }
     }

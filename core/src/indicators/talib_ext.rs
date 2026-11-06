@@ -493,18 +493,42 @@ pub fn eri(high: &[f64], low: &[f64], close: &[f64], p: usize) -> Result<EriResu
 pub fn fosc(close: &[f64], p: usize) -> Result<Array1<f64>> {
     period("timeperiod", p, 2)?;
     validate_input(close.len(), p + 1)?;
-    let mut out = init_output(close.len());
+    let mut out = crate::utils::uninit_output(close.len());
+    out[..p].fill(f64::NAN);
     let sx = (p * (p - 1) / 2) as f64;
     let sx2 = (p * (p - 1) * (2 * p - 1) / 6) as f64;
     let div = sx * sx - p as f64 * sx2;
+    let mut sy = 0.0;
+    let mut sxy = 0.0;
+    let mut invalid_count = 0usize;
+    for (j, &value) in close[..p].iter().enumerate() {
+        sy += value;
+        sxy += (p - 1 - j) as f64 * value;
+        invalid_count += usize::from(!value.is_finite());
+    }
     for i in p..close.len() {
-        let mut sy = 0.0;
-        let mut sxy = 0.0;
-        for j in 0..p {
-            let v = close[i - p + j];
-            let x = (p - 1 - j) as f64;
-            sy += v;
-            sxy += x * v;
+        if invalid_count == 0 && (i - p) % 128 != 0 {
+            // Sliding the window one row toward the present shifts each
+            // retained value's regression weight up by one. Update both
+            // moments in O(1) instead of rescanning `p` observations.
+            let oldest = close[i - p - 1];
+            let newest = close[i - 1];
+            sxy += sy - p as f64 * oldest;
+            sy += newest - oldest;
+            invalid_count += usize::from(!newest.is_finite());
+        } else {
+            // Rebase periodically to bound accumulated floating-point drift.
+            // Non-finite windows are evaluated in the original summation
+            // order so their NaN/infinity behavior stays unchanged.
+            let window = &close[i - p..i];
+            sy = 0.0;
+            sxy = 0.0;
+            invalid_count = 0;
+            for (j, &value) in window.iter().enumerate() {
+                sy += value;
+                sxy += (p - 1 - j) as f64 * value;
+                invalid_count += usize::from(!value.is_finite());
+            }
         }
         let m = (p as f64 * sxy - sx * sy) / div;
         let b = (sy - m * sx) / p as f64;
@@ -514,7 +538,7 @@ pub fn fosc(close: &[f64], p: usize) -> Result<Array1<f64>> {
             100.0 * (close[i] - (m * p as f64 + b)) / close[i]
         };
     }
-    Ok(out)
+    Ok(Array1::from_vec(out))
 }
 
 pub fn fractal(high: &[f64], low: &[f64], left: usize, right: usize) -> Result<FractalResult> {

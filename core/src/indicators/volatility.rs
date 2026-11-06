@@ -38,7 +38,7 @@ fn true_range_at(high: &[f64], low: &[f64], close: &[f64], index: usize) -> f64 
 pub fn atr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_ohlc(high, low, close)?;
     validate_input(high.len(), period + 1)?;
-    let mut output = Array1::<f64>::zeros(high.len());
+    let mut output = Array1::from(crate::utils::uninit_output(high.len()));
     atr_into(
         high,
         low,
@@ -106,7 +106,7 @@ pub fn atr_into(
 pub fn natr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_ohlc(high, low, close)?;
     validate_input(high.len(), period + 1)?;
-    let mut output = Array1::<f64>::zeros(high.len());
+    let mut output = Array1::from(crate::utils::uninit_output(high.len()));
     natr_into(
         high,
         low,
