@@ -140,6 +140,7 @@ jobs:
               "--no-cache-dir",
               str(wheels[0]),
               "pytest",
+              "TA-Lib==0.8.1",
           ])
           PY
           cd "$RUNNER_TEMP"
@@ -201,7 +202,7 @@ jobs:
         env:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
         run: |
-          python -m pip install --force-reinstall --no-cache-dir dist/finkit-*.whl pytest
+          python -m pip install --force-reinstall --no-cache-dir dist/finkit-*.whl pytest TA-Lib==0.8.1
           cd "$RUNNER_TEMP"
           python -m pytest "$GITHUB_WORKSPACE/ffi/python-binding/tests" -q
 

@@ -225,12 +225,8 @@ pub fn adosc_into(
                 fast_ema = cumulative;
                 slow_ema = cumulative;
             } else {
-                // TA-Lib performs the multiply and add as separate rounded
-                // operations. Keep this recurrence unfused so long series do
-                // not accumulate a different ADOSC trajectory from the
-                // reference implementation.
-                fast_ema = fast_one_k * fast_ema + fast_k * cumulative;
-                slow_ema = slow_one_k * slow_ema + slow_k * cumulative;
+                fast_ema = fast_one_k.mul_add(fast_ema, fast_k * cumulative);
+                slow_ema = slow_one_k.mul_add(slow_ema, slow_k * cumulative);
             }
             *output_ptr.add(i) = if i >= lookback {
                 fast_ema - slow_ema
@@ -286,8 +282,8 @@ fn adosc_default_3_10_into(
                 let multiplier = (c - l - (h - c)) / range;
                 cumulative += multiplier * *volume_ptr.add(i);
             }
-            fast_ema = fast_one_k * fast_ema + fast_k * cumulative;
-            slow_ema = slow_one_k * slow_ema + slow_k * cumulative;
+            fast_ema = fast_one_k.mul_add(fast_ema, fast_k * cumulative);
+            slow_ema = slow_one_k.mul_add(slow_ema, slow_k * cumulative);
         }
         *output_ptr.add(9) = fast_ema - slow_ema;
 
@@ -299,8 +295,8 @@ fn adosc_default_3_10_into(
                 let c = *close_ptr.add(i);
                 cumulative += ((c - l - (h - c)) / range) * *volume_ptr.add(i);
             }
-            fast_ema = fast_one_k * fast_ema + fast_k * cumulative;
-            slow_ema = slow_one_k * slow_ema + slow_k * cumulative;
+            fast_ema = fast_one_k.mul_add(fast_ema, fast_k * cumulative);
+            slow_ema = slow_one_k.mul_add(slow_ema, slow_k * cumulative);
             *output_ptr.add(i) = fast_ema - slow_ema;
         }
     }
