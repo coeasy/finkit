@@ -187,6 +187,7 @@ fn old_aroon(high: &[f64], low: &[f64], period: usize) -> (Vec<f64>, Vec<f64>) {
     (up, down)
 }
 
+#[expect(clippy::uninit_vec)]
 fn old_aroonosc(high: &[f64], low: &[f64], period: usize) -> Vec<f64> {
     let scale = 100.0 / period as f64;
     let mut highs = IndexTracker::<true>::new();
