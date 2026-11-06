@@ -73,6 +73,7 @@ fn validate_period(name: &str, period: usize) -> Result<()> {
 /// MFM = ((Close - Low) - (High - Close)) / (High - Low)
 /// MFV = MFM × Volume
 /// CMF = SUM(MFV, period) / SUM(Volume, period)
+#[expect(clippy::uninit_vec)]
 pub fn cmf(
     high: &[f64],
     low: &[f64],

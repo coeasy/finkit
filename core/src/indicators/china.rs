@@ -491,6 +491,7 @@ pub fn cr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Arr
 ///
 /// # Formula
 /// DPO = Close - SMA(Close, period) shifted back by (period / 2 + 1) bars
+#[expect(clippy::uninit_vec)]
 pub fn dpo(input: &[f64], period: usize) -> Result<Array1<f64>> {
     if period == 0 {
         return Err(TaError::InvalidParameter {
