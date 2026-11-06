@@ -1699,8 +1699,8 @@ fn smi_finite_fused(
             }
             (slow_n, slow_d)
         } else {
-            slow_n = (numerator - slow_n).mul_add(alpha_slow, slow_n);
-            slow_d = (denominator - slow_d).mul_add(alpha_slow, slow_d);
+            slow_n = (numerator - slow_n) * alpha_slow + slow_n;
+            slow_d = (denominator - slow_d) * alpha_slow + slow_d;
             if !slow_n.is_finite() || !slow_d.is_finite() {
                 valid = false;
                 return;
@@ -1719,8 +1719,8 @@ fn smi_finite_fused(
             fast_d = fast_seed_d / fast as f64;
             (fast_n, fast_d)
         } else {
-            fast_n = (slow_n_value - fast_n).mul_add(alpha_fast, fast_n);
-            fast_d = (slow_d_value - fast_d).mul_add(alpha_fast, fast_d);
+            fast_n = (slow_n_value - fast_n) * alpha_fast + fast_n;
+            fast_d = (slow_d_value - fast_d) * alpha_fast + fast_d;
             (fast_n, fast_d)
         };
 
@@ -1743,7 +1743,7 @@ fn smi_finite_fused(
             }
             signal_value = signal_seed / signal as f64;
         } else {
-            signal_value = (raw - signal_value).mul_add(alpha_signal, signal_value);
+            signal_value = (raw - signal_value) * alpha_signal + signal_value;
         }
         smi[i] = raw;
         smisignal[i] = signal_value;

@@ -225,8 +225,12 @@ pub fn adosc_into(
                 fast_ema = cumulative;
                 slow_ema = cumulative;
             } else {
-                fast_ema = fast_one_k.mul_add(fast_ema, fast_k * cumulative);
-                slow_ema = slow_one_k.mul_add(slow_ema, slow_k * cumulative);
+                // Keep the recurrence in ordinary scalar arithmetic. On the
+                // portable release target `f64::mul_add` lowers to a libm
+                // `fma` call inside this per-bar loop; TA-Lib's C path uses
+                // the same multiply/add form and avoids that call overhead.
+                fast_ema = fast_one_k * fast_ema + fast_k * cumulative;
+                slow_ema = slow_one_k * slow_ema + slow_k * cumulative;
             }
             *output_ptr.add(i) = if i >= lookback {
                 fast_ema - slow_ema
@@ -282,8 +286,8 @@ fn adosc_default_3_10_into(
                 let multiplier = (c - l - (h - c)) / range;
                 cumulative += multiplier * *volume_ptr.add(i);
             }
-            fast_ema = fast_one_k.mul_add(fast_ema, fast_k * cumulative);
-            slow_ema = slow_one_k.mul_add(slow_ema, slow_k * cumulative);
+            fast_ema = fast_one_k * fast_ema + fast_k * cumulative;
+            slow_ema = slow_one_k * slow_ema + slow_k * cumulative;
         }
         *output_ptr.add(9) = fast_ema - slow_ema;
 
@@ -295,8 +299,8 @@ fn adosc_default_3_10_into(
                 let c = *close_ptr.add(i);
                 cumulative += ((c - l - (h - c)) / range) * *volume_ptr.add(i);
             }
-            fast_ema = fast_one_k.mul_add(fast_ema, fast_k * cumulative);
-            slow_ema = slow_one_k.mul_add(slow_ema, slow_k * cumulative);
+            fast_ema = fast_one_k * fast_ema + fast_k * cumulative;
+            slow_ema = slow_one_k * slow_ema + slow_k * cumulative;
             *output_ptr.add(i) = fast_ema - slow_ema;
         }
     }
