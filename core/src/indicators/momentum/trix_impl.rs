@@ -24,7 +24,7 @@ use super::prelude::*;
 /// ```
 pub fn trix(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let len = input.len();
-    let mut output = init_output(len);
+    let mut output = Array1::from(crate::utils::uninit_output(len));
     trix_into(input, period, output.as_slice_mut().unwrap())?;
     Ok(output)
 }
@@ -40,16 +40,18 @@ pub fn trix_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()>
     }
 
     let len = input.len();
-    crate::utils::simd_fill_nan(output);
 
     // See `math::leading_warmup`: recurse on the valid tail so a leading warm-up
     // run from an upstream indicator is skipped instead of poisoning the
     // three-stage EMA seed (which reads `input[..period]`).
     let start = crate::math::leading_warmup(input);
     if start > 0 {
+        output[..start].fill(f64::NAN);
         if start + period <= len {
             let (tail_in, tail_out) = (&input[start..], &mut output[start..]);
             trix_into(tail_in, period, tail_out)?;
+        } else {
+            output[start..].fill(f64::NAN);
         }
         return Ok(());
     }
@@ -83,7 +85,7 @@ pub fn trix_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()>
                 e2 = output[i] * k + e2 * one_k;
                 sum3 += e2;
             }
-            crate::utils::simd_fill_nan(&mut output[..first_trix]);
+            output[..first_trix].fill(f64::NAN);
             let mut e3_prev = sum3 * inv_p;
             for i in first_trix..len {
                 e2 = output[i] * k + e2 * one_k;
@@ -94,10 +96,10 @@ pub fn trix_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()>
                 e3_prev = e3;
             }
         } else {
-            crate::utils::simd_fill_nan(output);
+            output.fill(f64::NAN);
         }
     } else {
-        crate::utils::simd_fill_nan(output);
+        output.fill(f64::NAN);
     }
     Ok(())
 }
