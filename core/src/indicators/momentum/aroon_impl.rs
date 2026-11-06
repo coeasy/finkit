@@ -230,7 +230,7 @@ pub fn aroon(high: &[f64], low: &[f64], period: usize) -> Result<AroonResult> {
 /// skeleton for no second result.
 ///
 /// The cached-age path serves both legs in one walk. Single-leg formula calls
-/// have their own measured deque path in [`aroon_leg_into`].
+/// have their own measured deque path in `aroon_leg_into`.
 #[inline]
 pub fn aroon_into(
     high: &[f64],
