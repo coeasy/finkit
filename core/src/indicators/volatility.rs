@@ -26,9 +26,15 @@ fn validate_output(input_len: usize, output_len: usize) -> Result<()> {
 
 #[inline]
 fn true_range_at(high: &[f64], low: &[f64], close: &[f64], index: usize) -> f64 {
-    let h = high[index];
-    let l = low[index];
-    let previous_close = close[index - 1];
+    // All callers validate equal lengths and invoke this only for an index in
+    // `1..len`, so these three hot-path loads are in bounds.
+    let (h, l, previous_close) = unsafe {
+        (
+            *high.get_unchecked(index),
+            *low.get_unchecked(index),
+            *close.get_unchecked(index - 1),
+        )
+    };
     (h - l)
         .max((h - previous_close).abs())
         .max((l - previous_close).abs())

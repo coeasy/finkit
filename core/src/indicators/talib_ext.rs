@@ -100,9 +100,9 @@ pub fn rma_profile(input: &[f64], p: usize) -> Result<Array1<f64>> {
     let mut value = input[..p].iter().sum::<f64>() / p as f64;
     out[p - 1] = value;
     let inv = 1.0 / p as f64;
-    for i in p..input.len() {
-        value = (input[i] - value).mul_add(inv, value);
-        out[i] = value;
+    for (slot, &sample) in out[p..].iter_mut().zip(&input[p..]) {
+        value = (sample - value).mul_add(inv, value);
+        *slot = value;
     }
     Ok(Array1::from_vec(out))
 }
@@ -1258,8 +1258,8 @@ pub fn qstick(open: &[f64], close: &[f64], p: usize) -> Result<Array1<f64>> {
 
 fn qstick_finite_fused(open: &[f64], close: &[f64], period: usize) -> Option<Array1<f64>> {
     let len = open.len();
-    let mut output = Vec::with_capacity(len);
-    output.resize(period - 1, f64::NAN);
+    let mut output = crate::utils::uninit_output(len);
+    output[..period - 1].fill(f64::NAN);
     let inv_period = 1.0 / period as f64;
 
     let mut sum = 0.0;
@@ -1273,7 +1273,7 @@ fn qstick_finite_fused(open: &[f64], close: &[f64], period: usize) -> Option<Arr
     if !sum.is_finite() {
         return None;
     }
-    output.push(sum * inv_period);
+    output[period - 1] = sum * inv_period;
 
     for index in period..len {
         let entering = close[index] - open[index];
@@ -1287,7 +1287,7 @@ fn qstick_finite_fused(open: &[f64], close: &[f64], period: usize) -> Option<Arr
         if !sum.is_finite() {
             return None;
         }
-        output.push(sum * inv_period);
+        output[index] = sum * inv_period;
     }
     Some(Array1::from_vec(output))
 }
