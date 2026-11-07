@@ -357,6 +357,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: pypi-dist
+          attestations: false
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
