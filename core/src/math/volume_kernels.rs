@@ -105,13 +105,6 @@ pub fn obv_vec(close: &[f64], volume: &[f64]) -> Result<Vec<f64>> {
     let output = unsafe {
         std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), close.len())
     };
-    #[cfg(feature = "rayon")]
-    if close.len() >= 262_144 && close.len() == volume.len() && !close.is_empty() {
-        obv_into_parallel_fresh(close, volume, output)?;
-    } else {
-        obv_into(close, volume, output)?;
-    }
-    #[cfg(not(feature = "rayon"))]
     obv_into(close, volume, output)?;
 
     let ptr = raw_output.as_mut_ptr().cast::<f64>();
@@ -119,60 +112,6 @@ pub fn obv_vec(close: &[f64], volume: &[f64]) -> Result<Vec<f64>> {
     let capacity = raw_output.capacity();
     std::mem::forget(raw_output);
     Ok(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
-}
-
-#[cfg(feature = "rayon")]
-fn obv_into_parallel_fresh(close: &[f64], volume: &[f64], output: &mut [f64]) -> Result<()> {
-    use rayon::prelude::*;
-
-    validate_same_len("volume", close.len(), volume.len())?;
-    validate_same_len("output", close.len(), output.len())?;
-    if close.is_empty() {
-        return Err(TaError::EmptyInput);
-    }
-
-    const CHUNK_SIZE: usize = 32 * 1024;
-    output[0] = volume[0];
-    let data = &close[1..];
-    let volume_data = &volume[1..];
-    let local_totals: Vec<f64> = output[1..]
-        .par_chunks_mut(CHUNK_SIZE)
-        .enumerate()
-        .map(|(chunk_index, chunk)| {
-            let start = chunk_index * CHUNK_SIZE;
-            let mut previous_close = close[start];
-            let mut local = 0.0;
-            for (offset, slot) in chunk.iter_mut().enumerate() {
-                let index = start + offset;
-                let current = data[index];
-                if current > previous_close {
-                    local += volume_data[index];
-                } else if current < previous_close {
-                    local -= volume_data[index];
-                }
-                previous_close = current;
-                *slot = local;
-            }
-            local
-        })
-        .collect();
-
-    let mut offsets = Vec::with_capacity(local_totals.len());
-    let mut offset = output[0];
-    for total in local_totals {
-        offsets.push(offset);
-        offset += total;
-    }
-    output[1..]
-        .par_chunks_mut(CHUNK_SIZE)
-        .enumerate()
-        .for_each(|(chunk_index, chunk)| {
-            let base = offsets[chunk_index];
-            for value in chunk {
-                *value += base;
-            }
-        });
-    Ok(())
 }
 
 /// Allocating OBV wrapper sharing the allocation-free canonical recurrence.
@@ -251,10 +190,18 @@ pub fn adosc_into(
         return adosc_default_3_10_into(high, low, close, volume, output);
     }
 
-    let fast_k = 2.0 / (fast_period as f64 + 1.0);
-    let fast_one_k = 1.0 - fast_k;
-    let slow_k = 2.0 / (slow_period as f64 + 1.0);
-    let slow_one_k = 1.0 - slow_k;
+    // Match TA-Lib's coefficient construction: compute the retained weight
+    // first, then derive k so the pair sums to exactly 1.0.
+    let mut fast_one_k = (fast_period as f64 - 1.0) / (fast_period as f64 + 1.0);
+    let fast_k = 1.0 - fast_one_k;
+    if fast_one_k < 0.5 {
+        fast_one_k = 1.0 - fast_k;
+    }
+    let mut slow_one_k = (slow_period as f64 - 1.0) / (slow_period as f64 + 1.0);
+    let slow_k = 1.0 - slow_one_k;
+    if slow_one_k < 0.5 {
+        slow_one_k = 1.0 - slow_k;
+    }
 
     unsafe {
         let high_ptr = high.as_ptr();
@@ -278,8 +225,12 @@ pub fn adosc_into(
                 fast_ema = cumulative;
                 slow_ema = cumulative;
             } else {
-                fast_ema = fast_ema * fast_one_k + cumulative * fast_k;
-                slow_ema = slow_ema * slow_one_k + cumulative * slow_k;
+                // Keep the recurrence in ordinary scalar arithmetic. On the
+                // portable release target `f64::mul_add` lowers to a libm
+                // `fma` call inside this per-bar loop; TA-Lib's C path uses
+                // the same multiply/add form and avoids that call overhead.
+                fast_ema = fast_one_k * fast_ema + fast_k * cumulative;
+                slow_ema = slow_one_k * slow_ema + slow_k * cumulative;
             }
             *output_ptr.add(i) = if i >= lookback {
                 fast_ema - slow_ema
@@ -299,13 +250,6 @@ fn adosc_default_3_10_into(
     volume: &[f64],
     output: &mut [f64],
 ) -> Result<()> {
-    #[cfg(all(feature = "std", target_arch = "x86_64"))]
-    if crate::math::simd_ops::has_avx2() {
-        // The AVX2 path uses the same FMA EMA recurrence as the scalar path,
-        // so dispatching it preserves the TA-Lib 0.8 numeric contract.
-        return unsafe { adosc_default_3_10_avx2(high, low, close, volume, output) };
-    }
-
     unsafe {
         let high_ptr = high.as_ptr();
         let low_ptr = low.as_ptr();
@@ -316,10 +260,20 @@ fn adosc_default_3_10_into(
 
         let range = *high_ptr - *low_ptr;
         let mut cumulative = if range > 0.0 {
-            (((*close_ptr - *low_ptr) - (*high_ptr - *close_ptr)) / range) * *volume_ptr
+            ((*close_ptr - *low_ptr - (*high_ptr - *close_ptr)) / range) * *volume_ptr
         } else {
             0.0
         };
+        let mut fast_one_k: f64 = 2.0 / 4.0;
+        let fast_k = 1.0 - fast_one_k;
+        if fast_one_k < 0.5 {
+            fast_one_k = 1.0 - fast_k;
+        }
+        let mut slow_one_k: f64 = 9.0 / 11.0;
+        let slow_k = 1.0 - slow_one_k;
+        if slow_one_k < 0.5 {
+            slow_one_k = 1.0 - slow_k;
+        }
         let mut fast_ema = cumulative;
         let mut slow_ema = cumulative;
 
@@ -329,11 +283,11 @@ fn adosc_default_3_10_into(
             let range = h - l;
             if range > 0.0 {
                 let c = *close_ptr.add(i);
-                let multiplier = ((c - l) - (h - c)) / range;
+                let multiplier = (c - l - (h - c)) / range;
                 cumulative += multiplier * *volume_ptr.add(i);
             }
-            fast_ema = fast_ema * 0.5 + cumulative * 0.5;
-            slow_ema = slow_ema * (1.0 - 2.0 / 11.0) + cumulative * (2.0 / 11.0);
+            fast_ema = fast_one_k * fast_ema + fast_k * cumulative;
+            slow_ema = slow_one_k * slow_ema + slow_k * cumulative;
         }
         *output_ptr.add(9) = fast_ema - slow_ema;
 
@@ -343,86 +297,10 @@ fn adosc_default_3_10_into(
             let range = h - l;
             if range > 0.0 {
                 let c = *close_ptr.add(i);
-                cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(i);
+                cumulative += ((c - l - (h - c)) / range) * *volume_ptr.add(i);
             }
-            fast_ema = fast_ema * 0.5 + cumulative * 0.5;
-            slow_ema = slow_ema * (1.0 - 2.0 / 11.0) + cumulative * (2.0 / 11.0);
-            *output_ptr.add(i) = fast_ema - slow_ema;
-        }
-    }
-    Ok(())
-}
-
-#[cfg(all(feature = "std", target_arch = "x86_64"))]
-#[target_feature(enable = "avx2")]
-#[allow(unsafe_op_in_unsafe_fn)]
-#[allow(dead_code)] // Kept as an opt-in kernel until the FMA parity path is dispatched.
-unsafe fn adosc_default_3_10_avx2(
-    high: &[f64],
-    low: &[f64],
-    close: &[f64],
-    volume: &[f64],
-    output: &mut [f64],
-) -> Result<()> {
-    use core::arch::x86_64::*;
-
-    output[..9].fill(f64::NAN);
-    let high_ptr = high.as_ptr();
-    let low_ptr = low.as_ptr();
-    let close_ptr = close.as_ptr();
-    let volume_ptr = volume.as_ptr();
-    let output_ptr = output.as_mut_ptr();
-    let zero = _mm256_setzero_pd();
-    let mut cumulative = 0.0;
-    let mut fast_ema = 0.0;
-    let mut slow_ema = 0.0;
-
-    let chunks = high.len() / 4;
-    for chunk in 0..chunks {
-        let off = chunk * 4;
-        let vh = _mm256_loadu_pd(high_ptr.add(off));
-        let vl = _mm256_loadu_pd(low_ptr.add(off));
-        let vc = _mm256_loadu_pd(close_ptr.add(off));
-        let vv = _mm256_loadu_pd(volume_ptr.add(off));
-        let hl = _mm256_sub_pd(vh, vl);
-        let clv = _mm256_sub_pd(_mm256_sub_pd(vc, vl), _mm256_sub_pd(vh, vc));
-        let valid = _mm256_cmp_pd(hl, zero, _CMP_GT_OS);
-        let multiplier = _mm256_blendv_pd(zero, _mm256_div_pd(clv, hl), valid);
-        let flow = _mm256_mul_pd(multiplier, vv);
-        let values: [f64; 4] = core::mem::transmute(flow);
-
-        for (lane, money_flow) in values.into_iter().enumerate() {
-            let i = off + lane;
-            cumulative += money_flow;
-            if i == 0 {
-                fast_ema = cumulative;
-                slow_ema = cumulative;
-            } else {
-                fast_ema = fast_ema.mul_add(0.5, cumulative * 0.5);
-                slow_ema = slow_ema.mul_add(1.0 - 2.0 / 11.0, cumulative * (2.0 / 11.0));
-            }
-            if i >= 9 {
-                *output_ptr.add(i) = fast_ema - slow_ema;
-            }
-        }
-    }
-
-    for i in chunks * 4..high.len() {
-        let h = *high_ptr.add(i);
-        let l = *low_ptr.add(i);
-        let range = h - l;
-        if range > 0.0 {
-            let c = *close_ptr.add(i);
-            cumulative += (((c - l) - (h - c)) / range) * *volume_ptr.add(i);
-        }
-        if i == 0 {
-            fast_ema = cumulative;
-            slow_ema = cumulative;
-        } else {
-            fast_ema = fast_ema.mul_add(0.5, cumulative * 0.5);
-            slow_ema = slow_ema.mul_add(1.0 - 2.0 / 11.0, cumulative * (2.0 / 11.0));
-        }
-        if i >= 9 {
+            fast_ema = fast_one_k * fast_ema + fast_k * cumulative;
+            slow_ema = slow_one_k * slow_ema + slow_k * cumulative;
             *output_ptr.add(i) = fast_ema - slow_ema;
         }
     }

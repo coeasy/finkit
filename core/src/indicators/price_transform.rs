@@ -37,11 +37,10 @@ pub fn avgprice(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Resul
     validate_input(open.len(), 1)?;
 
     let len = open.len();
-    // 直接分配 Array1 并写入，避免 Vec 到 Array1 的转换开销
-    let mut output = Array1::<f64>::zeros(len);
-    crate::math::simd_ops::simd_avgprice(open, high, low, close, output.as_slice_mut().unwrap());
+    let mut output = crate::utils::uninit_output(len);
+    crate::math::simd_ops::simd_avgprice(open, high, low, close, &mut output);
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// Median Price (MEDPRICE)
@@ -75,12 +74,12 @@ pub fn medprice(high: &[f64], low: &[f64]) -> Result<Array1<f64>> {
     validate_input(high.len(), 1)?;
 
     let len = high.len();
-    let mut output = Array1::zeros(len);
+    let mut output = crate::utils::uninit_output(len);
     // SIMD-accelerated (high + low) / 2 — typical AVX2 kernel processes 4 f64
     // per iteration. ~2-3x faster than the per-element loop on 1K+ bars.
-    crate::math::simd_ops::simd_median_price(high, low, output.as_slice_mut().unwrap());
+    crate::math::simd_ops::simd_median_price(high, low, &mut output);
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// Typical Price (TYPPRICE)
@@ -116,11 +115,11 @@ pub fn typprice(high: &[f64], low: &[f64], close: &[f64]) -> Result<Array1<f64>>
     validate_input(high.len(), 1)?;
 
     let len = high.len();
-    let mut output = Array1::zeros(len);
+    let mut output = crate::utils::uninit_output(len);
     // SIMD-accelerated (high + low + close) / 3 — AVX2 vectorised add+div.
-    crate::math::simd_ops::simd_typical_price(high, low, close, output.as_slice_mut().unwrap());
+    crate::math::simd_ops::simd_typical_price(high, low, close, &mut output);
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// Weighted Close Price (WCLPRICE)
@@ -156,10 +155,10 @@ pub fn wclprice(high: &[f64], low: &[f64], close: &[f64]) -> Result<Array1<f64>>
     validate_input(high.len(), 1)?;
 
     let len = high.len();
-    let mut output = Array1::zeros(len);
-    wclprice_into(high, low, close, output.as_slice_mut().unwrap())?;
+    let mut output = crate::utils::uninit_output(len);
+    wclprice_into(high, low, close, &mut output)?;
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// WCLPRICE zero-copy variant: writes result into pre-allocated slice.

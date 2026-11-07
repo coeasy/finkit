@@ -36,10 +36,35 @@
 /// and the whole output is `NaN` (`NaN - NaN` is still `NaN`).
 #[inline]
 pub(crate) fn leading_warmup(input: &[f64]) -> usize {
+    // Most public indicator inputs start with real data. In that common case
+    // the warm-up ends at index zero, so don't scan the entire series looking
+    // for a later finite value. The full search is needed only when the first
+    // value is non-finite (typically an upstream indicator's NaN prefix).
+    if input.first().is_some_and(|value| value.is_finite()) {
+        return 0;
+    }
     input
         .iter()
         .position(|value| value.is_finite())
         .unwrap_or(input.len())
+}
+
+#[cfg(all(test, feature = "std"))]
+mod warmup_tests {
+    use super::leading_warmup;
+
+    #[test]
+    fn finite_first_value_skips_later_values() {
+        assert_eq!(leading_warmup(&[1.0, f64::NAN]), 0);
+        assert_eq!(leading_warmup(&[f64::INFINITY, 1.0, f64::NAN]), 1);
+    }
+
+    #[test]
+    fn non_finite_prefix_reports_first_finite_or_length() {
+        assert_eq!(leading_warmup(&[f64::NAN, f64::NEG_INFINITY, 3.0]), 2);
+        assert_eq!(leading_warmup(&[f64::NAN, f64::INFINITY]), 2);
+        assert_eq!(leading_warmup(&[]), 0);
+    }
 }
 
 #[cfg(feature = "std")]

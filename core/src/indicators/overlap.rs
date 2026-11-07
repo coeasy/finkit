@@ -368,20 +368,87 @@ pub fn accbands(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Resu
     validate_input(close.len(), period)?;
 
     let len = close.len();
-    let mut upper_raw = Vec::with_capacity(len);
-    let mut lower_raw = Vec::with_capacity(len);
-    for i in 0..len {
-        let sum = high[i] + low[i];
-        if sum != 0.0 {
-            let factor = 4.0 * (high[i] - low[i]) / sum;
-            upper_raw.push(high[i] * (1.0 + factor));
-            lower_raw.push(low[i] * (1.0 - factor));
-        } else {
-            upper_raw.push(high[i]);
-            lower_raw.push(low[i]);
+    // The ring setup costs more than it saves for short calls. Keep the
+    // allocation-and-SMA composition there; the streaming path pays off once
+    // the avoided full-series temporaries dominate.
+    if len < 16_384 {
+        return accbands_reference(high, low, close, period);
+    }
+
+    // Keep only one lookback-sized ring for the transformed bands. The old
+    // composition held two full raw series alongside the three SMA outputs;
+    // here each transformed value is consumed once and evicted when it leaves
+    // the rolling window. If a derived band is non-finite, retain the original
+    // SMA validation and leading-warmup behavior via the reference path.
+    let mut upper = Array1::from(crate::utils::uninit_output(len));
+    let mut lower = Array1::from(crate::utils::uninit_output(len));
+    upper.as_slice_mut().unwrap()[..period - 1].fill(f64::NAN);
+    lower.as_slice_mut().unwrap()[..period - 1].fill(f64::NAN);
+    let mut upper_window = vec![0.0; period];
+    let mut lower_window = vec![0.0; period];
+    for i in 0..period {
+        let (upper_value, lower_value) = accbands_raw_at(high[i], low[i]);
+        if !upper_value.is_finite() || !lower_value.is_finite() {
+            return accbands_reference(high, low, close, period);
+        }
+        upper_window[i] = upper_value;
+        lower_window[i] = lower_value;
+    }
+    let mut upper_sum = moving_avg::simd_horizontal_sum(&upper_window);
+    let mut lower_sum = moving_avg::simd_horizontal_sum(&lower_window);
+    let inverse_period = 1.0 / period as f64;
+    upper[period - 1] = upper_sum * inverse_period;
+    lower[period - 1] = lower_sum * inverse_period;
+
+    let mut window_index = 0usize;
+    for i in period..len {
+        let (upper_value, lower_value) = accbands_raw_at(high[i], low[i]);
+        if !upper_value.is_finite() || !lower_value.is_finite() {
+            return accbands_reference(high, low, close, period);
+        }
+        upper_sum += upper_value - upper_window[window_index];
+        lower_sum += lower_value - lower_window[window_index];
+        upper_window[window_index] = upper_value;
+        lower_window[window_index] = lower_value;
+        upper[i] = upper_sum * inverse_period;
+        lower[i] = lower_sum * inverse_period;
+        window_index += 1;
+        if window_index == period {
+            window_index = 0;
         }
     }
 
+    Ok(BbandsResult {
+        upper,
+        middle: moving_avg::sma(close, period)?,
+        lower,
+    })
+}
+
+#[inline]
+fn accbands_raw_at(high: f64, low: f64) -> (f64, f64) {
+    let sum = high + low;
+    if sum != 0.0 {
+        let factor = 4.0 * (high - low) / sum;
+        (high * (1.0 + factor), low * (1.0 - factor))
+    } else {
+        (high, low)
+    }
+}
+
+fn accbands_reference(
+    high: &[f64],
+    low: &[f64],
+    close: &[f64],
+    period: usize,
+) -> Result<BbandsResult> {
+    let mut upper_raw = Vec::with_capacity(high.len());
+    let mut lower_raw = Vec::with_capacity(high.len());
+    for (&high, &low) in high.iter().zip(low) {
+        let (upper, lower) = accbands_raw_at(high, low);
+        upper_raw.push(upper);
+        lower_raw.push(lower);
+    }
     Ok(BbandsResult {
         upper: moving_avg::sma(&upper_raw, period)?,
         middle: moving_avg::sma(close, period)?,
@@ -2073,6 +2140,10 @@ pub fn hma(input: &[f64], period: usize) -> Result<Array1<f64>> {
     }
     validate_input(input.len(), period)?;
 
+    if input.iter().all(|value| value.is_finite()) {
+        return hma_finite(input, period);
+    }
+
     let half_period = period / 2;
     let sqrt_period = (period as f64).sqrt().round() as usize;
     let wma_half = moving_avg::wma(input, half_period)?;
@@ -2080,9 +2151,8 @@ pub fn hma(input: &[f64], period: usize) -> Result<Array1<f64>> {
 
     let len = input.len();
     let diff_start = period - 1;
-    let mut output = init_output(len);
     if diff_start >= len {
-        return Ok(output);
+        return Ok(init_output(len));
     }
 
     let diff: Vec<f64> = (diff_start..len)
@@ -2096,17 +2166,45 @@ pub fn hma(input: &[f64], period: usize) -> Result<Array1<f64>> {
         .collect();
 
     if diff.len() < sqrt_period {
-        return Ok(output);
+        return Ok(init_output(len));
     }
 
     let hma_inner = moving_avg::wma(&diff, sqrt_period)?;
-    for (j, &v) in hma_inner.iter().enumerate() {
-        if j >= sqrt_period - 1 {
-            output[diff_start + j] = v;
-        }
+    let hma_start = diff_start + sqrt_period - 1;
+    if hma_start >= len {
+        return Ok(init_output(len));
+    }
+    let mut output = Vec::with_capacity(len);
+    output.resize(hma_start, f64::NAN);
+    output.extend_from_slice(&hma_inner.as_slice().unwrap()[sqrt_period - 1..]);
+    Ok(Array1::from_vec(output))
+}
+
+fn hma_finite(input: &[f64], period: usize) -> Result<Array1<f64>> {
+    let len = input.len();
+    let half_period = period / 2;
+    let sqrt_period = (period as f64).sqrt().round() as usize;
+    let diff_start = period - 1;
+    let diff_len = len - diff_start;
+    let hma_start = diff_start + sqrt_period - 1;
+    if diff_len < sqrt_period || hma_start >= len {
+        return Ok(init_output(len));
     }
 
-    Ok(output)
+    let mut half = crate::utils::uninit_output(len);
+    let mut full = crate::utils::uninit_output(len);
+    moving_avg::wma_finite_into(input, half_period, &mut half);
+    moving_avg::wma_finite_into(input, period, &mut full);
+
+    for i in diff_start..len {
+        half[i] = 2.0 * half[i] - full[i];
+    }
+    moving_avg::wma_finite_into(&half[diff_start..], sqrt_period, &mut full[..diff_len]);
+
+    let mut output = crate::utils::uninit_output(len);
+    output[..hma_start].fill(f64::NAN);
+    output[hma_start..].copy_from_slice(&full[sqrt_period - 1..diff_len]);
+    Ok(Array1::from_vec(output))
 }
 
 /// Arnaud Legoux Moving Average (ALMA)
@@ -2718,6 +2816,36 @@ mod tests {
         assert!(result[3].is_nan());
         assert!(!result[4].is_nan());
         assert!(result[4] > 0.0);
+    }
+
+    #[test]
+    fn hma_compact_output_matches_materialized_composition() {
+        let input = (0..512)
+            .map(|i| 100.0 + (i as f64 * 0.017).sin() * 5.0 + i as f64 * 0.001)
+            .collect::<Vec<_>>();
+        for period in [2, 3, 4, 5, 10, 20, 64] {
+            let actual = hma(&input, period).unwrap();
+            let half = moving_avg::wma(&input, period / 2).unwrap();
+            let full = moving_avg::wma(&input, period).unwrap();
+            let difference = (period - 1..input.len())
+                .map(|i| 2.0 * half[i] - full[i])
+                .collect::<Vec<_>>();
+            let inner =
+                moving_avg::wma(&difference, (period as f64).sqrt().round() as usize).unwrap();
+            let start = period - 1 + (period as f64).sqrt().round() as usize - 1;
+            for i in 0..input.len() {
+                if i < start {
+                    assert!(actual[i].is_nan(), "period={period}, i={i}");
+                } else {
+                    assert!(
+                        (actual[i] - inner[i - (period - 1)]).abs() <= 1e-10,
+                        "period={period}, i={i}, actual={}, expected={}",
+                        actual[i],
+                        inner[i - (period - 1)]
+                    );
+                }
+            }
+        }
     }
 
     #[test]

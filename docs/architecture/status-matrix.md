@@ -1,6 +1,18 @@
 # 实现现状矩阵
 
-- 基线：`codex/release-v0.2.0-convergence`，提交 `f1fa798` 加本地候选改动（workspace `0.2.0`；最终 SHA 待提交）
+> **当前发布候选（2026-11-06）**：公开 GitHub Release 为 `v0.2.0`；当前工作树目标 `v0.3.0`，最终提交和 same-SHA release readiness 尚待完成。下方 2026-10-18 至 2026-10-23 的证据表保留各自历史基线，不代表本次候选 SHA。
+>
+> 本机验证不表示 GitHub Actions 当前 SHA 已通过，也不证明 Linux/macOS/移动端构建、干净安装包消费者或公开 registry 发布。因子研究不是回测产品，用户明确排除回测实现。
+> 截至 2026-10-23 的历史记录写入时，GitHub Releases 页面显示最新公开发行仍为 `v0.2.0`。
+
+- 当前工作流入口：[核心工作流矩阵](workflow-matrix.md)
+- 当前方案进度与后续阶段：[项目功能、架构与重构审查](../PROJECT_FUNCTIONALITY_ARCHITECTURE_REVIEW_2026-10-23.md) §9
+
+## 历史快照说明
+
+本文件下方的 2026-10-18、10-14、10-13、10-10 章节保留各自原始 SHA 和日期，均为历史记录。不得将历史候选分支、本机包或远端 Actions 结果误认为当前工作树或当前公开发行证据。
+
+- 历史基线：`codex/release-v0.2.0-convergence`，提交 `f1fa798` 加本地候选改动（workspace `0.2.0`；最终 SHA 待提交）
 - 状态更新日期：2026-10-18（Windows x64 本地验证 + 历史 PR #30 GitHub Actions；不代表公开发布）
 - 依据：[项目功能、架构与重构审查（2026-10-18）](../PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md)
 - 上一版基线：`496763b7`（2026-10-10），记录见 §5
@@ -14,7 +26,7 @@
 | 当前候选工作树测试 / 构建 | `cargo test --workspace --locked --no-fail-fast` **通过**；安装 wheel 后 TA-Lib 全重叠门禁 155/155、Python 新增合同测试 8/8 通过 | Windows x64；候选改动在最终提交后的远端复验仍需完成，不能外推到所有平台 |
 | 当前候选性能校准 | `benchmark_talib_arch_v3_gate.py --sizes 100000 1000000 --repetitions 3` 通过现有稳定基准门槛 | Windows x64 本地三轮中位数：总体 1.313x、100K 1.484x、1M 1.175x、Top20 1.497x；与 Linux hosted-runner 基线不同机型，不视作跨平台性能承诺。全覆盖脚本中的逐项慢于 TA-Lib 结果仅作诊断，不替代校准门槛 |
 | 当前候选 GitHub Actions | `71180ba` 上 Docs Check、Python ABI3 wheels、多语言发布和跨平台工作流通过；Architecture v3 校准门禁通过 | 历史 SHA CI 不是当前候选证明；PR 上发布资产 job 按条件跳过。新的源码改动须推送后以当前 SHA 重新跑 CI |
-| 公开发行 | GitHub Releases 页面显示最新公开 Release 为 `v0.1.15`；`0.2.0` 是仓库当前候选版本 | [GitHub Releases](https://github.com/coeasy/finkit/releases)；候选 tag、registry 发布、平台包均须按实际完成状态更新 |
+| 公开发行 | 截至 2026-10-23，GitHub Releases 最新公开 Release 为 `v0.1.15`；仓库存在 `v0.2.0` tag/源码，但不是公开 Release | [GitHub Releases](https://github.com/coeasy/finkit/releases)；各公共 registry 与平台包仍须按实际发布记录核对 |
 
 下列 §4–§6 记录保留其原始日期与 SHA，仅作历史追溯。它们不是 `8b398999` 的验证结果。
 
@@ -51,7 +63,7 @@
 | 面 | 源码入口 | 可编译 | 专项测试 | parity / 一致性 | CI target | 发行状态 |
 |---|---|---|---|---|---|---|
 | 批量指标 / 数值核 | `core/src/indicators/`、`core/src/math/` | ✅ | `golden_tests.rs`、`golden_talib_tests.rs`、`talib_coverage_matrix.rs`、`adx_nan_golden.rs`、`indicator_api_surface.rs` | TA-Lib golden；`allocating == into`（`runtime_convergence.rs`） | `test` | 源码 + v0.1.15 `.crate` |
-| 公式 tree 后端（默认） | `core/src/formula/engine.rs` `eval*` | ✅ | `formula_execution_mode.rs`、`formula_differential_tests.rs`、`formula_input_bounds.rs` | `tree == plan`（rostered，`formula_plan_differential.rs`） | `test` | 源码 + v0.1.15 |
+| 公式 Auto 后端（Rust 默认策略） | `core/src/formula/engine.rs` `eval*` | ✅ | `formula_execution_mode.rs`、`formula_differential_tests.rs`、`formula_input_bounds.rs` | `tree == plan`（rostered，`formula_plan_differential.rs`） | `test` | 源码 + v0.3.0 候选 |
 | 公式 plan 后端（opt-in） | `formula/compute_ir.rs`、`executor.rs`、`bridge_dispatch.rs`、`unified_dispatch.rs` | ✅ | `formula_plan_differential.rs`、`formula_string_literals.rs` | 同上；tree-only 入口 `BackendUnsupported` 明确失败 | `test` | 源码（默认关闭） |
 | streaming | `core/src/streaming/` | ✅ | `runtime_convergence.rs`、`repaint_tests.rs`、`long_run_stability.rs` | `batch == streaming`；注册表双向门禁 | `test` | 源码 + v0.1.15 |
 | 因子图 / 统一运行时 / DirtyRange | `semantic_graph.rs`、`unified_runtime.rs`、`compute.rs` | ✅ | `factor_graph_contract.rs`、`unified_operation_seam.rs`、`runtime_convergence.rs` | `full == range`；增量保守回退 | `runtime-integration-tests` | next-release（非 v0.1.15） |
@@ -89,7 +101,7 @@
 
 | 断言 | 门禁 / 测试 |
 |---|---|
-| 公式默认后端是 Tree | `formula_execution_mode.rs`；`check_formula_engine_contract.py` |
+| 公式默认后端是 Auto | `formula_execution_mode.rs`；`check_formula_engine_contract.py` |
 | tree-only 入口矩阵无空白（四份名册一致） | `check_formula_engine_contract.py`（engine 守卫 / formula-engine.md / runtime 合同两处名册 / 测试） |
 | 批量 == 流式 == range == into == tree/plan == FFI | `runtime_convergence.rs`（五条边 rostered） |
 | 字符串字面量两路径一致 + 缺口名册 | `formula_string_literals.rs` |
@@ -128,11 +140,11 @@
 
 | 核验 | 命令 | 结果 |
 |---|---|---|
-| 公式后端契约 | `cargo test -p finkit --locked --test formula_execution_mode` | **13/13 通过**（默认 Tree；13 个 tree-only 守卫；plan 可用入口填充 plan 缓存） |
+| 公式后端契约 | `cargo test -p finkit --locked --test formula_execution_mode` | **14/14 通过**（默认 Auto；13 个 tree-only 守卫；plan 可用入口填充 plan 缓存） |
 | 公式差分 | `cargo test -p finkit --locked --test formula_plan_differential` | **4/4 通过**（国内/Pine 语料 tree==plan） |
 | 字符串字面量 | `cargo test -p finkit --locked --test formula_string_literals` | **6/6 通过**（两路径 `string_table` 一致；`string_base` 偏移；4 个消费下标的函数在 Plan 下运行且与 tree 逐值一致；参数边界保留 Tree 既有兼容行为） |
 | 相邻公式面 | `cargo test -p finkit --locked --test dzh_compat_tests --test em_compat_tests --test formula_dialect_coverage --test formula_corpus --test formula_terminal_contract --test runtime_convergence` | **94/94 通过**（43+21+2+10+1+17） |
-| 公式引擎合同 | `python scripts/check_formula_engine_contract.py` | 通过（13 项 tree-only 在 **四份**名册一致；默认 Tree；缓存容量一致） |
+| 公式引擎合同 | `python scripts/check_formula_engine_contract.py` | 通过（13 项 tree-only 在 **四份**名册一致；默认 Auto；缓存容量一致） |
 | feature 组合 | `python scripts/check_feature_matrix.py` | 通过（**4** 个受支持组合构建成功；**6** 个 known-broken 仍按记录失败） |
 | 依赖方向 | `python scripts/check_dependency_direction.py` | 通过（30 条 shipped 边全部向下；1 条 dev-only 边已记录） |
 | 绑定 parity | `python scripts/audit_binding_parity.py --check` | 通过（8 个绑定基线一致；iOS/Android 15/78 属 ratchet 基线） |

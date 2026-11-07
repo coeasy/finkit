@@ -45,7 +45,8 @@ pub fn apo(input: &[f64], fast_period: usize, slow_period: usize) -> Result<Arra
     validate_input(input.len(), slow_period)?;
 
     let len = input.len();
-    let mut output = init_output(len);
+    let mut output = crate::utils::uninit_output(len);
+    output[..slow_period - 1].fill(f64::NAN);
 
     // Fused single-pass APO: compute the fast & slow SMA running sums inline
     // and subtract, eliminating the two full-length SMA arrays plus the final
@@ -71,7 +72,7 @@ pub fn apo(input: &[f64], fast_period: usize, slow_period: usize) -> Result<Arra
         output[i] = fast_sum * fast_inv - slow_sum * slow_inv;
     }
 
-    Ok(output)
+    Ok(Array1::from_vec(output))
 }
 
 /// Absolute Price Oscillator with an explicit moving-average type.

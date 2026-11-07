@@ -71,7 +71,7 @@ jobs:
             target: x86_64-apple-darwin
             manylinux: "off"
           - name: macos-arm64
-            os: macos-14
+            os: macos-15
             target: aarch64-apple-darwin
             manylinux: "off"
           - name: windows-x86_64
@@ -140,6 +140,7 @@ jobs:
               "--no-cache-dir",
               str(wheels[0]),
               "pytest",
+              "TA-Lib==0.8.1",
           ])
           PY
           cd "$RUNNER_TEMP"
@@ -200,10 +201,26 @@ jobs:
         shell: bash
         env:
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          PYTHON_VERSION: ${{ matrix.python }}
         run: |
-          python -m pip install --force-reinstall --no-cache-dir dist/finkit-*.whl pytest
-          cd "$RUNNER_TEMP"
-          python -m pytest "$GITHUB_WORKSPACE/ffi/python-binding/tests" -q
+          if [[ "$PYTHON_VERSION" == "3.8" ]]; then
+            # TA-Lib's current Python wrapper requires Python 3.9+, so keep the
+            # 3.8 job focused on proving the abi3 wheel imports and executes.
+            python -m pip install --force-reinstall --no-cache-dir dist/finkit-*.whl
+            cd "$RUNNER_TEMP"
+            python - <<'PY'
+          import numpy as np
+          import finkit as ta
+
+          result = ta.sma(np.array([1.0, 2.0, 3.0, 4.0]), timeperiod=2)
+          assert isinstance(result, np.ndarray)
+          np.testing.assert_allclose(result[1:], [1.5, 2.5, 3.5])
+          PY
+          else
+            python -m pip install --force-reinstall --no-cache-dir dist/finkit-*.whl pytest TA-Lib==0.8.1
+            cd "$RUNNER_TEMP"
+            python -m pytest "$GITHUB_WORKSPACE/ffi/python-binding/tests" -q
+          fi
 
   validate:
     name: Validate wheel set

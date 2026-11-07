@@ -19,6 +19,7 @@ _native_all = getattr(
     "__all__",
     [name for name in dir(_native) if not name.startswith("_")],
 )
+_native_numpy_direct = frozenset(getattr(_native, "__numpy_direct_names__", ()))
 
 from finkit.exceptions import (  # noqa: E402,F401
     FinkitError,
@@ -100,7 +101,11 @@ for _name in _native_all:
     _function = globals().get(_name)
     if callable(_function) and not isinstance(_function, type):
         wrapped = _translate_native_errors(_name, _function)
-        globals()[_name] = _as_numpy_result(_name, wrapped)
+        globals()[_name] = (
+            wrapped
+            if _name in _native_numpy_direct
+            else _as_numpy_result(_name, wrapped)
+        )
 
 
 def _as_contiguous_float64(values):
@@ -116,6 +121,9 @@ def _as_contiguous_float64(values):
     if array.dtype != np.float64 or not array.flags.c_contiguous:
         array = np.ascontiguousarray(array, dtype=np.float64)
     return array
+
+
+_SMALL_PRICE_DIRECT_MAX = 4096
 
 
 def _as_contiguous_float_array(values):
@@ -555,18 +563,29 @@ if hasattr(_native, "_fast_adosc"):
 
 if hasattr(_native, "_fast_bop"):
 
-    def bop(open, high, low, close):
+    def _bop_normalized(open, high, low, close):
         open = _as_contiguous_float64(open)
         high = _as_contiguous_float64(high)
         low = _as_contiguous_float64(low)
         close = _as_contiguous_float64(close)
         return _native._fast_bop(open, high, low, close)
 
-    bop = _translate_native_errors("bop", bop)
+    _bop_normalized = _translate_native_errors("bop", _bop_normalized)
+
+    def bop(open, high, low, close):
+        try:
+            return _native.bop(open, high, low, close)
+        except (TypeError, ValueError, OverflowError):
+            return _bop_normalized(open, high, low, close)
 
 if hasattr(_native, "_fast_price_transform"):
 
     def avgprice(open, high, low, close):
+        try:
+            if len(open) <= _SMALL_PRICE_DIRECT_MAX:
+                return _native.avgprice(open, high, low, close)
+        except (TypeError, ValueError):
+            pass
         open = _as_contiguous_float64(open)
         high = _as_contiguous_float64(high)
         low = _as_contiguous_float64(low)
@@ -574,17 +593,32 @@ if hasattr(_native, "_fast_price_transform"):
         return _native._fast_price_transform("avgprice", open, high, low, close)
 
     def medprice(high, low):
+        try:
+            if len(high) <= _SMALL_PRICE_DIRECT_MAX:
+                return _native.medprice(high, low)
+        except (TypeError, ValueError):
+            pass
         high = _as_contiguous_float64(high)
         low = _as_contiguous_float64(low)
         return _native._fast_price_transform("medprice", None, high, low, None)
 
     def typprice(high, low, close):
+        try:
+            if len(high) <= _SMALL_PRICE_DIRECT_MAX:
+                return _native.typprice(high, low, close)
+        except (TypeError, ValueError):
+            pass
         high = _as_contiguous_float64(high)
         low = _as_contiguous_float64(low)
         close = _as_contiguous_float64(close)
         return _native._fast_price_transform("typprice", None, high, low, close)
 
     def wclprice(high, low, close):
+        try:
+            if len(high) <= _SMALL_PRICE_DIRECT_MAX:
+                return _native.wclprice(high, low, close)
+        except (TypeError, ValueError):
+            pass
         high = _as_contiguous_float64(high)
         low = _as_contiguous_float64(low)
         close = _as_contiguous_float64(close)

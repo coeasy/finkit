@@ -403,7 +403,7 @@ ADOSC_CANONICAL = '''pub fn adosc(
     }
     validate_input(high.len(), slow_period)?;
 
-    let mut output = Array1::<f64>::zeros(high.len());
+    let mut output = Array1::from(crate::utils::uninit_output(high.len()));
     crate::math::volume_kernels::adosc_into(
         high,
         low,
@@ -463,7 +463,7 @@ CANONICAL_FUNCTIONS: tuple[CanonicalFunction, ...] = (
         # and could never match a canonical body for `adosc` alone.
         next_doc="/// ADOSC zero-copy variant",
         canonical=ADOSC_CANONICAL,
-        forbidden=("simd_ad_line", "cumulative = vec!"),
+        forbidden=("simd_ad_line", "cumulative = vec!", "Array1::<f64>::zeros"),
     ),
     CanonicalFunction(
         label="volume.rs public OBV",
@@ -519,7 +519,7 @@ TRANGE_CANONICAL = '''fn fast_trange<'py>(
     let len = high.len();
     let output = unsafe { PyArray1::new(py, [len], false) };
     let output_addr = output.data() as usize;
-    py.detach(|| unsafe {
+    run_native_kernel(py, len, || unsafe {
         let output_ptr = output_addr as *mut f64;
         indicators::trange_into(
             high,
@@ -921,18 +921,10 @@ def verify_numpy_direct() -> list[str]:
 EXTREMA_KERNEL = ROOT / "core" / "src" / "math" / "statistics.rs"
 EXTREMA_KERNEL_SIGNATURE = "pub(crate) fn rolling_minmax_visit("
 EXTREMA_KERNEL_MARKERS = (
-    # Two-tier design, and both tiers must survive:
-    #   * the cached-index fast path, which rescans only when an extrema leaves
-    #     the window (a per-bar rescan here is what used to make TA_MAX/TA_MIN
-    #     slow on long series), and
-    #   * the monotonic ring fallback for oversized windows, which bounds the
-    #     worst case the cached index cannot.
-    # The markers are phrases from the live kernel doc; they replaced the older
-    # pair ("Expire stale fronts before insertion" / "Large-window compatibility
-    # fallback"), which described the pre-rewrite implementation and had gone
-    # stale -- leaving this gate permanently red and therefore ignored.
-    "rescanning only when an extrema leaves the window",
+    # The fused high/low visitor uses the monotonic queue for every window size,
+    # so trends cannot trigger a full-window rescan at every bar.
     "Monotonic ring",
+    "every bar is inserted and removed at most once",
     "fn rolling_minmax_ring(",
 )
 EXTREMA_CONSUMERS = (

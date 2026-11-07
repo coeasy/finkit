@@ -592,7 +592,7 @@ fn rolling_extreme_cached<const WANT_MAX: bool>(
     }
 }
 
-/// Van Herk–Gil–Werman rolling extreme for **fully finite** input.
+/// Van Herk–Gil–Werman rolling extreme for input with no NaN values.
 ///
 /// The cached-index kernel is amortized O(1)/bar, but its rescan fires whenever
 /// the cached extreme leaves the window — on noisy series that is most bars, so
@@ -602,19 +602,18 @@ fn rolling_extreme_cached<const WANT_MAX: bool>(
 /// older block combined with the extreme of a prefix of the newer one, both
 /// precomputed once per block.
 ///
-/// Callers dispatch here only after an `is_finite` prescan, so the missing-bar
-/// contract is moot: entries `0..window - 1` are left untouched (the caller's
-/// warm-up fill stays) and every later entry is written with the exact window
-/// extreme — the same values the cached-index kernel would produce bit for bit.
-/// Infinites would break that equivalence, hence the stricter prescan.
+/// The block pass detects a NaN while reading the suffix/prefix tables and
+/// returns `false` so the caller can fall back to the missing-aware cached
+/// kernel. Entries `0..window - 1` are left untouched and every later entry is
+/// written with the exact window extreme. Infinities are valid extrema.
 pub(crate) fn van_herk_extreme_into<const WANT_MAX: bool>(
     data: &[f64],
     window: usize,
     output: &mut [f64],
-) {
+) -> bool {
     let len = data.len();
     if window <= 1 || window > len || output.len() != len {
-        return;
+        return true;
     }
 
     // See `VAN_HERK_STACK_TABLES`: every catalogue window fits the stack tier,
@@ -622,27 +621,214 @@ pub(crate) fn van_herk_extreme_into<const WANT_MAX: bool>(
     if window <= VAN_HERK_STACK_TABLES {
         let mut suffix = [0.0f64; VAN_HERK_STACK_TABLES];
         let mut prefix = [0.0f64; VAN_HERK_STACK_TABLES];
-        van_herk_body::<WANT_MAX>(data, window, output, &mut suffix, &mut prefix);
+        if window == 30 {
+            van_herk_body::<WANT_MAX, 30>(data, window, output, &mut suffix, &mut prefix)
+        } else {
+            van_herk_body::<WANT_MAX, 0>(data, window, output, &mut suffix, &mut prefix)
+        }
     } else {
         let mut suffix = vec![0.0f64; window];
         let mut prefix = vec![0.0f64; window];
-        van_herk_body::<WANT_MAX>(data, window, output, &mut suffix, &mut prefix);
+        van_herk_body::<WANT_MAX, 0>(data, window, output, &mut suffix, &mut prefix)
     }
 }
 
-/// The block body, shared by both table tiers.
+/// Fused finite-input MINMAX variant. It constructs the maximum and minimum
+/// prefix/suffix tables together, loading each input bar once per table pass.
+/// Returning `false` asks the caller to use the NaN-aware independent kernels.
+pub(crate) fn van_herk_minmax_pair_into(
+    data: &[f64],
+    window: usize,
+    minimum: &mut [f64],
+    maximum: &mut [f64],
+) -> bool {
+    if window == 0
+        || window > data.len()
+        || minimum.len() != data.len()
+        || maximum.len() != data.len()
+        || window > EXTREMA_CACHE_LIMIT
+    {
+        return false;
+    }
+    if window == 1 {
+        minimum.copy_from_slice(data);
+        maximum.copy_from_slice(data);
+        return true;
+    }
+
+    if window <= VAN_HERK_STACK_TABLES {
+        let mut suffix_min = [0.0f64; VAN_HERK_STACK_TABLES];
+        let mut suffix_max = [0.0f64; VAN_HERK_STACK_TABLES];
+        let mut prefix_min = [0.0f64; VAN_HERK_STACK_TABLES];
+        let mut prefix_max = [0.0f64; VAN_HERK_STACK_TABLES];
+        if window == 30 {
+            van_herk_minmax_body::<30>(
+                data,
+                window,
+                minimum,
+                maximum,
+                &mut suffix_min,
+                &mut suffix_max,
+                &mut prefix_min,
+                &mut prefix_max,
+            )
+        } else {
+            van_herk_minmax_body::<0>(
+                data,
+                window,
+                minimum,
+                maximum,
+                &mut suffix_min,
+                &mut suffix_max,
+                &mut prefix_min,
+                &mut prefix_max,
+            )
+        }
+    } else {
+        let mut suffix_min = vec![0.0f64; window];
+        let mut suffix_max = vec![0.0f64; window];
+        let mut prefix_min = vec![0.0f64; window];
+        let mut prefix_max = vec![0.0f64; window];
+        van_herk_minmax_body::<0>(
+            data,
+            window,
+            minimum,
+            maximum,
+            &mut suffix_min,
+            &mut suffix_max,
+            &mut prefix_min,
+            &mut prefix_max,
+        )
+    }
+}
+
+#[inline(always)]
+fn van_herk_minmax_body<const FIXED_WINDOW: usize>(
+    data: &[f64],
+    window: usize,
+    minimum: &mut [f64],
+    maximum: &mut [f64],
+    suffix_min: &mut [f64],
+    suffix_max: &mut [f64],
+    prefix_min: &mut [f64],
+    prefix_max: &mut [f64],
+) -> bool {
+    let window = if FIXED_WINDOW == 0 {
+        window
+    } else {
+        FIXED_WINDOW
+    };
+    let len = data.len();
+    let source = data.as_ptr();
+    let min_target = minimum.as_mut_ptr();
+    let max_target = maximum.as_mut_ptr();
+
+    // SAFETY: table slices hold at least `window` entries; `today` and every
+    // crossing offset remain below `len`, as in `van_herk_body` above.
+    unsafe {
+        let mut block_start = 0usize;
+        let mut today = window - 1;
+        while today < len {
+            let block_end = block_start + window - 1;
+            let mut low = *source.add(block_end);
+            if low.is_nan() {
+                return false;
+            }
+            let mut high = low;
+            suffix_min[window - 1] = low;
+            suffix_max[window - 1] = high;
+            let mut offset = window - 1;
+            while offset > 0 {
+                offset -= 1;
+                let value = *source.add(block_start + offset);
+                if value.is_nan() {
+                    return false;
+                }
+                if value < low {
+                    low = value;
+                }
+                if value > high {
+                    high = value;
+                }
+                suffix_min[offset] = low;
+                suffix_max[offset] = high;
+            }
+            *min_target.add(today) = suffix_min[0];
+            *max_target.add(today) = suffix_max[0];
+
+            let block_next = block_start + window;
+            if block_next >= len {
+                break;
+            }
+            let n_available = (len - block_next).min(window - 1);
+            low = *source.add(block_next);
+            if low.is_nan() {
+                return false;
+            }
+            high = low;
+            prefix_min[0] = low;
+            prefix_max[0] = high;
+            let mut grown = 1usize;
+            while grown < n_available {
+                let value = *source.add(block_next + grown);
+                if value.is_nan() {
+                    return false;
+                }
+                if value < low {
+                    low = value;
+                }
+                if value > high {
+                    high = value;
+                }
+                prefix_min[grown] = low;
+                prefix_max[grown] = high;
+                grown += 1;
+            }
+
+            let mut offset = 1usize;
+            while offset <= n_available {
+                let older_min = suffix_min[offset];
+                let newer_min = prefix_min[offset - 1];
+                *min_target.add(today + offset) = if newer_min < older_min {
+                    newer_min
+                } else {
+                    older_min
+                };
+                let older_max = suffix_max[offset];
+                let newer_max = prefix_max[offset - 1];
+                *max_target.add(today + offset) = if newer_max > older_max {
+                    newer_max
+                } else {
+                    older_max
+                };
+                offset += 1;
+            }
+
+            block_start += window;
+            today += n_available + 1;
+        }
+    }
+    true
+}
+
+/// The finite-input block body, shared by both table tiers.
 ///
 /// Split out so the stack and heap tiers cannot drift: they differ only in
 /// where `suffix`/`prefix` come from, and the measured win (0.870x) is produced
 /// by the storage alone — the probe's two variants are otherwise identical
 /// statement for statement.
-fn van_herk_body<const WANT_MAX: bool>(
+fn van_herk_body<const WANT_MAX: bool, const FIXED_WINDOW: usize>(
     data: &[f64],
     window: usize,
     output: &mut [f64],
     suffix: &mut [f64],
     prefix: &mut [f64],
-) {
+) -> bool {
+    let window = if FIXED_WINDOW == 0 {
+        window
+    } else {
+        FIXED_WINDOW
+    };
     let len = data.len();
     debug_assert!(
         suffix.len() >= window && prefix.len() >= window,
@@ -667,11 +853,17 @@ fn van_herk_body<const WANT_MAX: bool>(
 
             // suffix[o] = extreme of data[block_start + o ..= block_end].
             let mut extreme = *source.add(block_end);
+            if extreme.is_nan() {
+                return false;
+            }
             suffix[window - 1] = extreme;
             let mut offset = window - 1;
             while offset > 0 {
                 offset -= 1;
                 let value = *source.add(block_start + offset);
+                if value.is_nan() {
+                    return false;
+                }
                 let takes = if WANT_MAX {
                     value > extreme
                 } else {
@@ -694,10 +886,16 @@ fn van_herk_body<const WANT_MAX: bool>(
 
             // prefix[o] = extreme of data[block_next ..= block_next + o].
             extreme = *source.add(block_next);
+            if extreme.is_nan() {
+                return false;
+            }
             prefix[0] = extreme;
             let mut grown = 1usize;
             while grown < n_available {
                 let value = *source.add(block_next + grown);
+                if value.is_nan() {
+                    return false;
+                }
                 let takes = if WANT_MAX {
                     value > extreme
                 } else {
@@ -734,85 +932,7 @@ fn van_herk_body<const WANT_MAX: bool>(
             today += n_available + 1;
         }
     }
-}
-
-/// Fused high/low form of [`rolling_extreme_cached`].
-///
-/// The two legs warm up independently: `warm_high_at` and `warm_low_at` may
-/// differ when only one leg opens with a missing run, which keeps each extreme
-/// from being reported from a partially populated window.
-#[inline]
-fn rolling_minmax_cached(
-    high: &[f64],
-    low: &[f64],
-    window: usize,
-    warm_high_at: usize,
-    warm_low_at: usize,
-    mut emit: impl FnMut(usize, f64, f64),
-) {
-    let mut highest = f64::NEG_INFINITY;
-    let mut highest_index = 0usize;
-    let mut has_high = false;
-    let mut lowest = f64::INFINITY;
-    let mut lowest_index = 0usize;
-    let mut has_low = false;
-    let high_ptr = high.as_ptr();
-    let low_ptr = low.as_ptr();
-
-    // Branch-lean update, mirroring `rolling_extreme_cached`: `NaN` fails every
-    // comparison and so never takes an extreme, and each leg's expiry is only
-    // tested after its dominance test failed.
-    macro_rules! track {
-        ($i:expr) => {{
-            // SAFETY: `$i < high.len() == low.len()` and both pointers come
-            // from slices that outlive the loop.
-            let candidate_high = unsafe { *high_ptr.add($i) };
-            let candidate_low = unsafe { *low_ptr.add($i) };
-
-            if candidate_high >= highest {
-                highest = candidate_high;
-                highest_index = $i;
-                has_high = true;
-            } else if has_high && highest_index + window <= $i {
-                let (rescanned, position, found) =
-                    rescan_extreme_window::<true>(high, $i + 1 - window, $i);
-                highest = rescanned;
-                highest_index = position;
-                has_high = found;
-            }
-
-            if candidate_low <= lowest {
-                lowest = candidate_low;
-                lowest_index = $i;
-                has_low = true;
-            } else if has_low && lowest_index + window <= $i {
-                let (rescanned, position, found) =
-                    rescan_extreme_window::<false>(low, $i + 1 - window, $i);
-                lowest = rescanned;
-                lowest_index = position;
-                has_low = found;
-            }
-        }};
-    }
-
-    // Warm-up split: while either leg is still short of its warm point nothing
-    // is emitted. Both warm points then coincide with plain tracking.
-    let tracked_end = warm_high_at.min(warm_low_at).min(high.len());
-    let emit_from = warm_high_at.max(warm_low_at).min(high.len());
-    for i in 0..tracked_end {
-        track!(i);
-    }
-    for i in tracked_end..emit_from {
-        track!(i);
-    }
-    for i in emit_from..high.len() {
-        track!(i);
-        emit(
-            i,
-            if has_high { highest } else { f64::NAN },
-            if has_low { lowest } else { f64::NAN },
-        );
-    }
+    true
 }
 
 /// Visit fused rolling maximum/minimum values without materializing extrema arrays.
@@ -822,12 +942,9 @@ fn rolling_minmax_cached(
 /// and give the same answer for every input, so no gating is needed to keep
 /// them in agreement:
 ///
-/// * **Cached index** — `window <= EXTREMA_CACHE_LIMIT`. One comparison per side
-///   per bar, rescanning only when an extrema leaves the window. This is what
-///   makes the TA-Lib C `TA_MAX`/`TA_MIN` fast path fast.
-/// * **Monotonic ring** — oversized windows. Every bar is inserted and removed
-///   at most once, which bounds the worst case the cached index would otherwise
-///   pay in rescans.
+/// * **Monotonic ring** — every bar is inserted and removed at most once. This
+///   avoids rescanning a full window whenever a trailing high or low expires,
+///   which is common on the steadily trending price series used by callers.
 ///
 /// Missing bars are dropped by both: neither can hold an extrema, and a window
 /// whose bars are all missing emits `NaN`.
@@ -849,16 +966,10 @@ pub(crate) fn rolling_minmax_visit(
     let warm_high_at = first_finite(high).map_or(high.len(), |start| start + window - 1);
     let warm_low_at = first_finite(low).map_or(low.len(), |start| start + window - 1);
 
-    if window <= EXTREMA_CACHE_LIMIT {
-        rolling_minmax_cached(high, low, window, warm_high_at, warm_low_at, emit);
-        return;
-    }
-
     rolling_minmax_ring(high, low, window, warm_high_at, warm_low_at, emit);
 }
 
-/// Monotonic-queue form of [`rolling_minmax_visit`], for windows above
-/// [`EXTREMA_CACHE_LIMIT`].
+/// Monotonic-queue form of [`rolling_minmax_visit`].
 ///
 /// Two queues hold the surviving candidates for each leg. Every bar is inserted
 /// and removed at most once, so the total work is linear in the series regardless
@@ -1019,31 +1130,22 @@ fn fill_rolling_extreme<const WANT_MAX: bool>(data: &[f64], window: usize, outpu
     // not fill it: skip a leading run of missing bars before reporting.
     let warm_at = first_finite(data).map_or(data.len(), |start| start + window - 1);
 
-    // Contract for callers that hand over an uninitialized buffer: every slot
-    // from `window - 1` on is written by this call. The block kernel honours it
-    // directly; the cached kernels stop at `warm_at`, which a leading missing
-    // run can push past `window - 1`, so that gap is filled here. It is at most
-    // the leading missing run long, not a full pass over the series.
-    if warm_at > window - 1 {
-        let end = warm_at.min(output.len());
-        output[window - 1..end].fill(f64::NAN);
-    }
-
     if window <= EXTREMA_CACHE_LIMIT {
-        // Fully finite input is the common case for price series, and it is the
-        // regime where the cached-index kernel's rescan degenerates to a full
-        // window scan on most bars. The block algorithm's cost is independent
-        // of the data distribution, so it wins exactly where the cache loses.
-        // The test is `is_finite`, not `!is_nan`: a leading non-finite run is
-        // warm-up (see `warm_at` above), and the block kernel has no warm-up
-        // concept — it would report an `inf` bar the cached kernel skips.
-        if data.iter().all(|value| value.is_finite()) {
-            van_herk_extreme_into::<WANT_MAX>(data, window, output);
-        } else {
+        // Check for NaNs during the block pass instead of paying a full preflight
+        // scan. Missing data falls back to the cached kernel; ordinary series
+        // retain the finite-input block kernel's tight comparison loop.
+        if !van_herk_extreme_into::<WANT_MAX>(data, window, output) {
             rolling_extreme_cached::<WANT_MAX>(data, window, warm_at, output);
         }
     } else {
         rolling_extreme_ring::<WANT_MAX>(data, window, warm_at, output);
+    }
+
+    // The block kernel also writes windows before a leading NaN run has
+    // supplied `window` observations. Restore that warm-up gap afterwards.
+    if warm_at > window - 1 {
+        let end = warm_at.min(output.len());
+        output[window - 1..end].fill(f64::NAN);
     }
 }
 

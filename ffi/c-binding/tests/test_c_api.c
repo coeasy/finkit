@@ -37,9 +37,9 @@ int main(void) {
     }
     const int catalog_ok = strstr(catalog, "\"schema_version\":1") != NULL &&
                            strstr(catalog, "\"name\":\"SMA\"") != NULL &&
-                           strstr(catalog, "talib_0_8_0") != NULL &&
+                           strstr(catalog, "talib_0_8_1") != NULL &&
                            strstr(catalog, "talib_0_7_1") == NULL &&
-                           count_occurrences(catalog, "\"profile_output_contracts\":{\"talib_0_8_0\"") == 201;
+                           count_occurrences(catalog, "\"profile_output_contracts\":{\"talib_0_8_1\"") == 201;
     finkit_free_string(catalog);
     if (!catalog_ok) {
         fprintf(stderr, "C API catalog did not publish the current 201-name TA-Lib profile\n");

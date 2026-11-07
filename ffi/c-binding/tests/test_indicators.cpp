@@ -466,13 +466,13 @@ void test_current_talib_catalog() {
            "Catalog schema version is missing");
     ASSERT(catalog.find("\"name\":\"SMA\"") != std::string::npos,
            "Catalog does not contain SMA");
-    ASSERT(catalog.find("talib_0_8_0") != std::string::npos,
+    ASSERT(catalog.find("talib_0_8_1") != std::string::npos,
            "Catalog does not contain the current TA-Lib profile");
     ASSERT(catalog.find("talib_0_7_1") == std::string::npos,
            "Catalog contains the retired TA-Lib profile");
     size_t count = 0;
     size_t position = 0;
-    const std::string profile_marker = "\"profile_output_contracts\":{\"talib_0_8_0\"";
+    const std::string profile_marker = "\"profile_output_contracts\":{\"talib_0_8_1\"";
     while ((position = catalog.find(profile_marker, position)) != std::string::npos) {
         ++count;
         position += profile_marker.size();

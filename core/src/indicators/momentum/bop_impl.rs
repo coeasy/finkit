@@ -37,7 +37,7 @@ pub fn bop(open: &[f64], high: &[f64], low: &[f64], close: &[f64]) -> Result<Arr
     validate_input(open.len(), 1)?;
 
     let len = open.len();
-    let mut buf = vec![0.0f64; len];
+    let mut buf = crate::utils::uninit_output(len);
     simd_ops::simd_bop(open, high, low, close, &mut buf);
 
     Ok(Array1::from_vec(buf))

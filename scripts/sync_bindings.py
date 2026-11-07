@@ -578,6 +578,10 @@ def wrap_body(lang: str, body: str) -> str:
     re-running the generator or ``--discover`` is stable.
     """
     body = body.strip()
+    input_slice = re.search(r"let\s+(\w+)\s*=\s*\w+\s*\.as_slice\(\)", body)
+    if input_slice is None:
+        return body
+    input_len = f"{input_slice.group(1)}.len()"
     if lang not in ("go", "dotnet", "ios", "java"):
         return body
     ri = body.find("->")
@@ -615,8 +619,8 @@ def transform_python_numpy_body(body: str) -> str:
 
     The registry stores the language-level implementation bodies, while the
     generated Python module owns the host-object boundary.  Float64 indicator
-    results are calculated while the GIL is detached and converted to
-    ``PyArray1`` only after it is reacquired.  This avoids the expensive
+    results are calculated with the GIL released for large inputs and while
+    retaining it for short inputs, then converted to ``PyArray1``. This avoids the expensive
     ``Rust Vec -> Python list -> NumPy array`` round trip without changing the
     public function names or numerical contracts.
 
@@ -624,25 +628,34 @@ def transform_python_numpy_body(body: str) -> str:
     existing list/array conversion is not a hot numeric-series path.
     """
     body = body.strip()
+    input_slice = re.search(r"let\s+(\w+)\s*=\s*\w+\s*\.as_slice\(\)", body)
+    if input_slice is None:
+        return body
+    input_len = f"{input_slice.group(1)}.len()"
     if "-> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)>" in body:
         body = body.replace(
             "-> PyResult<(Vec<f64>, Vec<f64>, Vec<f64>)>",
             "-> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>, Py<PyArray1<f64>>)>",
         )
-        return body.replace("py.detach(||", "py_arrays3_f64(py, ||", 1)
+        body = body.replace("py.detach(||", "py_arrays3_f64(py, ||", 1)
     if "-> PyResult<(Vec<f64>, Vec<f64>)>" in body:
         body = body.replace(
             "-> PyResult<(Vec<f64>, Vec<f64>)>",
             "-> PyResult<(Py<PyArray1<f64>>, Py<PyArray1<f64>>)>",
         )
-        return body.replace("py.detach(||", "py_arrays2_f64(py, ||", 1)
+        body = body.replace("py.detach(||", "py_arrays2_f64(py, ||", 1)
     if "-> PyResult<Vec<f64>>" in body:
         body = body.replace(
             "-> PyResult<Vec<f64>>",
             "-> PyResult<Py<PyArray1<f64>>>"
         )
-        return body.replace("py.detach(||", "py_array_f64(py, ||", 1)
-    return body
+        body = body.replace("py.detach(||", "py_array_f64(py, ||", 1)
+    return re.sub(
+        r"\b(py_(?:array|arrays)[a-z0-9_]+)\(py,\s*\|\|",
+        lambda match: f"{match.group(1)}(py, {input_len}, ||",
+        body,
+        count=1,
+    )
 
 
 def normalize_body_for_check(lang: str, body: str) -> str:
@@ -662,14 +675,31 @@ def emit_generated(lang: str, inds: list[dict]) -> str:
         "// ─────────────────────────────────────────────────────────────────────\n\n"
     )
     bodies = []
+    numpy_direct_names = []
     for ind in inds:
         body = ind.get("ffi", {}).get("bodies", {}).get(lang)
         if body:
             if lang == "python":
                 body = transform_python_numpy_body(body)
+                if re.search(r"\bpy_(?:array|arrays)[a-z0-9_]+\(py,", body):
+                    explicit_name = re.search(
+                        r'#\[pyfunction\(name\s*=\s*"([^"]+)"\)\]', body
+                    )
+                    rust_name = re.search(r"\bfn\s+(\w+)\s*\(", body)
+                    if explicit_name:
+                        numpy_direct_names.append(explicit_name.group(1))
+                    elif rust_name:
+                        numpy_direct_names.append(rust_name.group(1))
             # Wrap each generated function in catch_unwind so a panic inside
             # the core call cannot unwind across the FFI boundary.
             bodies.append(wrap_body(lang, body).rstrip("\n") + "\n")
+    if lang == "python":
+        names = sorted(set(numpy_direct_names))
+        bodies.append(
+            "pub const PY_NUMPY_DIRECT_NAMES: &[&str] = &[\n"
+            + "".join(f'    "{name}",\n' for name in names)
+            + "];\n"
+        )
     # Keep generated files POSIX-clean so the wheel workflow's `git diff
     # --check` does not reject a second blank line at EOF.
     return (header + "\n".join(bodies)).rstrip("\n") + "\n"

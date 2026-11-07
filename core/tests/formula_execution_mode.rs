@@ -83,11 +83,11 @@ macro_rules! assert_tree_only {
 }
 
 #[test]
-fn tree_is_the_default() {
+fn auto_is_the_default() {
     assert_eq!(
         FormulaEngine::new().execution_mode(),
-        FormulaExecutionMode::Tree,
-        "the reference path must stay the default until flipping it is a deliberate release decision"
+        FormulaExecutionMode::Auto,
+        "the engine default must use the measured automatic backend policy"
     );
 }
 

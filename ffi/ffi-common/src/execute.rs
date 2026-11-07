@@ -329,6 +329,12 @@ fn candlestick_detector(
 
 fn normalize_profile(value: &str) -> String {
     let profile = value.trim().to_ascii_lowercase();
+    // Preserve explicit callers on the prior profile identifier. TA-Lib C and
+    // Python 0.8.0/0.8.1 share the supported calculation contracts here; the
+    // response is canonicalized to the latest pinned profile.
+    if profile == "talib_0_8_0" {
+        return TALIB_SEMANTIC_PROFILE.to_string();
+    }
     // Existing in-tree unit fixtures are intentionally kept as historical
     // regression inputs, but the compatibility alias is compiled only for
     // tests. Production bindings expose and accept the latest profile only.
@@ -2076,22 +2082,37 @@ mod tests {
     fn talib_profile_is_explicit_and_uses_talib_sma_warmup() {
         let request = r#"{
             "operation":"SMA",
-            "semantic_profile":"talib_0_8_0",
+            "semantic_profile":"talib_0_8_1",
             "input_order":["CLOSE"],
             "inputs":{"CLOSE":[1.0,2.0,3.0]},
             "params":[2]
         }"#;
         let payload: Value = serde_json::from_str(&execute_operation_json(request)).unwrap();
-        assert_eq!(payload["semantic_profile"], "talib_0_8_0");
+        assert_eq!(payload["semantic_profile"], "talib_0_8_1");
         assert_eq!(payload["values"]["SMA"][0], Value::Null);
         assert_eq!(payload["values"]["SMA"][2], 2.5);
+    }
+
+    #[test]
+    fn previous_talib_profile_identifier_is_accepted_and_canonicalized() {
+        let request = serde_json::json!({
+            "operation": "SMA",
+            "semantic_profile": "talib_0_8_0",
+            "input_order": ["CLOSE"],
+            "inputs": {"CLOSE": [1.0, 2.0, 3.0, 4.0]},
+            "params": [2]
+        })
+        .to_string();
+        let payload: Value = serde_json::from_str(&execute_operation_json(&request)).unwrap();
+        assert_eq!(payload["semantic_profile"], TALIB_SEMANTIC_PROFILE);
+        assert_eq!(payload["values"]["SMA"][3], 3.5);
     }
 
     #[test]
     fn talib_profile_rejects_parameters_outside_catalog_contract() {
         let request = r#"{
             "operation":"SMA",
-            "semantic_profile":"talib_0_8_0",
+            "semantic_profile":"talib_0_8_1",
             "input_order":["CLOSE"],
             "inputs":{"CLOSE":[1.0,2.0,3.0]},
             "params":[2,99]
@@ -2121,13 +2142,13 @@ mod tests {
     fn talib_profile_dispatches_extended_overlap_group() {
         let request = r#"{
             "operation":"T3",
-            "semantic_profile":"talib_0_8_0",
+            "semantic_profile":"talib_0_8_1",
             "input_order":["CLOSE"],
             "inputs":{"CLOSE":[1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0,9.0,10.0,11.0,12.0,13.0,14.0]},
             "params":[2,0.7]
         }"#;
         let payload: Value = serde_json::from_str(&execute_operation_json(request)).unwrap();
-        assert_eq!(payload["semantic_profile"], "talib_0_8_0");
+        assert_eq!(payload["semantic_profile"], "talib_0_8_1");
         assert_eq!(payload["operation"], "T3");
         assert_eq!(payload["values"]["T3"].as_array().unwrap().len(), 14);
         assert!(payload["values"]["T3"][13].as_f64().unwrap().is_finite());

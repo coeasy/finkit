@@ -255,18 +255,39 @@ pub(crate) fn linreg_slope_scalar(data: &[f64], period: usize, result: &mut [f64
 
     let mut sum_y: f64 = data[..period].iter().sum();
     let mut sum_xy: f64 = 0.0;
+    let mut sum_abs: f64 = 0.0;
     let mut weight = p1;
     for &val in data[..period].iter() {
         sum_xy += weight * val;
+        sum_abs += val.abs();
         weight -= 1.0;
     }
     result[period - 1] = (p * sum_xy - sum_x * sum_y) * inv_divisor;
 
+    let reseed_interval = period.saturating_mul(32).max(1);
+    let mut bars_since_reseed = reseed_interval;
     for i in period..len {
         let old_val = data[i - period];
         let new_val = data[i];
-        sum_xy += sum_y - p * old_val;
-        sum_y += new_val - old_val;
+        let weighted_trailing = p * old_val;
+        sum_xy = sum_xy + sum_y - weighted_trailing;
+        sum_y = sum_y - old_val + new_val;
+        sum_abs = sum_abs - old_val.abs() + new_val.abs();
+        bars_since_reseed -= 1;
+        if bars_since_reseed == 0 || weighted_trailing.abs() > 100.0 * sum_abs {
+            bars_since_reseed = reseed_interval;
+            let first = i + 1 - period;
+            sum_y = 0.0;
+            sum_xy = 0.0;
+            sum_abs = 0.0;
+            let mut weight = p1;
+            for &value in &data[first..=i] {
+                sum_y += value;
+                sum_xy += weight * value;
+                sum_abs += value.abs();
+                weight -= 1.0;
+            }
+        }
         result[i] = (p * sum_xy - sum_x * sum_y) * inv_divisor;
     }
 
@@ -297,17 +318,20 @@ pub(crate) fn linreg_scalar(data: &[f64], period: usize, result: &mut [f64]) {
     let inv_divisor = 1.0 / divisor;
     let inv_p = 1.0 / p;
 
-    let mut sum_y: f64 = data[..period].iter().sum();
+    let mut origin = data[0];
+    let mut sum_y: f64 = data[..period].iter().map(|&value| value - origin).sum();
     let mut sum_xy: f64 = 0.0;
     let mut weight = last_x;
     for &val in data[..period].iter() {
-        sum_xy += weight * val;
+        sum_xy += weight * (val - origin);
         weight -= 1.0;
     }
     let slope = (p * sum_xy - sum_x * sum_y) * inv_divisor;
     let intercept = (sum_y - slope * sum_x) * inv_p;
     result[period - 1] = slope * last_x + intercept;
 
+    let reseed_interval = period.saturating_mul(32).max(1);
+    let mut since_reseed = 0usize;
     for i in period..len {
         let old_val = data[i - period];
         let new_val = data[i];
@@ -316,6 +340,23 @@ pub(crate) fn linreg_scalar(data: &[f64], period: usize, result: &mut [f64]) {
         let slope = (p * sum_xy - sum_x * sum_y) * inv_divisor;
         let intercept = (sum_y - slope * sum_x) * inv_p;
         result[i] = slope * last_x + intercept;
+        since_reseed += 1;
+        if since_reseed == reseed_interval {
+            if i + 1 < len {
+                let first = i + 1 - period;
+                origin = data[first];
+                sum_y = 0.0;
+                sum_xy = 0.0;
+                let mut weight = last_x;
+                for &value in &data[first..=i] {
+                    let centered = value - origin;
+                    sum_y += centered;
+                    sum_xy += weight * centered;
+                    weight -= 1.0;
+                }
+            }
+            since_reseed = 0;
+        }
     }
 
     for r in result.iter_mut().take(period - 1) {

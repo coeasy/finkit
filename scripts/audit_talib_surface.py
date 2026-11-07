@@ -21,8 +21,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--expected-version",
-        default="0.8.0",
-        help="Required TA-Lib Python wrapper version (default: 0.8.0)",
+        default="0.8.1",
+        help="Required TA-Lib Python wrapper version (default: 0.8.1)",
     )
     parser.add_argument(
         "--require-complete",

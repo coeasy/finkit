@@ -20,7 +20,9 @@ fn parse_formula_backend(backend: &str) -> PyResult<FormulaExecutionMode> {
 pub fn formula_backend(backend: Option<&str>) -> PyResult<String> {
     let mode = match backend {
         Some(name) => parse_formula_backend(name)?,
-        None => FormulaExecutionMode::default(),
+        // The Rust engine defaults to `Auto`, but Python formula functions
+        // retain their documented backward-compatible `tree` default.
+        None => FormulaExecutionMode::Tree,
     };
     Ok(mode.as_str().to_string())
 }

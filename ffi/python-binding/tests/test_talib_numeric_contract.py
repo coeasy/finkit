@@ -13,8 +13,26 @@ FIXTURE = json.loads(
 )
 
 
+def test_normalizes_previous_talib_profile_identifier():
+    payload = json.loads(
+        ta.operation_execute_json(
+            json.dumps(
+                {
+                    "operation": "SMA",
+                    "semantic_profile": "talib_0_8_0",
+                    "input_order": ["CLOSE"],
+                    "inputs": {"CLOSE": [1, 2, 3, 4]},
+                    "params": [2],
+                }
+            )
+        )
+    )
+    assert payload["semantic_profile"] == "talib_0_8_1"
+    assert payload["values"]["SMA"][3] == 3.5
+
+
 def test_executes_every_talib_numeric_contract_vector():
-    assert FIXTURE["semantic_profile"] == "talib_0_8_0"
+    assert FIXTURE["semantic_profile"] == "talib_0_8_1"
     assert len(FIXTURE["vectors"]) == 201
 
     for vector in FIXTURE["vectors"]:

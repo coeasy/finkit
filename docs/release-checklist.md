@@ -1,12 +1,12 @@
-# Finkit v0.2.0 Release Checklist
+# Finkit v0.3.0 Release Checklist
 
 This checklist is the release boundary for the current workspace version. It
-keeps the published v0.1.15 assets separate from v0.2.0 candidates and does not
+keeps the published v0.2.0 assets separate from v0.3.0 candidates and does not
 claim registry installation commands before a clean consumer test exists.
 
 ## Before creating the tag
 
-- [ ] Confirm the intended release commit contains the v0.2.0 workspace version.
+- [ ] Confirm the intended release commit contains the v0.3.0 workspace version.
 - [ ] Run the version/docs contracts:
       `python scripts/check_versions.py`,
       `python scripts/check_changelog.py CHANGELOG.md`,
@@ -120,7 +120,7 @@ claim registry installation commands before a clean consumer test exists.
       skipped rather than failed, and reports a manifest whose name/version
       disagree with `Cargo.toml` as a stale product identity rather than as one
       "artifact missing" line per entry.
-- [ ] Verify the tag will be exactly `v0.2.0`; `publish.yml` rejects a mismatch.
+- [ ] Verify the tag will be exactly `v0.3.0`; `publish.yml` rejects a mismatch.
 - [ ] Confirm the GitHub Actions secret `CARGO_REGISTRY_TOKEN` is available to
       the repository and has permission to publish `finkit`.
 - [ ] Confirm the release notes cover the 31 TA-Lib functions, dialect coverage
@@ -133,7 +133,7 @@ claim registry installation commands before a clean consumer test exists.
 
 ## Tag and crates.io publication
 
-1. Create and push the `v0.2.0` tag from the intended release commit.
+1. Create and push the `v0.3.0` tag from the intended release commit.
 2. Let the tag workflow run its version/changelog checks, docs.rs build, and
    `cargo publish --dry-run` gate.
 3. The workflow publishes only the `finkit` crate. PyPI publication is
@@ -146,17 +146,17 @@ claim registry installation commands before a clean consumer test exists.
 
 ## After publication
 
-- [ ] Open the crates.io page and confirm version `0.2.0` is visible.
+- [ ] Open the crates.io page and confirm version `0.3.0` is visible.
 - [ ] Run a clean consumer smoke test in a temporary project using
-      `finkit = "0.2.0"` and a minimal indicator call.
-- [ ] Confirm docs.rs generated documentation for `finkit 0.2.0`.
+      `finkit = "0.3.0"` and a minimal indicator call.
+- [ ] Confirm docs.rs generated documentation for `finkit 0.3.0`.
 - [ ] Confirm the GitHub Release contains the four Python ABI3 wheels, the Rust
       crate asset, the Linux x86_64 main CLI and `finkit-factor-study` CLI, and
       `SHA256SUMS`.
 - [ ] Verify each downloaded asset against `SHA256SUMS`.
 - [ ] Only after the registry smoke test passes, add `cargo add finkit` to user
       installation docs and move `PUBLISHED_VERSION` in
-      `scripts/check_versions.py` to `0.2.0`.
+      `scripts/check_versions.py` to `0.3.0`.
 - [ ] Do not add `pip install finkit`, `npm install finkit`, Maven Central,
       NuGet, public `go get`, or Android/iOS registry coordinates until their
       own publication and clean-consumer tests pass.
@@ -165,8 +165,9 @@ claim registry installation commands before a clean consumer test exists.
 
 ## Current status
 
-- Workspace target: `0.2.0`.
-- Latest published release: `v0.1.15`.
+- Workspace target: `0.3.0`.
+- Latest public GitHub release: `v0.2.0`.
+- crates.io: `finkit` is not yet present; first registry publication is part of this release.
 - crates.io workflow: implemented in `.github/workflows/publish.yml`, pending a
   real tag run with repository credentials.
 - PyPI: deliberately deferred; no `pip install finkit` claim is valid yet.

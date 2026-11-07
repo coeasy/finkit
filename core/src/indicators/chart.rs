@@ -37,21 +37,24 @@ pub fn heikin_ashi(
     validate_input(open.len(), 1)?;
 
     let len = open.len();
-    let mut ha_o = vec![f64::NAN; len];
-    let mut ha_h = vec![f64::NAN; len];
-    let mut ha_l = vec![f64::NAN; len];
-    let mut ha_c = vec![f64::NAN; len];
+    // Every candle produces all four values, including NaNs for a bad input
+    // row, so skip four zero-initializing allocations and write each slot once.
+    let mut ha_o = crate::utils::uninit_output(len);
+    let mut ha_h = crate::utils::uninit_output(len);
+    let mut ha_l = crate::utils::uninit_output(len);
+    let mut ha_c = crate::utils::uninit_output(len);
 
     let mut prev_open = f64::NAN;
     let mut prev_close = f64::NAN;
-    for i in 0..len {
-        let o = open[i];
-        let h = high[i];
-        let l = low[i];
-        let c = close[i];
+    for index in 0..len {
+        let (o, h, l, c) = (open[index], high[index], low[index], close[index]);
         if o.is_nan() || h.is_nan() || l.is_nan() || c.is_nan() {
             prev_open = f64::NAN;
             prev_close = f64::NAN;
+            ha_o[index] = f64::NAN;
+            ha_h[index] = f64::NAN;
+            ha_l[index] = f64::NAN;
+            ha_c[index] = f64::NAN;
             continue;
         }
         let hc = (o + h + l + c) * 0.25;
@@ -60,10 +63,10 @@ pub fn heikin_ashi(
         } else {
             (prev_open + prev_close) * 0.5
         };
-        ha_c[i] = hc;
-        ha_o[i] = ho;
-        ha_h[i] = h.max(ho).max(hc);
-        ha_l[i] = l.min(ho).min(hc);
+        ha_c[index] = hc;
+        ha_o[index] = ho;
+        ha_h[index] = h.max(ho).max(hc);
+        ha_l[index] = l.min(ho).min(hc);
         prev_open = ho;
         prev_close = hc;
     }

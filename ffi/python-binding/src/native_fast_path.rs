@@ -20,6 +20,21 @@ fn value_error(error: impl std::fmt::Display) -> PyErr {
     PyErr::new::<pyo3::exceptions::PyValueError, _>(error.to_string())
 }
 
+/// Avoid releasing/reacquiring the GIL for short calls whose thread-state
+/// transition is a meaningful fraction of the kernel runtime.
+#[inline]
+fn run_native_kernel<T: Send>(
+    py: Python<'_>,
+    input_len: usize,
+    kernel: impl FnOnce() -> T + Send,
+) -> T {
+    if input_len >= crate::conversion::PY_GIL_RELEASE_THRESHOLD {
+        py.detach(kernel)
+    } else {
+        kernel()
+    }
+}
+
 #[inline]
 fn validate_period(len: usize, period: usize) -> PyResult<()> {
     if period == 0 {
@@ -149,7 +164,7 @@ fn fast_rocp<'py>(
     timeperiod: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    let values = py.detach(|| rate_change_vec(close, timeperiod, 0))?;
+    let values = run_native_kernel(py, close.len(), || rate_change_vec(close, timeperiod, 0))?;
     Ok(PyArray1::from_vec(py, values))
 }
 
@@ -161,7 +176,7 @@ fn fast_rocr<'py>(
     timeperiod: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    let values = py.detach(|| rate_change_vec(close, timeperiod, 1))?;
+    let values = run_native_kernel(py, close.len(), || rate_change_vec(close, timeperiod, 1))?;
     Ok(PyArray1::from_vec(py, values))
 }
 
@@ -173,7 +188,7 @@ fn fast_rocr100<'py>(
     timeperiod: usize,
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
-    let values = py.detach(|| rate_change_vec(close, timeperiod, 2))?;
+    let values = run_native_kernel(py, close.len(), || rate_change_vec(close, timeperiod, 2))?;
     Ok(PyArray1::from_vec(py, values))
 }
 
@@ -408,8 +423,7 @@ fn fast_obv<'py>(
 ) -> PyResult<Bound<'py, PyArray1<f64>>> {
     let close = close.as_slice().map_err(value_error)?;
     let volume = volume.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| volume_kernels::obv_vec(close, volume))
+    let output = run_native_kernel(py, close.len(), || volume_kernels::obv_vec(close, volume))
         .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output))
 }
@@ -424,8 +438,10 @@ fn fast_obv_into(
     let close = close.as_slice().map_err(value_error)?;
     let volume = volume.as_slice().map_err(value_error)?;
     let output = output.as_slice_mut().map_err(value_error)?;
-    py.detach(|| volume_kernels::obv_into(close, volume, output))
-        .map_err(value_error)
+    run_native_kernel(py, close.len(), || {
+        volume_kernels::obv_into(close, volume, output)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction(name = "_fast_vwap")]
@@ -441,8 +457,10 @@ fn fast_vwap<'py>(
     let close = close.as_slice().map_err(value_error)?;
     let volume = volume.as_slice().map_err(value_error)?;
     let mut output = vec![0.0; high.len()];
-    py.detach(|| volume_kernels::vwap_into(high, low, close, volume, &mut output))
-        .map_err(value_error)?;
+    run_native_kernel(py, high.len(), || {
+        volume_kernels::vwap_into(high, low, close, volume, &mut output)
+    })
+    .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output))
 }
 
@@ -460,8 +478,10 @@ fn fast_vwap_into(
     let close = close.as_slice().map_err(value_error)?;
     let volume = volume.as_slice().map_err(value_error)?;
     let output = output.as_slice_mut().map_err(value_error)?;
-    py.detach(|| volume_kernels::vwap_into(high, low, close, volume, output))
-        .map_err(value_error)
+    run_native_kernel(py, high.len(), || {
+        volume_kernels::vwap_into(high, low, close, volume, output)
+    })
+    .map_err(value_error)
 }
 
 #[pyfunction(name = "_fast_mom")]
@@ -605,13 +625,13 @@ fn fast_unary_period<'py>(
                     indicators::midpoint_into(close, timeperiod, output)
                 }
             };
-            py.detach(compute).map_err(value_error)?;
+            run_native_kernel(py, len, compute).map_err(value_error)?;
             return Ok(output);
         }
         3 => {
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
-            py.detach(|| unsafe {
+            run_native_kernel(py, len, || unsafe {
                 moving_avg::dema_into(
                     close,
                     timeperiod,
@@ -624,7 +644,7 @@ fn fast_unary_period<'py>(
         4 => {
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
-            py.detach(|| unsafe {
+            run_native_kernel(py, len, || unsafe {
                 moving_avg::tema_into(
                     close,
                     timeperiod,
@@ -637,7 +657,7 @@ fn fast_unary_period<'py>(
         5 => {
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
-            py.detach(|| unsafe {
+            run_native_kernel(py, len, || unsafe {
                 indicators::rsi_into(
                     close,
                     timeperiod,
@@ -650,7 +670,7 @@ fn fast_unary_period<'py>(
         6 => {
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
-            py.detach(|| unsafe {
+            run_native_kernel(py, len, || unsafe {
                 indicators::roc_into(
                     close,
                     timeperiod,
@@ -663,7 +683,7 @@ fn fast_unary_period<'py>(
         7 => {
             let output = unsafe { PyArray1::new(py, [len], false) };
             let output_addr = output.data() as usize;
-            py.detach(|| unsafe {
+            run_native_kernel(py, len, || unsafe {
                 indicators::cmo_fast_into(
                     close,
                     timeperiod,
@@ -679,12 +699,12 @@ fn fast_unary_period<'py>(
     let output = match operation {
         2 => {
             validate_period(close.len(), timeperiod)?;
-            py.detach(|| mom_vec(close, timeperiod))
+            run_native_kernel(py, len, || mom_vec(close, timeperiod))
         }
         _ => {
             return Err(value_error(format!(
                 "invalid parameter: unsupported fast operation id {operation}"
-            )))
+            )));
         }
     };
     Ok(PyArray1::from_vec(py, output))
@@ -702,13 +722,17 @@ fn fast_unary_period_scale<'py>(
     if operation == 2 && timeperiod == 20 {
         let output = unsafe { PyArray1::new(py, [close.len()], false) };
         let output_addr = output.data() as usize;
-        py.detach(|| unsafe {
+        let calculate = || unsafe {
             rolling_stats::variance20_into(
                 close,
                 std::slice::from_raw_parts_mut(output_addr as *mut f64, close.len()),
             )
-        })
-        .map_err(value_error)?;
+        };
+        if close.len() >= crate::conversion::PY_GIL_RELEASE_THRESHOLD {
+            py.detach(calculate).map_err(value_error)?;
+        } else {
+            calculate().map_err(value_error)?;
+        }
         return Ok(output);
     }
     let output = match operation {
@@ -716,7 +740,7 @@ fn fast_unary_period_scale<'py>(
             validate_period(close.len(), timeperiod)?;
             let output = unsafe { PyArray1::new(py, [close.len()], false) };
             let output_addr = output.data() as usize;
-            py.detach(|| unsafe {
+            let calculate = || unsafe {
                 let output_ptr = output_addr as *mut f64;
                 let output = std::slice::from_raw_parts_mut(output_ptr, close.len());
                 if timeperiod == 20 && scale == 1.0 {
@@ -724,17 +748,27 @@ fn fast_unary_period_scale<'py>(
                 } else {
                     rolling_stats::stddev_rolling_into(close, timeperiod, scale, output)
                 }
-            })
-            .map_err(value_error)?;
+            };
+            if close.len() >= crate::conversion::PY_GIL_RELEASE_THRESHOLD {
+                py.detach(calculate).map_err(value_error)?;
+            } else {
+                calculate().map_err(value_error)?;
+            }
             return Ok(output);
         }
-        2 => py
-            .detach(|| rolling_stats::variance(close, timeperiod))
-            .map_err(value_error)?,
+        2 => {
+            let calculate = || rolling_stats::variance(close, timeperiod);
+            if close.len() >= crate::conversion::PY_GIL_RELEASE_THRESHOLD {
+                py.detach(calculate)
+            } else {
+                calculate()
+            }
+            .map_err(value_error)?
+        }
         _ => {
             return Err(value_error(format!(
                 "invalid parameter: unsupported fast operation id {operation}"
-            )))
+            )));
         }
     };
     Ok(PyArray1::from_vec(py, output))
@@ -827,7 +861,7 @@ fn fast_binary_period<'py>(
         _ => {
             return Err(value_error(format!(
                 "invalid parameter: unsupported fast operation id {operation}"
-            )))
+            )));
         }
     };
     Ok(PyArray1::from_vec(py, output))
@@ -847,6 +881,7 @@ fn fast_hlc_period<'py>(
     let close = close.as_slice().map_err(value_error)?;
     validate_same_len(high.len(), low.len())?;
     validate_same_len(high.len(), close.len())?;
+    let len = high.len();
     let output = match operation {
         1 => {
             let output = unsafe { PyArray1::new(py, [high.len()], false) };
@@ -859,39 +894,37 @@ fn fast_hlc_period<'py>(
                     indicators::willr_into(high, low, close, timeperiod, output)
                 }
             };
-            py.detach(compute).map_err(value_error)?;
+            run_native_kernel(py, len, compute).map_err(value_error)?;
             return Ok(output);
         }
-        2 => py
-            .detach(|| {
-                let len = high.len();
-                let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
-                unsafe { raw_output.set_len(len) };
-                let output = unsafe {
-                    std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len)
-                };
-                indicators::adx_into(high, low, close, timeperiod, output).map_err(value_error)?;
-                let ptr = raw_output.as_mut_ptr().cast::<f64>();
-                let capacity = raw_output.capacity();
-                std::mem::forget(raw_output);
-                Ok::<Vec<f64>, crate::PyErr>(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
-            })
-            .map_err(value_error)?,
-        8 => py
-            .detach(|| {
-                let len = high.len();
-                let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
-                unsafe { raw_output.set_len(len) };
-                let output = unsafe {
-                    std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len)
-                };
-                indicators::adxr_into(high, low, close, timeperiod, output).map_err(value_error)?;
-                let ptr = raw_output.as_mut_ptr().cast::<f64>();
-                let capacity = raw_output.capacity();
-                std::mem::forget(raw_output);
-                Ok::<Vec<f64>, crate::PyErr>(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
-            })
-            .map_err(value_error)?,
+        2 => run_native_kernel(py, len, || {
+            let len = high.len();
+            let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+            unsafe { raw_output.set_len(len) };
+            let output = unsafe {
+                std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len)
+            };
+            indicators::adx_into(high, low, close, timeperiod, output).map_err(value_error)?;
+            let ptr = raw_output.as_mut_ptr().cast::<f64>();
+            let capacity = raw_output.capacity();
+            std::mem::forget(raw_output);
+            Ok::<Vec<f64>, crate::PyErr>(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
+        })
+        .map_err(value_error)?,
+        8 => run_native_kernel(py, len, || {
+            let len = high.len();
+            let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
+            unsafe { raw_output.set_len(len) };
+            let output = unsafe {
+                std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len)
+            };
+            indicators::adxr_into(high, low, close, timeperiod, output).map_err(value_error)?;
+            let ptr = raw_output.as_mut_ptr().cast::<f64>();
+            let capacity = raw_output.capacity();
+            std::mem::forget(raw_output);
+            Ok::<Vec<f64>, crate::PyErr>(unsafe { Vec::from_raw_parts(ptr, len, capacity) })
+        })
+        .map_err(value_error)?,
         3 => {
             let len = high.len();
             let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(len);
@@ -899,65 +932,53 @@ fn fast_hlc_period<'py>(
             let output = unsafe {
                 std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len)
             };
-            py.detach(|| indicators::cci_into(high, low, close, timeperiod, output))
-                .map_err(value_error)?;
+            run_native_kernel(py, len, || {
+                indicators::cci_into(high, low, close, timeperiod, output)
+            })
+            .map_err(value_error)?;
             let ptr = raw_output.as_mut_ptr().cast::<f64>();
             let capacity = raw_output.capacity();
             std::mem::forget(raw_output);
             unsafe { Vec::from_raw_parts(ptr, len, capacity) }
         }
-        4 => py
-            .detach(|| {
-                let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(high.len());
-                unsafe { raw_output.set_len(high.len()) };
-                let output = unsafe {
-                    std::slice::from_raw_parts_mut(
-                        raw_output.as_mut_ptr().cast::<f64>(),
-                        high.len(),
-                    )
-                };
-                indicators::plus_di_fast_into(high, low, close, timeperiod, output)
-                    .map_err(value_error)?;
-                let ptr = raw_output.as_mut_ptr().cast::<f64>();
-                let capacity = raw_output.capacity();
-                std::mem::forget(raw_output);
-                Ok::<Vec<f64>, crate::PyErr>(unsafe {
-                    Vec::from_raw_parts(ptr, high.len(), capacity)
-                })
-            })
-            .map_err(value_error)?,
-        5 => py
-            .detach(|| {
-                let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(high.len());
-                unsafe { raw_output.set_len(high.len()) };
-                let output = unsafe {
-                    std::slice::from_raw_parts_mut(
-                        raw_output.as_mut_ptr().cast::<f64>(),
-                        high.len(),
-                    )
-                };
-                indicators::minus_di_fast_into(high, low, close, timeperiod, output)
-                    .map_err(value_error)?;
-                let ptr = raw_output.as_mut_ptr().cast::<f64>();
-                let capacity = raw_output.capacity();
-                std::mem::forget(raw_output);
-                Ok::<Vec<f64>, crate::PyErr>(unsafe {
-                    Vec::from_raw_parts(ptr, high.len(), capacity)
-                })
-            })
-            .map_err(value_error)?,
-        6 => py
-            .detach(|| indicators::atr(high, low, close, timeperiod))
+        4 => run_native_kernel(py, len, || {
+            let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(high.len());
+            unsafe { raw_output.set_len(high.len()) };
+            let output = unsafe {
+                std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), high.len())
+            };
+            indicators::plus_di_fast_into(high, low, close, timeperiod, output)
+                .map_err(value_error)?;
+            let ptr = raw_output.as_mut_ptr().cast::<f64>();
+            let capacity = raw_output.capacity();
+            std::mem::forget(raw_output);
+            Ok::<Vec<f64>, crate::PyErr>(unsafe { Vec::from_raw_parts(ptr, high.len(), capacity) })
+        })
+        .map_err(value_error)?,
+        5 => run_native_kernel(py, len, || {
+            let mut raw_output = Vec::<MaybeUninit<f64>>::with_capacity(high.len());
+            unsafe { raw_output.set_len(high.len()) };
+            let output = unsafe {
+                std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), high.len())
+            };
+            indicators::minus_di_fast_into(high, low, close, timeperiod, output)
+                .map_err(value_error)?;
+            let ptr = raw_output.as_mut_ptr().cast::<f64>();
+            let capacity = raw_output.capacity();
+            std::mem::forget(raw_output);
+            Ok::<Vec<f64>, crate::PyErr>(unsafe { Vec::from_raw_parts(ptr, high.len(), capacity) })
+        })
+        .map_err(value_error)?,
+        6 => run_native_kernel(py, len, || indicators::atr(high, low, close, timeperiod))
             .map_err(value_error)?
             .into_raw_vec(),
-        7 => py
-            .detach(|| indicators::natr(high, low, close, timeperiod))
+        7 => run_native_kernel(py, len, || indicators::natr(high, low, close, timeperiod))
             .map_err(value_error)?
             .into_raw_vec(),
         _ => {
             return Err(value_error(format!(
                 "invalid parameter: unsupported fast operation id {operation}"
-            )))
+            )));
         }
     };
     Ok(PyArray1::from_vec(py, output))
@@ -978,7 +999,7 @@ fn fast_trange<'py>(
     let len = high.len();
     let output = unsafe { PyArray1::new(py, [len], false) };
     let output_addr = output.data() as usize;
-    py.detach(|| unsafe {
+    run_native_kernel(py, len, || unsafe {
         let output_ptr = output_addr as *mut f64;
         indicators::trange_into(
             high,
@@ -1010,8 +1031,10 @@ fn fast_mfi<'py>(
     let output = unsafe {
         std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), close.len())
     };
-    py.detach(|| indicators::mfi_into(high, low, close, volume, timeperiod, output))
-        .map_err(value_error)?;
+    run_native_kernel(py, close.len(), || {
+        indicators::mfi_into(high, low, close, volume, timeperiod, output)
+    })
+    .map_err(value_error)?;
     let ptr = raw_output.as_mut_ptr().cast::<f64>();
     let len = raw_output.len();
     let capacity = raw_output.capacity();
@@ -1037,8 +1060,10 @@ fn fast_ad<'py>(
     unsafe { raw_output.set_len(len) };
     let output =
         unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len) };
-    py.detach(|| volume_kernels::ad_into(high, low, close, volume, output))
-        .map_err(value_error)?;
+    run_native_kernel(py, len, || {
+        volume_kernels::ad_into(high, low, close, volume, output)
+    })
+    .map_err(value_error)?;
     let ptr = raw_output.as_mut_ptr().cast::<f64>();
     let capacity = raw_output.capacity();
     std::mem::forget(raw_output);
@@ -1067,7 +1092,7 @@ fn fast_adosc<'py>(
     unsafe { raw_output.set_len(len) };
     let output =
         unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<f64>(), len) };
-    py.detach(|| {
+    run_native_kernel(py, len, || {
         volume_kernels::adosc_into(high, low, close, volume, fastperiod, slowperiod, output)
     })
     .map_err(value_error)?;
@@ -1091,8 +1116,7 @@ fn fast_bop<'py>(
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
-    let output = py
-        .detach(|| indicators::bop(open, high, low, close))
+    let output = run_native_kernel(py, open.len(), || indicators::bop(open, high, low, close))
         .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output.into_raw_vec()))
 }
@@ -1133,21 +1157,27 @@ fn fast_price_transform<'py>(
         "avgprice" => {
             let open = open.ok_or_else(|| value_error("AVGPRICE requires open data"))?;
             let close = close.ok_or_else(|| value_error("AVGPRICE requires close data"))?;
-            py.detach(|| indicators::avgprice_into(open, high, low, close, output))
+            run_native_kernel(py, len, || {
+                indicators::avgprice_into(open, high, low, close, output)
+            })
         }
-        "medprice" => py.detach(|| indicators::medprice_into(high, low, output)),
+        "medprice" => run_native_kernel(py, len, || indicators::medprice_into(high, low, output)),
         "typprice" => {
             let close = close.ok_or_else(|| value_error("TYPPRICE requires close data"))?;
-            py.detach(|| indicators::typprice_into(high, low, close, output))
+            run_native_kernel(py, len, || {
+                indicators::typprice_into(high, low, close, output)
+            })
         }
         "wclprice" => {
             let close = close.ok_or_else(|| value_error("WCLPRICE requires close data"))?;
-            py.detach(|| indicators::wclprice_into(high, low, close, output))
+            run_native_kernel(py, len, || {
+                indicators::wclprice_into(high, low, close, output)
+            })
         }
         _ => {
             return Err(value_error(format!(
                 "invalid parameter: unsupported price transform {operation}"
-            )))
+            )));
         }
     };
     result.map_err(value_error)?;
@@ -1187,8 +1217,10 @@ fn fast_dx<'py>(
     let low = low.as_slice().map_err(value_error)?;
     let close = close.as_slice().map_err(value_error)?;
     let mut output = vec![0.0; close.len()];
-    py.detach(|| indicators::dx_into(high, low, close, timeperiod, &mut output))
-        .map_err(value_error)?;
+    run_native_kernel(py, high.len(), || {
+        indicators::dx_into(high, low, close, timeperiod, &mut output)
+    })
+    .map_err(value_error)?;
     Ok(PyArray1::from_vec(py, output))
 }
 
@@ -1202,13 +1234,29 @@ fn fast_aroon<'py>(
 ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
     let high = high.as_slice().map_err(value_error)?;
     let low = low.as_slice().map_err(value_error)?;
-    let mut aroon_up = vec![0.0; high.len()];
-    let mut aroon_down = vec![0.0; high.len()];
-    py.detach(|| indicators::aroon_into(high, low, timeperiod, &mut aroon_up, &mut aroon_down))
+    let len = high.len();
+    let mut raw_up = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    let mut raw_down = Vec::<MaybeUninit<f64>>::with_capacity(len);
+    unsafe {
+        raw_up.set_len(len);
+        raw_down.set_len(len);
+    }
+    let output_up = unsafe { slice::from_raw_parts_mut(raw_up.as_mut_ptr().cast::<f64>(), len) };
+    let output_down =
+        unsafe { slice::from_raw_parts_mut(raw_down.as_mut_ptr().cast::<f64>(), len) };
+    py.detach(|| indicators::aroon_into(high, low, timeperiod, output_up, output_down))
         .map_err(value_error)?;
+    let up_ptr = raw_up.as_mut_ptr().cast::<f64>();
+    let up_capacity = raw_up.capacity();
+    forget(raw_up);
+    let down_ptr = raw_down.as_mut_ptr().cast::<f64>();
+    let down_capacity = raw_down.capacity();
+    forget(raw_down);
     Ok((
-        PyArray1::from_vec(py, aroon_up),
-        PyArray1::from_vec(py, aroon_down),
+        PyArray1::from_vec(py, unsafe { Vec::from_raw_parts(up_ptr, len, up_capacity) }),
+        PyArray1::from_vec(py, unsafe {
+            Vec::from_raw_parts(down_ptr, len, down_capacity)
+        }),
     ))
 }
 

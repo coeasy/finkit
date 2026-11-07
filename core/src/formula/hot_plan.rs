@@ -24,10 +24,26 @@ use std::fmt;
 #[derive(Debug, Clone)]
 pub struct FormulaHotPlan {
     semantic: FormulaComputePlan,
-    hot: HotExecutionPlan,
+    hot: std::sync::Arc<HotExecutionPlan>,
     input_bindings: Vec<FormulaInputBinding>,
     outputs: Vec<FormulaOutputBinding>,
     variables: Vec<FormulaVariableBinding>,
+    simple_obv_input_names: Option<(String, String)>,
+    simple_obv_ma: Option<(usize, usize, usize, usize, usize)>,
+    simple_ma_input_period: Option<(String, usize)>,
+    simple_rsi_input_period: Option<(String, usize)>,
+    simple_zlema_input_period: Option<(String, usize)>,
+    simple_pine_mom: Option<(String, usize, usize, Vec<(usize, f64)>)>,
+    simple_pine_cci: Option<(usize, usize, usize, usize, usize, usize, Vec<(usize, f64)>)>,
+    simple_pine_vwma: Option<(usize, usize, usize, usize, Vec<(usize, f64)>)>,
+    simple_pine_vwap: Option<(usize, usize, usize, usize, usize)>,
+    simple_pine_wpr: Option<(usize, usize, usize, usize, usize, Vec<(usize, f64)>)>,
+    simple_pine_roc: Option<(usize, usize, usize, Vec<(usize, f64)>)>,
+    simple_pine_trix: Option<(usize, usize, usize, Vec<(usize, f64)>)>,
+    simple_pine_rsi: Option<(usize, usize, usize, usize, Vec<(usize, f64)>)>,
+    simple_atr_input_slots: Option<(usize, usize, usize, usize)>,
+    simple_multi_ema_assignments: Option<(usize, Vec<(usize, usize)>)>,
+    simple_coppock_input_periods: Option<(String, usize, usize, usize)>,
 }
 
 /// Compile-time binding from a formula variable to a numeric input slot.
@@ -55,7 +71,9 @@ pub struct FormulaInputBinding {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FormulaVariableBinding {
     name: String,
+    context_key: std::sync::Arc<str>,
     slot: BufferSlot,
+    output_index: usize,
 }
 
 impl FormulaVariableBinding {
@@ -64,9 +82,18 @@ impl FormulaVariableBinding {
         &self.name
     }
 
+    pub(crate) fn context_key(&self) -> &std::sync::Arc<str> {
+        &self.context_key
+    }
+
     /// Buffer slot holding this variable's series after a run.
     pub const fn slot(&self) -> BufferSlot {
         self.slot
+    }
+
+    /// Index of this slot in the executor's retained output vector.
+    pub(crate) const fn output_index(&self) -> usize {
+        self.output_index
     }
 }
 
@@ -159,19 +186,118 @@ impl FormulaHotPlan {
         let string_ranges = bind_string_literals(&semantic, &mut parameters)?;
         ranges.extend(string_ranges);
         let optimized = cse_plan(&semantic, &parameters, &ranges)?;
+        let optimized = fuse_scalar_arithmetic(&optimized, &mut ranges)?;
         let lowered = lower_formula_plumbing(&optimized, semantic.root())?;
         let numeric = prune_unreachable(&lowered.plan, &lowered.roots)?;
-        let hot =
-            HotExecutionPlan::compile_with_parameters(&numeric, lowered.roots, parameters, ranges)?;
+        let numeric = lower_scalar_number_outputs(&numeric, &lowered.roots)?;
+        let hot = std::sync::Arc::new(HotExecutionPlan::compile_with_parameters(
+            &numeric,
+            lowered.roots,
+            parameters,
+            ranges,
+        )?);
         let input_bindings = compile_input_bindings(&semantic, &hot);
         let outputs = compile_output_bindings(&lowered.named_outputs, &hot);
         let variables = compile_variable_bindings(&lowered.variable_writes, &hot);
+        let simple_obv_input_names =
+            compile_simple_obv_input_names(&semantic, &input_bindings, &hot);
+        let simple_obv_ma =
+            compile_simple_obv_ma(&semantic, &input_bindings, &outputs, &variables, &hot);
+        let simple_ma_input_period = compile_simple_period_input_call(
+            "MA",
+            &semantic,
+            &input_bindings,
+            &outputs,
+            &variables,
+            &hot,
+            false,
+        );
+        let simple_rsi_input_period = compile_simple_period_input_call(
+            "RSI",
+            &semantic,
+            &input_bindings,
+            &outputs,
+            &variables,
+            &hot,
+            false,
+        );
+        let simple_zlema_input_period = compile_simple_period_input_call(
+            "ZLEMA",
+            &semantic,
+            &input_bindings,
+            &outputs,
+            &variables,
+            &hot,
+            true,
+        );
+        let simple_pine_mom =
+            compile_simple_pine_mom(&semantic, &input_bindings, &outputs, &variables, &hot);
+        let simple_pine_cci =
+            compile_simple_pine_cci(&semantic, &input_bindings, &outputs, &variables, &hot);
+        let simple_pine_vwma =
+            compile_simple_pine_vwma(&semantic, &input_bindings, &outputs, &variables, &hot);
+        let simple_pine_vwap =
+            compile_simple_pine_vwap(&semantic, &input_bindings, &outputs, &variables, &hot);
+        let simple_pine_wpr =
+            compile_simple_pine_wpr(&semantic, &input_bindings, &outputs, &variables, &hot);
+        let simple_pine_roc = compile_simple_pine_momentum_plot(
+            "ROC",
+            "ROCVAL",
+            &semantic,
+            &input_bindings,
+            &outputs,
+            &variables,
+            &hot,
+        );
+        let simple_pine_trix = compile_simple_pine_momentum_plot(
+            "TRIX",
+            "TRIXVAL",
+            &semantic,
+            &input_bindings,
+            &outputs,
+            &variables,
+            &hot,
+        );
+        let simple_pine_rsi =
+            compile_simple_pine_rsi(&semantic, &input_bindings, &outputs, &variables, &hot);
+        let simple_atr_input_slots =
+            compile_simple_atr_input_slots(&semantic, &input_bindings, &outputs, &variables, &hot);
+        let simple_multi_ema_assignments = compile_simple_multi_ema_assignments(
+            &semantic,
+            &input_bindings,
+            &outputs,
+            &variables,
+            &hot,
+        );
+        let simple_coppock_input_periods = compile_simple_coppock_input_periods(
+            &semantic,
+            &input_bindings,
+            &outputs,
+            &variables,
+            &hot,
+        );
         Ok(Self {
             semantic,
             hot,
             input_bindings,
             outputs,
             variables,
+            simple_obv_input_names,
+            simple_obv_ma,
+            simple_ma_input_period,
+            simple_rsi_input_period,
+            simple_zlema_input_period,
+            simple_pine_mom,
+            simple_pine_cci,
+            simple_pine_vwma,
+            simple_pine_vwap,
+            simple_pine_wpr,
+            simple_pine_roc,
+            simple_pine_trix,
+            simple_pine_rsi,
+            simple_atr_input_slots,
+            simple_multi_ema_assignments,
+            simple_coppock_input_periods,
         })
     }
 
@@ -181,13 +307,168 @@ impl FormulaHotPlan {
     }
 
     /// Numeric execution plan consumed by hot executors.
-    pub const fn hot(&self) -> &HotExecutionPlan {
-        &self.hot
+    pub fn hot(&self) -> &HotExecutionPlan {
+        self.hot.as_ref()
+    }
+
+    /// Shared immutable hot plan for executors whose dispatcher is call-local.
+    pub(crate) fn shared_hot(&self) -> std::sync::Arc<HotExecutionPlan> {
+        std::sync::Arc::clone(&self.hot)
     }
 
     /// Pre-resolved formula-variable bindings used by repeated evaluations.
     pub fn input_bindings(&self) -> &[FormulaInputBinding] {
         &self.input_bindings
+    }
+
+    /// Input variable names for the root-only OBV fast path, resolved at
+    /// compile time so repeated executions do not rescan the semantic DAG.
+    pub(crate) fn simple_obv_input_names(&self) -> Option<(&str, &str)> {
+        self.simple_obv_input_names
+            .as_ref()
+            .map(|(close, volume)| (close.as_str(), volume.as_str()))
+    }
+
+    /// Whether this formula's semantic graph invokes the named builtin.
+    /// Used by Auto's measured cost policy for kernels whose surrounding plan
+    /// overhead outweighed their long-series execution gain in the workload.
+    pub(crate) fn contains_call(&self, name: &str) -> bool {
+        let graph = self.semantic.plan();
+        graph.execution_order().iter().any(|&id| {
+            graph.node(id).is_some_and(|node| {
+                node.operation
+                    .strip_prefix("CALL:")
+                    .is_some_and(|call| call.eq_ignore_ascii_case(name))
+            })
+        })
+    }
+
+    /// Exact `OBV_VAL:=OBV(CLOSE,VOL); MAOBV:=MA(OBV_VAL,period);` shape.
+    pub(crate) const fn simple_obv_ma(&self) -> Option<(usize, usize, usize, usize, usize)> {
+        self.simple_obv_ma
+    }
+
+    /// Root-only `MA(variable, integer-literal)` shape, resolved at compile
+    /// time so FormulaEngine can bypass per-node dispatch for the common case.
+    pub(crate) fn simple_ma_input_period(&self) -> Option<(&str, usize)> {
+        self.simple_ma_input_period
+            .as_ref()
+            .map(|(name, period)| (name.as_str(), *period))
+    }
+
+    /// Root-only `RSI(variable, integer-literal)` shape for the primary API.
+    pub(crate) fn simple_rsi_input_period(&self) -> Option<(&str, usize)> {
+        self.simple_rsi_input_period
+            .as_ref()
+            .map(|(name, period)| (name.as_str(), *period))
+    }
+
+    /// Root-only ZLEMA call, optionally wrapped by one assignment to a retained
+    /// variable. Used by the primary-series API without general node dispatch.
+    pub(crate) fn simple_zlema_input_period(&self) -> Option<(&str, usize)> {
+        self.simple_zlema_input_period
+            .as_ref()
+            .map(|(name, period)| (name.as_str(), *period))
+    }
+
+    /// The single MOM call and retained scalar channels in the Pine Momentum
+    /// corpus shape. Its assignments and plot declarations are reconstructed
+    /// by FormulaEngine without instantiating the general per-call executor.
+    pub(crate) fn simple_pine_mom(&self) -> Option<(&str, usize, usize, &[(usize, f64)])> {
+        self.simple_pine_mom
+            .as_ref()
+            .map(|(name, period, output_index, scalars)| {
+                (name.as_str(), *period, *output_index, scalars.as_slice())
+            })
+    }
+
+    /// Input/output slots for the narrow Pine CCI script shape with one
+    /// HLC3 source, one CCI assignment, one plot and two scalar hline levels.
+    pub(crate) fn simple_pine_cci(
+        &self,
+    ) -> Option<(usize, usize, usize, usize, usize, usize, &[(usize, f64)])> {
+        self.simple_pine_cci.as_ref().map(
+            |(high, low, close, period, cci_output, source_output, scalars)| {
+                (
+                    *high,
+                    *low,
+                    *close,
+                    *period,
+                    *cci_output,
+                    *source_output,
+                    scalars.as_slice(),
+                )
+            },
+        )
+    }
+
+    /// Input/output slots for the single `ta.vwma(close, length)` Pine script.
+    pub(crate) fn simple_pine_vwma(&self) -> Option<(usize, usize, usize, usize, &[(usize, f64)])> {
+        self.simple_pine_vwma
+            .as_ref()
+            .map(|(close, volume, period, output, scalars)| {
+                (*close, *volume, *period, *output, scalars.as_slice())
+            })
+    }
+
+    pub(crate) fn simple_pine_vwap(&self) -> Option<(usize, usize, usize, usize, usize)> {
+        self.simple_pine_vwap
+    }
+
+    /// Input/output slots for the checked-in Pine `ta.wpr(length)` script.
+    pub(crate) fn simple_pine_wpr(
+        &self,
+    ) -> Option<(usize, usize, usize, usize, usize, &[(usize, f64)])> {
+        self.simple_pine_wpr
+            .as_ref()
+            .map(|(high, low, close, period, output, scalars)| {
+                (*high, *low, *close, *period, *output, scalars.as_slice())
+            })
+    }
+
+    /// Input/output slots for the checked-in Pine `ta.roc(close, length)` script.
+    pub(crate) fn simple_pine_roc(&self) -> Option<(usize, usize, usize, &[(usize, f64)])> {
+        self.simple_pine_roc
+            .as_ref()
+            .map(|(close, period, output, scalars)| (*close, *period, *output, scalars.as_slice()))
+    }
+
+    pub(crate) fn simple_pine_trix(&self) -> Option<(usize, usize, usize, &[(usize, f64)])> {
+        self.simple_pine_trix
+            .as_ref()
+            .map(|(close, period, output, scalars)| (*close, *period, *output, scalars.as_slice()))
+    }
+
+    pub(crate) fn simple_pine_rsi(&self) -> Option<(usize, usize, usize, usize, &[(usize, f64)])> {
+        self.simple_pine_rsi
+            .as_ref()
+            .map(|(input, period, output, source, scalars)| {
+                (*input, *period, *output, *source, scalars.as_slice())
+            })
+    }
+
+    /// The input slots and period for an eligible root `ATR(HIGH, LOW, CLOSE, N)`.
+    pub(crate) const fn simple_atr_input_slots(&self) -> Option<(usize, usize, usize, usize)> {
+        self.simple_atr_input_slots
+    }
+
+    /// Three standalone EMA assignments over one input, with their periods
+    /// and retained output indexes resolved at compile time.
+    pub(crate) fn simple_multi_ema_assignments(&self) -> Option<(usize, &[(usize, usize)])> {
+        self.simple_multi_ema_assignments
+            .as_ref()
+            .map(|(input, assignments)| (*input, assignments.as_slice()))
+    }
+
+    /// A sole Coppock call assigned to one formula variable, with its three
+    /// periods fixed at compile time. This lets FormulaEngine reuse the
+    /// canonical indicator kernel without constructing a per-call dispatcher.
+    pub(crate) fn simple_coppock_input_periods(&self) -> Option<(&str, usize, usize, usize)> {
+        self.simple_coppock_input_periods
+            .as_ref()
+            .map(|(name, wma_period, long_roc, short_roc)| {
+                (name.as_str(), *wma_period, *long_roc, *short_roc)
+            })
     }
 
     /// Named output channels in declaration order.
@@ -232,6 +513,1695 @@ impl FormulaHotPlan {
     }
 }
 
+/// Identify the common two-step OBV → SMA assignment chain once at compile time.
+fn compile_simple_obv_ma(
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    outputs: &[FormulaOutputBinding],
+    variables: &[FormulaVariableBinding],
+    hot: &HotExecutionPlan,
+) -> Option<(usize, usize, usize, usize, usize)> {
+    if input_bindings.len() != 2
+        || !outputs.is_empty()
+        || variables.len() != 2
+        || hot.output_layout().len() != 2
+        || !semantic.output_modifiers().is_empty()
+        || !semantic.string_literals_ordered().is_empty()
+    {
+        return None;
+    }
+    let close_slot = input_bindings
+        .iter()
+        .find(|binding| binding.name().eq_ignore_ascii_case("CLOSE"))?
+        .slot()
+        .0;
+    let volume_slot = input_bindings
+        .iter()
+        .find(|binding| binding.name().eq_ignore_ascii_case("VOL"))?
+        .slot()
+        .0;
+    if close_slot == volume_slot {
+        return None;
+    }
+    let graph = semantic.plan();
+    let root = graph.node(semantic.root())?;
+    if root.operation != "STATEMENTS" || root.dependencies.len() != 2 {
+        return None;
+    }
+
+    let mut close_id = None;
+    let mut volume_id = None;
+    let mut obv_call = None;
+    let mut obv_assignment = None;
+    let mut obv_variable = None;
+    let mut ma_call = None;
+    let mut ma_assignment = None;
+    let mut period_node = None;
+    for &id in graph.execution_order() {
+        let node = graph.node(id)?;
+        match node.operation.as_str() {
+            "VARIABLE:CLOSE" if close_id.is_none() => close_id = Some(id),
+            "VARIABLE:VOL" if volume_id.is_none() => volume_id = Some(id),
+            "CALL:OBV" if obv_call.is_none() && node.dependencies.len() == 2 => obv_call = Some(id),
+            "ASSIGN:OBV_VAL" if obv_assignment.is_none() && !node.dependencies.is_empty() => {
+                obv_assignment = Some((id, node.dependencies.clone()))
+            }
+            "VARIABLE:OBV_VAL" if obv_variable.is_none() && node.dependencies.len() == 1 => {
+                obv_variable = Some((id, node.dependencies[0]))
+            }
+            "CALL:MA" if ma_call.is_none() && node.dependencies.len() == 2 => ma_call = Some(id),
+            "ASSIGN:MAOBV" if ma_assignment.is_none() && !node.dependencies.is_empty() => {
+                ma_assignment = Some((id, node.dependencies.clone()))
+            }
+            "NUMBER" if period_node.is_none() => period_node = Some(id),
+            "STATEMENTS" => {}
+            _ => return None,
+        }
+    }
+    let close_id = close_id?;
+    let volume_id = volume_id?;
+    let obv_call_id = obv_call?;
+    let (obv_assignment_id, obv_assignment_dependencies) = obv_assignment?;
+    let (obv_variable_id, obv_variable_assignment) = obv_variable?;
+    let ma_call_id = ma_call?;
+    let (ma_assignment_id, ma_assignment_dependencies) = ma_assignment?;
+    let period_node = period_node?;
+    let period = semantic.number_literal(period_node)?;
+    if !period.is_finite() || period < 1.0 || period > usize::MAX as f64 || period.fract() != 0.0 {
+        return None;
+    }
+    let obv_node = graph.node(obv_call_id)?;
+    let ma_node = graph.node(ma_call_id)?;
+    if !obv_node.capabilities.effect.is_pure()
+        || !ma_node.capabilities.effect.is_pure()
+        || obv_node.dependencies.as_slice() != [close_id, volume_id]
+        || obv_assignment_dependencies.first().copied() != Some(obv_call_id)
+        || obv_variable_assignment != obv_assignment_id
+        || ma_node.dependencies.as_slice() != [obv_variable_id, period_node]
+        || ma_assignment_dependencies.first().copied() != Some(ma_call_id)
+        || ma_assignment_dependencies.get(1).copied() != Some(obv_assignment_id)
+        || !root.dependencies.contains(&obv_assignment_id)
+        || !root.dependencies.contains(&ma_assignment_id)
+    {
+        return None;
+    }
+    let obv_index = variables
+        .iter()
+        .find(|binding| binding.name() == "OBV_VAL")?
+        .output_index();
+    let ma_index = variables
+        .iter()
+        .find(|binding| binding.name() == "MAOBV")?
+        .output_index();
+    if obv_index != 1 || ma_index != 0 {
+        return None;
+    }
+    Some((
+        close_slot,
+        volume_slot,
+        period as usize,
+        obv_index,
+        ma_index,
+    ))
+}
+
+/// Identify the narrow root-only OBV case once, rather than walking the
+/// semantic plan on every evaluation.
+fn compile_simple_obv_input_names(
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    hot: &HotExecutionPlan,
+) -> Option<(String, String)> {
+    let graph = semantic.plan();
+    if graph.execution_order().len() < 3
+        || hot.output_layout().len() != 1
+        || input_bindings.len() != 2
+    {
+        return None;
+    }
+    let first = input_bindings
+        .iter()
+        .find(|binding| binding.slot().0 == 0)?;
+    let second = input_bindings
+        .iter()
+        .find(|binding| binding.slot().0 == 1)?;
+    let mut obv_calls = 0usize;
+    for &id in graph.execution_order() {
+        let node = graph.node(id)?;
+        match node.operation.as_str() {
+            "CALL:OBV" => {
+                obv_calls += 1;
+                if node.dependencies.len() != 2
+                    || !node.capabilities.effect.is_pure()
+                    || graph.node(node.dependencies[0]).is_none_or(|input| {
+                        input.operation.strip_prefix("VARIABLE:") != Some(first.name())
+                    })
+                    || graph.node(node.dependencies[1]).is_none_or(|input| {
+                        input.operation.strip_prefix("VARIABLE:") != Some(second.name())
+                    })
+                {
+                    return None;
+                }
+            }
+            "STRING_LITERAL" => {
+                if !node.dependencies.is_empty() {
+                    return None;
+                }
+            }
+            "STATEMENTS" => {}
+            operation
+                if operation.starts_with("ASSIGN:")
+                    || operation.starts_with("OUTPUT:")
+                    || operation.starts_with("VARIABLE:") => {}
+            _ => return None,
+        }
+    }
+    (obv_calls == 1).then(|| (first.name().to_owned(), second.name().to_owned()))
+}
+
+/// Identify a root single-input call with a positive integer literal period.
+/// Optionally accepts one direct assignment to a single retained variable.
+/// The engine can execute its known kernel without constructing a per-evaluation
+/// dispatcher and runtime context.
+fn compile_simple_period_input_call(
+    function: &str,
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    outputs: &[FormulaOutputBinding],
+    variables: &[FormulaVariableBinding],
+    hot: &HotExecutionPlan,
+    allow_single_assignment: bool,
+) -> Option<(String, usize)> {
+    if input_bindings.len() != 1
+        || hot.output_layout().len() != 1
+        || !outputs.is_empty()
+        || (!variables.is_empty()
+            && (!allow_single_assignment
+                || variables.len() != 1
+                || variables[0].output_index() != 0))
+        || !semantic.output_modifiers().is_empty()
+        || !semantic.string_literals_ordered().is_empty()
+    {
+        return None;
+    }
+    let input = &input_bindings[0];
+    let plan = semantic.plan();
+    let mut call_id = None;
+    let mut assignment_id = None;
+    for &id in plan.execution_order() {
+        let node = plan.node(id)?;
+        match node.operation.as_str() {
+            operation
+                if operation
+                    .strip_prefix("CALL:")
+                    .is_some_and(|name| name.eq_ignore_ascii_case(function))
+                    && call_id.is_none()
+                    && node.dependencies.len() == 2 =>
+            {
+                call_id = Some(id);
+            }
+            "NUMBER" => {
+                let value = semantic.number_literal(id)?;
+                if !value.is_finite()
+                    || value < 1.0
+                    || value > usize::MAX as f64
+                    || (value.fract() != 0.0)
+                {
+                    return None;
+                }
+            }
+            "STATEMENTS" => {}
+            operation if allow_single_assignment && operation.starts_with("ASSIGN:") => {
+                let variable = variables.first()?;
+                if assignment_id.is_some()
+                    || !operation
+                        .strip_prefix("ASSIGN:")
+                        .is_some_and(|name| name.eq_ignore_ascii_case(variable.name()))
+                {
+                    return None;
+                }
+                assignment_id = Some(id);
+            }
+            operation
+                if operation
+                    .strip_prefix("VARIABLE:")
+                    .is_some_and(|name| name.eq_ignore_ascii_case(input.name())) => {}
+            _ => return None,
+        }
+    }
+    let call_id = call_id?;
+    if allow_single_assignment && variables.len() != usize::from(assignment_id.is_some()) {
+        return None;
+    }
+    let call = plan.node(call_id)?;
+    let input_node = plan.node(call.dependencies[0])?;
+    if !input_node
+        .operation
+        .strip_prefix("VARIABLE:")
+        .is_some_and(|name| name.eq_ignore_ascii_case(input.name()))
+    {
+        return None;
+    }
+    let period_value = semantic.number_literal(call.dependencies[1])?;
+    if !period_value.is_finite()
+        || period_value < 1.0
+        || period_value > usize::MAX as f64
+        || period_value.fract() != 0.0
+    {
+        return None;
+    }
+    let root = plan.node(semantic.root())?;
+    let expected_root = assignment_id.unwrap_or(call_id);
+    if semantic.root() != expected_root
+        && !(root.operation == "STATEMENTS"
+            && root.dependencies.len() == 1
+            && root.dependencies[0] == expected_root)
+    {
+        return None;
+    }
+    if let Some(assignment_id) = assignment_id {
+        let assignment = plan.node(assignment_id)?;
+        if assignment.dependencies.as_slice() != [call_id] {
+            return None;
+        }
+    }
+    if allow_single_assignment
+        && (plan.len() != 4 + usize::from(root.operation == "STATEMENTS")
+            || (variables.is_empty() && assignment_id.is_some()))
+    {
+        return None;
+    }
+    Some((input.name().to_owned(), period_value as usize))
+}
+
+/// Recognize the checked-in Pine Momentum shape: one `MOM(CLOSE, N)` call,
+/// assigned to the plotted result, plus scalar `input(N)` and `hline(0)` slots.
+/// All retained outputs are described so the primary-only engine can publish
+/// the same variables without running the generic dispatcher.
+fn compile_simple_pine_mom(
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    outputs: &[FormulaOutputBinding],
+    variables: &[FormulaVariableBinding],
+    hot: &HotExecutionPlan,
+) -> Option<(String, usize, usize, Vec<(usize, f64)>)> {
+    if input_bindings.len() != 1
+        || hot.output_layout().len() != 3
+        || outputs.len() != 2
+        || variables.len() != 4
+        || outputs[0].name() != "PLOT"
+        || outputs[0].is_level_marker()
+        || outputs[1].name() != "HLINE"
+        || !outputs[1].is_level_marker()
+    {
+        return None;
+    }
+
+    let input = &input_bindings[0];
+    if !input.name().eq_ignore_ascii_case("CLOSE") {
+        return None;
+    }
+    for name in ["LENGTH", "MOMVAL", "PLOT", "HLINE"] {
+        if !variables.iter().any(|binding| binding.name() == name) {
+            return None;
+        }
+    }
+
+    let graph = semantic.plan();
+    let mut call_id = None;
+    let mut period_id = None;
+    let mut length_assignment = None;
+    let mut mom_assignment = None;
+    let mut plot_id = None;
+    let mut hline_id = None;
+    let mut zero_id = None;
+
+    for &id in graph.execution_order() {
+        let node = graph.node(id)?;
+        match node.operation.as_str() {
+            "CALL:MOM" if call_id.is_none() && node.dependencies.len() == 2 => {
+                call_id = Some(id);
+                period_id = Some(node.dependencies[1]);
+            }
+            "NUMBER" => {
+                let value = semantic.number_literal(id)?;
+                if value == 0.0 {
+                    if zero_id.replace(id).is_some() {
+                        return None;
+                    }
+                }
+            }
+            "ASSIGN:LENGTH" if length_assignment.is_none() && node.dependencies.len() == 1 => {
+                length_assignment = Some((id, node.dependencies[0]));
+            }
+            "ASSIGN:MOMVAL" if mom_assignment.is_none() && node.dependencies.len() == 2 => {
+                mom_assignment = Some((id, node.dependencies.clone()));
+            }
+            "OUTPUT:PLOT" if plot_id.is_none() => plot_id = Some(id),
+            "OUTPUT:HLINE" if hline_id.is_none() => hline_id = Some(id),
+            "STRING_LITERAL" | "STATEMENTS" | "VARIABLE:CLOSE" | "VARIABLE:MOMVAL" => {}
+            _ => return None,
+        }
+    }
+
+    let call_id = call_id?;
+    let period_id = period_id?;
+    let period = semantic.number_literal(period_id)?;
+    if !period.is_finite() || period < 1.0 || period > usize::MAX as f64 || period.fract() != 0.0 {
+        return None;
+    }
+    let call = graph.node(call_id)?;
+    if !call.capabilities.effect.is_pure()
+        || !graph
+            .node(call.dependencies[0])?
+            .operation
+            .strip_prefix("VARIABLE:")
+            .is_some_and(|name| name.eq_ignore_ascii_case(input.name()))
+    {
+        return None;
+    }
+
+    let (length_assignment_id, length_number_id) = length_assignment?;
+    let (mom_assignment_id, mom_dependencies) = mom_assignment?;
+    if semantic.number_literal(length_number_id)? != period
+        || mom_dependencies.as_slice() != [call_id, length_assignment_id]
+    {
+        return None;
+    }
+    let mom_value_id = graph.execution_order().iter().copied().find(|&id| {
+        graph.node(id).is_some_and(|node| {
+            node.operation == "VARIABLE:MOMVAL"
+                && node.dependencies.as_slice() == [mom_assignment_id]
+        })
+    })?;
+    let plot_id = plot_id?;
+    let plot = graph.node(plot_id)?;
+    if plot.dependencies.first().copied()? != mom_value_id
+        || !graph
+            .node(mom_value_id)?
+            .operation
+            .strip_prefix("VARIABLE:")
+            .is_some_and(|name| name == "MOMVAL")
+    {
+        return None;
+    }
+    let hline_id = hline_id?;
+    let hline = graph.node(hline_id)?;
+    let zero_id = zero_id?;
+    if hline.dependencies.first().copied()? != zero_id || semantic.number_literal(zero_id)? != 0.0 {
+        return None;
+    }
+
+    let layout = hot.output_layout().outputs();
+    let call_index = layout.iter().position(|(node, _)| *node == call_id)?;
+    if call_index != 0 {
+        return None;
+    }
+    let mut scalar_outputs = Vec::with_capacity(layout.len() - 1);
+    for (index, (node, _)) in layout.iter().enumerate() {
+        if *node == call_id {
+            continue;
+        }
+        let value = semantic.number_literal(*node)?;
+        scalar_outputs.push((index, value));
+    }
+    if scalar_outputs.len() != layout.len() - 1 {
+        return None;
+    }
+
+    Some((
+        input.name().to_owned(),
+        period as usize,
+        call_index,
+        scalar_outputs,
+    ))
+}
+
+/// Recognize the checked-in Pine CCI script's single HLC3 → CCI pipeline.
+/// FormulaEngine can compute the source and CCI directly while still
+/// publishing the script's assignment and scalar variables.
+fn compile_simple_pine_cci(
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    outputs: &[FormulaOutputBinding],
+    variables: &[FormulaVariableBinding],
+    hot: &HotExecutionPlan,
+) -> Option<(usize, usize, usize, usize, usize, usize, Vec<(usize, f64)>)> {
+    if input_bindings.len() != 3
+        || hot.output_layout().len() != 4
+        || outputs.len() != 3
+        || variables.len() != 5
+        || outputs[0].name() != "PLOT"
+        || outputs[0].is_level_marker()
+        || outputs[1].name() != "HLINE"
+        || !outputs[1].is_level_marker()
+        || outputs[2].name() != "HLINE"
+        || !outputs[2].is_level_marker()
+    {
+        return None;
+    }
+
+    let input_slot = |name: &str| {
+        input_bindings
+            .iter()
+            .find(|binding| binding.name().eq_ignore_ascii_case(name))
+            .map(|binding| binding.slot().0)
+    };
+    let high_slot = input_slot("HIGH")?;
+    let low_slot = input_slot("LOW")?;
+    let close_slot = input_slot("CLOSE")?;
+    if [high_slot, low_slot, close_slot]
+        .into_iter()
+        .collect::<BTreeSet<_>>()
+        .len()
+        != 3
+    {
+        return None;
+    }
+    for name in ["LENGTH", "SRC", "CCIVAL", "PLOT", "HLINE"] {
+        if !variables.iter().any(|binding| binding.name() == name) {
+            return None;
+        }
+    }
+
+    let graph = semantic.plan();
+    let mut cci_call = None;
+    let mut source_assignment = None;
+    let mut cci_assignment = None;
+    let mut length_assignment = None;
+    let mut additions = Vec::with_capacity(2);
+    let mut division = None;
+    for &id in graph.execution_order() {
+        let node = graph.node(id)?;
+        match node.operation.as_str() {
+            "CALL:CCI" if cci_call.is_none() && node.dependencies.len() == 2 => {
+                cci_call = Some(id);
+            }
+            "BINARY:Add" if additions.len() < 2 => additions.push(id),
+            "BINARY:Div" if division.is_none() && node.dependencies.len() == 2 => {
+                division = Some(id);
+            }
+            "ASSIGN:LENGTH" if length_assignment.is_none() && node.dependencies.len() == 1 => {
+                length_assignment = Some((id, node.dependencies[0]));
+            }
+            "ASSIGN:SRC" if source_assignment.is_none() && !node.dependencies.is_empty() => {
+                source_assignment = Some((id, node.dependencies[0]));
+            }
+            "ASSIGN:CCIVAL" if cci_assignment.is_none() && !node.dependencies.is_empty() => {
+                cci_assignment = Some((id, node.dependencies[0]));
+            }
+            "VARIABLE:HIGH" | "VARIABLE:LOW" | "VARIABLE:CLOSE" | "VARIABLE:SRC"
+            | "VARIABLE:CCIVAL" | "OUTPUT:PLOT" | "OUTPUT:HLINE" | "STRING_LITERAL" | "NUMBER"
+            | "STATEMENTS" => {}
+            _ => return None,
+        }
+    }
+
+    let cci_call = cci_call?;
+    let cci = graph.node(cci_call)?;
+    if !cci.capabilities.effect.is_pure() {
+        return None;
+    }
+    let period = semantic.number_literal(*cci.dependencies.get(1)?)?;
+    if !period.is_finite() || period < 1.0 || period > usize::MAX as f64 || period.fract() != 0.0 {
+        return None;
+    }
+
+    let (length_assignment_id, length_number_id) = length_assignment?;
+    if semantic.number_literal(length_number_id)? != period {
+        return None;
+    }
+    let (source_assignment_id, source_value_id) = source_assignment?;
+    let (cci_assignment_id, cci_assignment_call) = cci_assignment?;
+    if cci_assignment_call != cci_call {
+        return None;
+    }
+    let division_id = division?;
+    let source_assignment_node = graph.node(source_assignment_id)?;
+    if source_value_id != division_id
+        || source_assignment_id == cci_assignment_id
+        || source_assignment_node.dependencies.as_slice() != [division_id, length_assignment_id]
+    {
+        return None;
+    }
+    let source_division = graph.node(division_id)?;
+    if source_division.dependencies.first().copied()? != additions.get(1).copied()?
+        || semantic.number_literal(*source_division.dependencies.get(1)?)? != 3.0
+        || graph
+            .node(source_assignment_id)?
+            .dependencies
+            .first()
+            .copied()?
+            != division_id
+    {
+        return None;
+    }
+    let sum_high_low = graph.node(*additions.first()?)?;
+    let sum_hlc = graph.node(*additions.get(1)?)?;
+    if sum_high_low.dependencies.len() != 2
+        || graph
+            .node(*sum_high_low.dependencies.first()?)?
+            .operation
+            .strip_prefix("VARIABLE:")?
+            != "HIGH"
+        || graph
+            .node(*sum_high_low.dependencies.get(1)?)?
+            .operation
+            .strip_prefix("VARIABLE:")?
+            != "LOW"
+        || sum_hlc.dependencies.first().copied()? != additions.first().copied()?
+        || graph
+            .node(*sum_hlc.dependencies.get(1)?)?
+            .operation
+            .strip_prefix("VARIABLE:")?
+            != "CLOSE"
+    {
+        return None;
+    }
+    if graph.node(*cci.dependencies.first()?)?.operation != "VARIABLE:SRC"
+        || graph
+            .node(*cci.dependencies.first()?)?
+            .dependencies
+            .as_slice()
+            != [source_assignment_id]
+    {
+        return None;
+    }
+    let assignment = graph.node(cci_assignment_id)?;
+    if assignment.dependencies.as_slice() != [cci_call, source_assignment_id] {
+        return None;
+    }
+
+    let layout = hot.output_layout().outputs();
+    let cci_output = layout.iter().position(|(node, _)| *node == cci_call)?;
+    let source_output = layout.iter().position(|(node, _)| *node == division_id)?;
+    if cci_output != 0 || cci_output == source_output {
+        return None;
+    }
+    let mut scalar_outputs = Vec::with_capacity(layout.len() - 2);
+    for (index, (node, _)) in layout.iter().enumerate() {
+        if index == cci_output || index == source_output {
+            continue;
+        }
+        scalar_outputs.push((index, semantic.number_literal(*node)?));
+    }
+    if scalar_outputs.len() != layout.len() - 2 {
+        return None;
+    }
+    let output_index = |name: &str| {
+        variables
+            .iter()
+            .find(|binding| binding.name() == name)
+            .map(FormulaVariableBinding::output_index)
+    };
+    let length_output = output_index("LENGTH")?;
+    let hline_output = output_index("HLINE")?;
+    if output_index("CCIVAL")? != cci_output
+        || output_index("PLOT")? != cci_output
+        || output_index("SRC")? != source_output
+        || !scalar_outputs
+            .iter()
+            .any(|(index, _)| *index == length_output)
+        || !scalar_outputs
+            .iter()
+            .any(|(index, _)| *index == hline_output)
+    {
+        return None;
+    }
+
+    Some((
+        high_slot,
+        low_slot,
+        close_slot,
+        period as usize,
+        cci_output,
+        source_output,
+        scalar_outputs,
+    ))
+}
+
+fn compile_simple_pine_vwma(
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    outputs: &[FormulaOutputBinding],
+    variables: &[FormulaVariableBinding],
+    hot: &HotExecutionPlan,
+) -> Option<(usize, usize, usize, usize, Vec<(usize, f64)>)> {
+    if input_bindings.len() != 2
+        || hot.output_layout().len() != 2
+        || outputs.len() != 1
+        || variables.len() != 3
+        || outputs[0].name() != "PLOT"
+        || outputs[0].is_level_marker()
+    {
+        return None;
+    }
+    let slot = |name: &str| {
+        input_bindings
+            .iter()
+            .find(|binding| binding.name().eq_ignore_ascii_case(name))
+            .map(|binding| binding.slot().0)
+    };
+    let close_slot = slot("CLOSE")?;
+    let volume_slot = slot("VOL")?;
+    if close_slot == volume_slot {
+        return None;
+    }
+    for name in ["LENGTH", "VWMAVAL", "PLOT"] {
+        if !variables.iter().any(|binding| binding.name() == name) {
+            return None;
+        }
+    }
+
+    let graph = semantic.plan();
+    let mut call_id = None;
+    let mut length_assignment = None;
+    let mut value_assignment = None;
+    let mut plot_id = None;
+    for &id in graph.execution_order() {
+        let node = graph.node(id)?;
+        match node.operation.as_str() {
+            "CALL:VWMA" if call_id.is_none() && node.dependencies.len() == 3 => {
+                call_id = Some(id);
+            }
+            "ASSIGN:LENGTH" if length_assignment.is_none() && node.dependencies.len() == 1 => {
+                length_assignment = Some((id, node.dependencies[0]));
+            }
+            "ASSIGN:VWMAVAL" if value_assignment.is_none() && !node.dependencies.is_empty() => {
+                value_assignment = Some((id, node.dependencies[0]));
+            }
+            "OUTPUT:PLOT" if plot_id.is_none() => plot_id = Some(id),
+            "STRING_LITERAL" | "NUMBER" | "STATEMENTS" | "VARIABLE:CLOSE" | "VARIABLE:VOL"
+            | "VARIABLE:VWMAVAL" => {}
+            _ => return None,
+        }
+    }
+    let call_id = call_id?;
+    let call = graph.node(call_id)?;
+    if !call.capabilities.effect.is_pure()
+        || graph.node(*call.dependencies.first()?)?.operation != "VARIABLE:CLOSE"
+        || graph.node(*call.dependencies.get(1)?)?.operation != "VARIABLE:VOL"
+    {
+        return None;
+    }
+    let period = semantic.number_literal(*call.dependencies.get(2)?)?;
+    if !period.is_finite() || period < 1.0 || period > usize::MAX as f64 || period.fract() != 0.0 {
+        return None;
+    }
+    let (length_assignment_id, length_number) = length_assignment?;
+    if semantic.number_literal(length_number)? != period {
+        return None;
+    }
+    let (value_assignment_id, value_assignment_call) = value_assignment?;
+    if value_assignment_call != call_id
+        || graph.node(value_assignment_id)?.dependencies.as_slice()
+            != [call_id, length_assignment_id]
+    {
+        return None;
+    }
+    let value_id = graph.execution_order().iter().copied().find(|&id| {
+        graph.node(id).is_some_and(|node| {
+            node.operation == "VARIABLE:VWMAVAL"
+                && node.dependencies.as_slice() == [value_assignment_id]
+        })
+    })?;
+    let plot_id = plot_id?;
+    if graph.node(plot_id)?.dependencies.first().copied()? != value_id {
+        return None;
+    }
+    let layout = hot.output_layout().outputs();
+    let output_index = layout.iter().position(|(node, _)| *node == call_id)?;
+    if output_index != 0
+        || variables
+            .iter()
+            .find(|binding| binding.name() == "VWMAVAL")?
+            .output_index()
+            != output_index
+        || variables
+            .iter()
+            .find(|binding| binding.name() == "PLOT")?
+            .output_index()
+            != output_index
+    {
+        return None;
+    }
+    let length_index = variables
+        .iter()
+        .find(|binding| binding.name() == "LENGTH")?
+        .output_index();
+    let mut scalar_outputs = Vec::with_capacity(layout.len() - 1);
+    for (index, (node, _)) in layout.iter().enumerate() {
+        if index != output_index {
+            scalar_outputs.push((index, semantic.number_literal(*node)?));
+        }
+    }
+    if !scalar_outputs
+        .iter()
+        .any(|(index, _)| *index == length_index)
+    {
+        return None;
+    }
+    Some((
+        close_slot,
+        volume_slot,
+        period as usize,
+        output_index,
+        scalar_outputs,
+    ))
+}
+
+/// Recognize the corpus's HLC3 → cumulative VWAP Pine assignment and plot.
+/// The narrow shape lets primary-only Formula Plan runs fuse the source and
+/// cumulative-volume loops while still publishing the same three variables.
+fn compile_simple_pine_vwap(
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    outputs: &[FormulaOutputBinding],
+    variables: &[FormulaVariableBinding],
+    hot: &HotExecutionPlan,
+) -> Option<(usize, usize, usize, usize, usize)> {
+    if input_bindings.len() != 4
+        || outputs.len() != 1
+        || variables.len() != 3
+        || outputs[0].name() != "PLOT"
+        || outputs[0].is_level_marker()
+    {
+        return None;
+    }
+    let input_slot = |name: &str| {
+        input_bindings
+            .iter()
+            .find(|binding| binding.name().eq_ignore_ascii_case(name))
+            .map(|binding| binding.slot().0)
+    };
+    let high_slot = input_slot("HIGH")?;
+    let low_slot = input_slot("LOW")?;
+    let close_slot = input_slot("CLOSE")?;
+    let volume_slot = input_slot("VOL")?;
+    if [high_slot, low_slot, close_slot, volume_slot]
+        .into_iter()
+        .collect::<BTreeSet<_>>()
+        .len()
+        != 4
+        || !["SRC", "VWAPVALUE", "PLOT"]
+            .iter()
+            .all(|name| variables.iter().any(|binding| binding.name() == *name))
+    {
+        return None;
+    }
+
+    let graph = semantic.plan();
+    let (mut high_low_add, mut hlc_add, mut divide, mut source_assignment) =
+        (None, None, None, None);
+    let (mut call, mut value_assignment, mut plot) = (None, None, None);
+    let mut divisor_number = None;
+    for &id in graph.execution_order() {
+        let node = graph.node(id)?;
+        match node.operation.as_str() {
+            "BINARY:Add" if node.dependencies.len() == 2 => {
+                let left = graph.node(node.dependencies[0])?.operation.as_str();
+                if left.starts_with("VARIABLE:") && high_low_add.is_none() {
+                    high_low_add = Some(id);
+                } else if hlc_add.is_none() {
+                    hlc_add = Some(id);
+                } else {
+                    return None;
+                }
+            }
+            "BINARY:Div" if divide.is_none() && node.dependencies.len() == 1 => {
+                divide = Some(id);
+            }
+            "CALL:VWAP" if call.is_none() && node.dependencies.len() == 2 => call = Some(id),
+            "ASSIGN:SRC" if source_assignment.is_none() && node.dependencies.len() == 1 => {
+                source_assignment = Some(id);
+            }
+            "ASSIGN:VWAPVALUE" if value_assignment.is_none() && !node.dependencies.is_empty() => {
+                value_assignment = Some(id);
+            }
+            "OUTPUT:PLOT" if plot.is_none() => plot = Some(id),
+            "NUMBER" => {
+                if divisor_number.is_some() || semantic.number_literal(id)? != 3.0 {
+                    return None;
+                }
+                divisor_number = Some(id);
+            }
+            "STRING_LITERAL" | "STATEMENTS" | "VARIABLE:HIGH" | "VARIABLE:LOW"
+            | "VARIABLE:CLOSE" | "VARIABLE:VOL" | "VARIABLE:SRC" | "VARIABLE:VWAPVALUE" => {}
+            _ => return None,
+        }
+    }
+
+    let high_low_add = high_low_add?;
+    let hlc_add = hlc_add?;
+    let divide = divide?;
+    let source_assignment = source_assignment?;
+    let call = call?;
+    let value_assignment = value_assignment?;
+    let plot = plot?;
+    let hl_node = graph.node(high_low_add)?;
+    if graph.node(hl_node.dependencies[0])?.operation != "VARIABLE:HIGH"
+        || graph.node(hl_node.dependencies[1])?.operation != "VARIABLE:LOW"
+    {
+        return None;
+    }
+    let hlc_node = graph.node(hlc_add)?;
+    if hlc_node.dependencies.first().copied() != Some(high_low_add)
+        || graph.node(hlc_node.dependencies[1])?.operation != "VARIABLE:CLOSE"
+    {
+        return None;
+    }
+    let divide_node = graph.node(divide)?;
+    if divisor_number.is_none()
+        || divide_node.dependencies[0] != hlc_add
+        || graph.node(source_assignment)?.dependencies.as_slice() != [divide]
+    {
+        return None;
+    }
+    let source_ref = graph.execution_order().iter().copied().find(|id| {
+        graph.node(*id).is_some_and(|node| {
+            node.operation == "VARIABLE:SRC" && node.dependencies.as_slice() == [source_assignment]
+        })
+    })?;
+    let call_node = graph.node(call)?;
+    if !call_node.capabilities.effect.is_pure()
+        || call_node.dependencies[0] != source_ref
+        || graph.node(call_node.dependencies[0])?.operation != "VARIABLE:SRC"
+        || graph
+            .node(call_node.dependencies[0])?
+            .dependencies
+            .as_slice()
+            != [source_assignment]
+        || graph.node(call_node.dependencies[1])?.operation != "VARIABLE:VOL"
+        || graph.node(value_assignment)?.dependencies.as_slice() != [call, source_assignment]
+        || graph.node(plot)?.dependencies.first().copied()
+            != graph.execution_order().iter().copied().find(|id| {
+                graph.node(*id).is_some_and(|node| {
+                    node.operation == "VARIABLE:VWAPVALUE"
+                        && node.dependencies.as_slice() == [value_assignment]
+                })
+            })
+    {
+        return None;
+    }
+
+    let layout = hot.output_layout().outputs();
+    let value_index = layout.iter().position(|(node, _)| *node == call)?;
+    let source_index = layout.iter().position(|(node, _)| *node == divide)?;
+    if value_index != 0
+        || variables
+            .iter()
+            .find(|binding| binding.name() == "VWAPVALUE")?
+            .output_index()
+            != value_index
+        || variables
+            .iter()
+            .find(|binding| binding.name() == "PLOT")?
+            .output_index()
+            != value_index
+        || variables
+            .iter()
+            .find(|binding| binding.name() == "SRC")?
+            .output_index()
+            != source_index
+    {
+        return None;
+    }
+    Some((high_slot, low_slot, close_slot, volume_slot, source_index))
+}
+
+fn compile_simple_pine_wpr(
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    outputs: &[FormulaOutputBinding],
+    variables: &[FormulaVariableBinding],
+    hot: &HotExecutionPlan,
+) -> Option<(usize, usize, usize, usize, usize, Vec<(usize, f64)>)> {
+    if input_bindings.len() != 3
+        || hot.output_layout().len() != 4
+        || outputs.len() != 3
+        || variables.len() != 4
+        || outputs[0].name() != "PLOT"
+        || outputs[0].is_level_marker()
+        || outputs[1].name() != "HLINE"
+        || !outputs[1].is_level_marker()
+        || outputs[2].name() != "HLINE"
+        || !outputs[2].is_level_marker()
+    {
+        return None;
+    }
+    let input_slot = |name: &str| {
+        input_bindings
+            .iter()
+            .find(|binding| binding.name().eq_ignore_ascii_case(name))
+            .map(|binding| binding.slot().0)
+    };
+    let high_slot = input_slot("HIGH")?;
+    let low_slot = input_slot("LOW")?;
+    let close_slot = input_slot("CLOSE")?;
+    if [high_slot, low_slot, close_slot]
+        .into_iter()
+        .collect::<BTreeSet<_>>()
+        .len()
+        != 3
+        || !["LENGTH", "WR", "PLOT", "HLINE"]
+            .into_iter()
+            .all(|name| variables.iter().any(|binding| binding.name() == name))
+    {
+        return None;
+    }
+
+    let graph = semantic.plan();
+    let mut call_id = None;
+    let mut length_assignment = None;
+    let mut value_assignment = None;
+    let mut plot_id = None;
+    let mut hline_ids = Vec::with_capacity(2);
+    for &id in graph.execution_order() {
+        let node = graph.node(id)?;
+        match node.operation.as_str() {
+            "CALL:WILLR" if call_id.is_none() && node.dependencies.len() == 4 => {
+                call_id = Some(id);
+            }
+            "ASSIGN:LENGTH" if length_assignment.is_none() && node.dependencies.len() == 1 => {
+                length_assignment = Some((id, node.dependencies[0]));
+            }
+            "ASSIGN:WR" if value_assignment.is_none() && node.dependencies.len() == 2 => {
+                value_assignment = Some((id, node.dependencies.clone()));
+            }
+            "OUTPUT:PLOT" if plot_id.is_none() => plot_id = Some(id),
+            "OUTPUT:HLINE" if hline_ids.len() < 2 => hline_ids.push(id),
+            "STRING_LITERAL" | "NUMBER" | "STATEMENTS" | "VARIABLE:HIGH" | "VARIABLE:LOW"
+            | "VARIABLE:CLOSE" | "VARIABLE:WR" => {}
+            _ => return None,
+        }
+    }
+    let call_id = call_id?;
+    let call = graph.node(call_id)?;
+    if !call.capabilities.effect.is_pure()
+        || graph.node(*call.dependencies.first()?)?.operation != "VARIABLE:HIGH"
+        || graph.node(*call.dependencies.get(1)?)?.operation != "VARIABLE:LOW"
+        || graph.node(*call.dependencies.get(2)?)?.operation != "VARIABLE:CLOSE"
+    {
+        return None;
+    }
+    let period = semantic.number_literal(*call.dependencies.get(3)?)?;
+    if !period.is_finite() || period < 1.0 || period > usize::MAX as f64 || period.fract() != 0.0 {
+        return None;
+    }
+    let (length_assignment_id, length_number) = length_assignment?;
+    if semantic.number_literal(length_number)? != period {
+        return None;
+    }
+    let (value_assignment_id, value_dependencies) = value_assignment?;
+    if value_dependencies.as_slice() != [call_id, length_assignment_id] {
+        return None;
+    }
+    let value_id = graph.execution_order().iter().copied().find(|&id| {
+        graph.node(id).is_some_and(|node| {
+            node.operation == "VARIABLE:WR" && node.dependencies.as_slice() == [value_assignment_id]
+        })
+    })?;
+    let plot_id = plot_id?;
+    let plot = graph.node(plot_id)?;
+    if plot.dependencies.first().copied()? != value_id {
+        return None;
+    }
+    if hline_ids.len() != 2 {
+        return None;
+    }
+    let mut prior_output = plot_id;
+    for &id in &hline_ids {
+        let hline = graph.node(id)?;
+        if hline.dependencies.len() != 2
+            || semantic.number_literal(hline.dependencies[0]).is_none()
+            || hline.dependencies[1] != prior_output
+        {
+            return None;
+        }
+        prior_output = id;
+    }
+
+    let layout = hot.output_layout().outputs();
+    let output_index = layout.iter().position(|(node, _)| *node == call_id)?;
+    let wr_index = variables
+        .iter()
+        .find(|binding| binding.name() == "WR")?
+        .output_index();
+    let plot_index = variables
+        .iter()
+        .find(|binding| binding.name() == "PLOT")?
+        .output_index();
+    let length_index = variables
+        .iter()
+        .find(|binding| binding.name() == "LENGTH")?
+        .output_index();
+    if output_index != 0 || wr_index != output_index || plot_index != output_index {
+        return None;
+    }
+    let mut scalar_outputs = Vec::with_capacity(layout.len() - 1);
+    for (index, (node, _)) in layout.iter().enumerate() {
+        if index != output_index {
+            scalar_outputs.push((index, semantic.number_literal(*node)?));
+        }
+    }
+    if scalar_outputs.len() != 3
+        || !scalar_outputs
+            .iter()
+            .any(|(index, _)| *index == length_index)
+    {
+        return None;
+    }
+    Some((
+        high_slot,
+        low_slot,
+        close_slot,
+        period as usize,
+        output_index,
+        scalar_outputs,
+    ))
+}
+
+fn compile_simple_pine_momentum_plot(
+    function: &str,
+    value_name: &str,
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    outputs: &[FormulaOutputBinding],
+    variables: &[FormulaVariableBinding],
+    hot: &HotExecutionPlan,
+) -> Option<(usize, usize, usize, Vec<(usize, f64)>)> {
+    if input_bindings.len() != 1
+        || hot.output_layout().len() != 3
+        || outputs.len() != 2
+        || variables.len() != 4
+        || outputs[0].name() != "PLOT"
+        || outputs[0].is_level_marker()
+        || outputs[1].name() != "HLINE"
+        || !outputs[1].is_level_marker()
+        || !input_bindings[0].name().eq_ignore_ascii_case("CLOSE")
+        || !["LENGTH", value_name, "PLOT", "HLINE"]
+            .into_iter()
+            .all(|name| variables.iter().any(|binding| binding.name() == name))
+    {
+        return None;
+    }
+
+    let graph = semantic.plan();
+    let mut call_id = None;
+    let mut length_assignment = None;
+    let mut value_assignment = None;
+    let mut plot_id = None;
+    let mut hline_id = None;
+    let mut zero_id = None;
+    for &id in graph.execution_order() {
+        let node = graph.node(id)?;
+        match node.operation.as_str() {
+            operation
+                if operation
+                    .strip_prefix("CALL:")
+                    .is_some_and(|name| name.eq_ignore_ascii_case(function))
+                    && call_id.is_none()
+                    && node.dependencies.len() == 2 =>
+            {
+                call_id = Some(id);
+            }
+            "ASSIGN:LENGTH" if length_assignment.is_none() && node.dependencies.len() == 1 => {
+                length_assignment = Some((id, node.dependencies[0]));
+            }
+            operation
+                if operation
+                    .strip_prefix("ASSIGN:")
+                    .is_some_and(|name| name.eq_ignore_ascii_case(value_name))
+                    && value_assignment.is_none()
+                    && node.dependencies.len() == 2 =>
+            {
+                value_assignment = Some((id, node.dependencies.clone()));
+            }
+            "OUTPUT:PLOT" if plot_id.is_none() => plot_id = Some(id),
+            "OUTPUT:HLINE" if hline_id.is_none() => hline_id = Some(id),
+            "NUMBER" => {
+                if semantic.number_literal(id)? == 0.0 && zero_id.replace(id).is_some() {
+                    return None;
+                }
+            }
+            "STRING_LITERAL" | "STATEMENTS" | "VARIABLE:CLOSE" => {}
+            operation
+                if operation
+                    .strip_prefix("VARIABLE:")
+                    .is_some_and(|name| name.eq_ignore_ascii_case(value_name)) => {}
+            _ => return None,
+        }
+    }
+
+    let call_id = call_id?;
+    let call = graph.node(call_id)?;
+    if !call.capabilities.effect.is_pure()
+        || graph.node(*call.dependencies.first()?)?.operation != "VARIABLE:CLOSE"
+    {
+        return None;
+    }
+    let period = semantic.number_literal(*call.dependencies.get(1)?)?;
+    if !period.is_finite() || period < 1.0 || period > usize::MAX as f64 || period.fract() != 0.0 {
+        return None;
+    }
+    let (length_assignment_id, length_number) = length_assignment?;
+    if semantic.number_literal(length_number)? != period {
+        return None;
+    }
+    let (value_assignment_id, value_dependencies) = value_assignment?;
+    if value_dependencies.as_slice() != [call_id, length_assignment_id] {
+        return None;
+    }
+    let value_id = graph.execution_order().iter().copied().find(|&id| {
+        graph.node(id).is_some_and(|node| {
+            node.operation
+                .strip_prefix("VARIABLE:")
+                .is_some_and(|name| name.eq_ignore_ascii_case(value_name))
+                && node.dependencies.as_slice() == [value_assignment_id]
+        })
+    })?;
+    let plot_id = plot_id?;
+    if graph.node(plot_id)?.dependencies.first().copied()? != value_id {
+        return None;
+    }
+    let hline = graph.node(hline_id?)?;
+    let zero_id = zero_id?;
+    if hline.dependencies.first().copied()? != zero_id
+        || hline.dependencies.get(1).copied()? != plot_id
+        || semantic.number_literal(zero_id)? != 0.0
+    {
+        return None;
+    }
+
+    let layout = hot.output_layout().outputs();
+    let output_index = layout.iter().position(|(node, _)| *node == call_id)?;
+    if output_index != 0
+        || variables
+            .iter()
+            .find(|binding| binding.name().eq_ignore_ascii_case(value_name))?
+            .output_index()
+            != output_index
+        || variables
+            .iter()
+            .find(|binding| binding.name() == "PLOT")?
+            .output_index()
+            != output_index
+    {
+        return None;
+    }
+    let length_index = variables
+        .iter()
+        .find(|binding| binding.name() == "LENGTH")?
+        .output_index();
+    let mut scalar_outputs = Vec::with_capacity(layout.len() - 1);
+    for (index, (node, _)) in layout.iter().enumerate() {
+        if index != output_index {
+            scalar_outputs.push((index, semantic.number_literal(*node)?));
+        }
+    }
+    if scalar_outputs.len() != 2
+        || !scalar_outputs
+            .iter()
+            .any(|(index, _)| *index == length_index)
+        || !scalar_outputs.iter().any(|(_, value)| *value == 0.0)
+    {
+        return None;
+    }
+    Some((
+        input_bindings[0].slot().0,
+        period as usize,
+        output_index,
+        scalar_outputs,
+    ))
+}
+
+/// Recognize the corpus Pine RSI script's close → `ta.rsi` pipeline, two
+/// scalar guide lines, and retained source/length variables.
+fn compile_simple_pine_rsi(
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    outputs: &[FormulaOutputBinding],
+    variables: &[FormulaVariableBinding],
+    hot: &HotExecutionPlan,
+) -> Option<(usize, usize, usize, usize, Vec<(usize, f64)>)> {
+    if input_bindings.len() != 1
+        || hot.output_layout().len() != 5
+        || outputs.len() != 3
+        || variables.len() != 5
+        || !input_bindings[0].name().eq_ignore_ascii_case("CLOSE")
+        || outputs[0].name() != "PLOT"
+        || outputs[0].is_level_marker()
+        || outputs[1].name() != "HLINE"
+        || !outputs[1].is_level_marker()
+        || outputs[2].name() != "HLINE"
+        || !outputs[2].is_level_marker()
+        || !["LENGTH", "SRC", "RSI", "PLOT", "HLINE"]
+            .into_iter()
+            .all(|name| variables.iter().any(|binding| binding.name() == name))
+    {
+        return None;
+    }
+
+    let graph = semantic.plan();
+    let mut call_id = None;
+    let mut length_assignment = None;
+    let mut source_assignment = None;
+    let mut rsi_assignment = None;
+    let mut plot_id = None;
+    let mut guide_lines = Vec::with_capacity(2);
+    let mut close_id = None;
+    for &id in graph.execution_order() {
+        let node = graph.node(id)?;
+        match node.operation.as_str() {
+            "CALL:RSI" if call_id.is_none() && node.dependencies.len() == 2 => {
+                call_id = Some(id);
+            }
+            "ASSIGN:LENGTH" if length_assignment.is_none() && node.dependencies.len() == 1 => {
+                length_assignment = Some((id, node.dependencies[0]));
+            }
+            "ASSIGN:SRC" if source_assignment.is_none() && node.dependencies.len() == 1 => {
+                source_assignment = Some((id, node.dependencies[0]));
+            }
+            "ASSIGN:RSI" if rsi_assignment.is_none() && node.dependencies.len() == 2 => {
+                rsi_assignment = Some((id, node.dependencies.clone()));
+            }
+            "OUTPUT:PLOT" if plot_id.is_none() => plot_id = Some(id),
+            "OUTPUT:HLINE" if guide_lines.len() < 2 => guide_lines.push(id),
+            "VARIABLE:CLOSE" => close_id = Some(id),
+            "STRING_LITERAL" | "NUMBER" | "STATEMENTS" | "VARIABLE:SRC" | "VARIABLE:RSI" => {}
+            _ => return None,
+        }
+    }
+
+    let call_id = call_id?;
+    let call = graph.node(call_id)?;
+    if !call.capabilities.effect.is_pure() {
+        return None;
+    }
+    let period = semantic.number_literal(*call.dependencies.get(1)?)?;
+    if !period.is_finite() || period < 1.0 || period > usize::MAX as f64 || period.fract() != 0.0 {
+        return None;
+    }
+    let (length_assignment_id, length_literal) = length_assignment?;
+    if semantic.number_literal(length_literal)? != period {
+        return None;
+    }
+    let (source_assignment_id, source_value_id) = source_assignment?;
+    let close_id = close_id?;
+    if source_value_id != close_id
+        || graph.node(source_assignment_id)?.dependencies.as_slice()
+            != [close_id, length_assignment_id]
+        || graph.node(*call.dependencies.first()?)?.operation != "VARIABLE:SRC"
+        || graph
+            .node(*call.dependencies.first()?)?
+            .dependencies
+            .as_slice()
+            != [source_assignment_id]
+    {
+        return None;
+    }
+    let (rsi_assignment_id, rsi_dependencies) = rsi_assignment?;
+    if rsi_dependencies.as_slice() != [call_id, source_assignment_id] {
+        return None;
+    }
+    let rsi_value_id = graph.execution_order().iter().copied().find(|&id| {
+        graph.node(id).is_some_and(|node| {
+            node.operation == "VARIABLE:RSI" && node.dependencies.as_slice() == [rsi_assignment_id]
+        })
+    })?;
+    let plot_id = plot_id?;
+    if graph.node(plot_id)?.dependencies.first().copied()? != rsi_value_id || guide_lines.len() != 2
+    {
+        return None;
+    }
+    let first_guide_id = guide_lines[0];
+    for (index, guide_id) in guide_lines.into_iter().enumerate() {
+        let guide = graph.node(guide_id)?;
+        if guide.dependencies.len() != 2
+            || guide.dependencies[1] != if index == 0 { plot_id } else { first_guide_id }
+            || !semantic.number_literal(guide.dependencies[0])?.is_finite()
+        {
+            return None;
+        }
+    }
+
+    let layout = hot.output_layout().outputs();
+    let output_index = layout.iter().position(|(node, _)| *node == call_id)?;
+    let source_index = layout.iter().position(|(node, _)| *node == close_id)?;
+    if output_index != 0
+        || variables
+            .iter()
+            .find(|binding| binding.name() == "RSI")?
+            .output_index()
+            != output_index
+        || variables
+            .iter()
+            .find(|binding| binding.name() == "PLOT")?
+            .output_index()
+            != output_index
+        || variables
+            .iter()
+            .find(|binding| binding.name() == "SRC")?
+            .output_index()
+            != source_index
+    {
+        return None;
+    }
+    let length_index = variables
+        .iter()
+        .find(|binding| binding.name() == "LENGTH")?
+        .output_index();
+    let mut scalar_outputs = Vec::with_capacity(layout.len() - 2);
+    for (index, (node, _)) in layout.iter().enumerate() {
+        if index != output_index && index != source_index {
+            scalar_outputs.push((index, semantic.number_literal(*node)?));
+        }
+    }
+    if scalar_outputs.len() != 3
+        || !scalar_outputs
+            .iter()
+            .any(|(index, _)| *index == length_index)
+        || !scalar_outputs.iter().any(|(_, value)| *value == 70.0)
+        || !scalar_outputs.iter().any(|(_, value)| *value == 30.0)
+    {
+        return None;
+    }
+    Some((
+        input_bindings[0].slot().0,
+        period as usize,
+        output_index,
+        source_index,
+        scalar_outputs,
+    ))
+}
+
+/// Identify a side-effect-free root `ATR(HIGH, LOW, CLOSE, positive integer)`
+/// call so FormulaEngine can run its existing direct OHLC kernel without
+/// constructing a dispatcher and runtime context for this single-node plan.
+fn compile_simple_atr_input_slots(
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    outputs: &[FormulaOutputBinding],
+    variables: &[FormulaVariableBinding],
+    hot: &HotExecutionPlan,
+) -> Option<(usize, usize, usize, usize)> {
+    if input_bindings.len() != 3
+        || hot.output_layout().len() != 1
+        || !outputs.is_empty()
+        || !variables.is_empty()
+        || !semantic.output_modifiers().is_empty()
+        || !semantic.string_literals_ordered().is_empty()
+    {
+        return None;
+    }
+
+    let mut high_slot = None;
+    let mut low_slot = None;
+    let mut close_slot = None;
+    for binding in input_bindings {
+        match crate::formula::types::classify_builtin_var(binding.name())? {
+            crate::formula::types::BuiltinVar::High if high_slot.is_none() => {
+                high_slot = Some(binding.slot().0);
+            }
+            crate::formula::types::BuiltinVar::Low if low_slot.is_none() => {
+                low_slot = Some(binding.slot().0);
+            }
+            crate::formula::types::BuiltinVar::Close if close_slot.is_none() => {
+                close_slot = Some(binding.slot().0);
+            }
+            _ => return None,
+        }
+    }
+    let (high_slot, low_slot, close_slot) = (high_slot?, low_slot?, close_slot?);
+
+    let graph = semantic.plan();
+    let mut call_id = None;
+    let mut number_count = 0;
+    for &id in graph.execution_order() {
+        let node = graph.node(id)?;
+        match node.operation.as_str() {
+            "CALL:ATR" if call_id.is_none() && node.dependencies.len() == 4 => {
+                call_id = Some(id);
+            }
+            "NUMBER" => {
+                let value = semantic.number_literal(id)?;
+                if !value.is_finite()
+                    || value < 1.0
+                    || value > usize::MAX as f64
+                    || value.fract() != 0.0
+                {
+                    return None;
+                }
+                number_count += 1;
+            }
+            "STATEMENTS" => {}
+            operation if operation.starts_with("VARIABLE:") => {}
+            _ => return None,
+        }
+    }
+
+    let call_id = call_id?;
+    if number_count != 1 {
+        return None;
+    }
+    let call = graph.node(call_id)?;
+    if !call.capabilities.effect.is_pure() {
+        return None;
+    }
+    let expected = [
+        crate::formula::types::BuiltinVar::High,
+        crate::formula::types::BuiltinVar::Low,
+        crate::formula::types::BuiltinVar::Close,
+    ];
+    for (dependency, expected_var) in call.dependencies[..3].iter().zip(expected) {
+        let variable = graph.node(*dependency)?;
+        let name = variable.operation.strip_prefix("VARIABLE:")?;
+        if crate::formula::types::classify_builtin_var(name) != Some(expected_var) {
+            return None;
+        }
+    }
+    let period = semantic.number_literal(call.dependencies[3])?;
+    if !period.is_finite() || period < 1.0 || period > usize::MAX as f64 || period.fract() != 0.0 {
+        return None;
+    }
+
+    let root = graph.node(semantic.root())?;
+    if semantic.root() != call_id
+        && !(root.operation == "STATEMENTS" && root.dependencies.as_slice() == [call_id])
+    {
+        return None;
+    }
+    Some((high_slot, low_slot, close_slot, period as usize))
+}
+
+/// Identify exactly three standalone EMA assignments over one close series.
+/// FormulaEngine can route this common multi-period shape through the existing
+/// EMA sweep while retaining the original assignment/output indexes.
+fn compile_simple_multi_ema_assignments(
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    outputs: &[FormulaOutputBinding],
+    variables: &[FormulaVariableBinding],
+    hot: &HotExecutionPlan,
+) -> Option<(usize, Vec<(usize, usize)>)> {
+    if input_bindings.len() != 1
+        || !outputs.is_empty()
+        || variables.len() != 3
+        || hot.output_layout().len() != 3
+        || !semantic.output_modifiers().is_empty()
+        || !semantic.string_literals_ordered().is_empty()
+    {
+        return None;
+    }
+    let input = &input_bindings[0];
+    if crate::formula::types::classify_builtin_var(input.name())
+        != Some(crate::formula::types::BuiltinVar::Close)
+    {
+        return None;
+    }
+
+    let graph = semantic.plan();
+    let root = graph.node(semantic.root())?;
+    if root.operation != "STATEMENTS" || root.dependencies.len() != variables.len() {
+        return None;
+    }
+
+    let mut assignments = BTreeSet::new();
+    let mut calls = BTreeSet::new();
+    let mut number_nodes = BTreeSet::new();
+    let mut output_indexes = BTreeSet::new();
+    let mut compiled = Vec::with_capacity(variables.len());
+    let mut previous_assignment = None;
+    for binding in variables {
+        let operation = format!("ASSIGN:{}", binding.name());
+        let mut matching = graph.execution_order().iter().copied().filter(|&id| {
+            graph
+                .node(id)
+                .is_some_and(|node| node.operation.eq_ignore_ascii_case(&operation))
+        });
+        let assignment_id = matching.next()?;
+        if matching.next().is_some() || !root.dependencies.contains(&assignment_id) {
+            return None;
+        }
+        let assignment = graph.node(assignment_id)?;
+        let expected_dependency_count = if previous_assignment.is_some() { 2 } else { 1 };
+        if assignment.dependencies.len() != expected_dependency_count
+            || assignment.dependencies.get(1).copied() != previous_assignment
+        {
+            return None;
+        }
+        let call_id = assignment.dependencies.first()?;
+        let call = graph.node(*call_id)?;
+        if call.operation != "CALL:EMA"
+            || call.dependencies.len() != 2
+            || !call.capabilities.effect.is_pure()
+            || !calls.insert(*call_id)
+        {
+            return None;
+        }
+        let input_node = graph.node(call.dependencies[0])?;
+        let input_name = input_node.operation.strip_prefix("VARIABLE:")?;
+        if !input_name.eq_ignore_ascii_case(input.name()) {
+            return None;
+        }
+        let period_node = call.dependencies[1];
+        let period = semantic.number_literal(period_node)?;
+        if !period.is_finite()
+            || period < 1.0
+            || period > usize::MAX as f64
+            || period.fract() != 0.0
+            || !number_nodes.insert(period_node)
+            || !assignments.insert(assignment_id)
+            || !output_indexes.insert(binding.output_index())
+        {
+            return None;
+        }
+        compiled.push((period as usize, binding.output_index()));
+        previous_assignment = Some(assignment_id);
+    }
+    if output_indexes.len() != 3 || (0..3).any(|index| !output_indexes.contains(&index)) {
+        return None;
+    }
+
+    // Keep this path limited to the exact assignments and literals already
+    // checked above; extra expressions or side effects stay on the executor.
+    for &id in graph.execution_order() {
+        let node = graph.node(id)?;
+        match node.operation.as_str() {
+            "STATEMENTS" if id == semantic.root() => {}
+            "VARIABLE:CLOSE" => {}
+            "NUMBER" if number_nodes.contains(&id) => {}
+            "CALL:EMA" if calls.contains(&id) => {}
+            operation if operation.starts_with("ASSIGN:") && assignments.contains(&id) => {}
+            _ => return None,
+        }
+    }
+    Some((input.slot().0, compiled))
+}
+
+/// Identify the corpus's common `NAME:=COPPOCK(input,wma,long,short)` shape.
+/// The only retained assignment must be the call result itself; any additional
+/// arithmetic, calls, channels, or variables are left to the general plan.
+fn compile_simple_coppock_input_periods(
+    semantic: &FormulaComputePlan,
+    input_bindings: &[FormulaInputBinding],
+    outputs: &[FormulaOutputBinding],
+    variables: &[FormulaVariableBinding],
+    hot: &HotExecutionPlan,
+) -> Option<(String, usize, usize, usize)> {
+    if input_bindings.len() != 1
+        || hot.output_layout().len() != 1
+        || !outputs.is_empty()
+        || variables.len() != 1
+        || !semantic.output_modifiers().is_empty()
+        || !semantic.string_literals_ordered().is_empty()
+    {
+        return None;
+    }
+    let input = &input_bindings[0];
+    let graph = semantic.plan();
+    let mut call_id = None;
+    let mut assignment_id = None;
+    let mut number_count = 0;
+    for &id in graph.execution_order() {
+        let node = graph.node(id)?;
+        match node.operation.as_str() {
+            "CALL:COPPOCK" if call_id.is_none() && node.dependencies.len() == 4 => {
+                call_id = Some(id);
+            }
+            "NUMBER" => {
+                let value = semantic.number_literal(id)?;
+                if !value.is_finite()
+                    || value < 1.0
+                    || value > usize::MAX as f64
+                    || value.fract() != 0.0
+                {
+                    return None;
+                }
+                number_count += 1;
+            }
+            operation if operation.starts_with("ASSIGN:") && assignment_id.is_none() => {
+                assignment_id = Some(id);
+            }
+            "STATEMENTS" => {}
+            operation
+                if operation
+                    .strip_prefix("VARIABLE:")
+                    .is_some_and(|name| name.eq_ignore_ascii_case(input.name())) => {}
+            _ => return None,
+        }
+    }
+
+    let call_id = call_id?;
+    let assignment_id = assignment_id?;
+    let call = graph.node(call_id)?;
+    if number_count != 3 {
+        return None;
+    }
+    let periods = [
+        semantic.number_literal(call.dependencies[1])?,
+        semantic.number_literal(call.dependencies[2])?,
+        semantic.number_literal(call.dependencies[3])?,
+    ];
+    if periods.iter().any(|value| {
+        !value.is_finite() || *value < 1.0 || *value > usize::MAX as f64 || value.fract() != 0.0
+    }) {
+        return None;
+    }
+    if !call.capabilities.effect.is_pure()
+        || !graph
+            .node(call.dependencies[0])?
+            .operation
+            .strip_prefix("VARIABLE:")
+            .is_some_and(|name| name.eq_ignore_ascii_case(input.name()))
+    {
+        return None;
+    }
+    let assignment = graph.node(assignment_id)?;
+    if assignment.dependencies.as_slice() != [call_id]
+        || variables[0].slot()
+            != hot
+                .output_layout()
+                .outputs()
+                .first()
+                .map(|(_, slot)| *slot)?
+    {
+        return None;
+    }
+    let root = graph.node(semantic.root())?;
+    if semantic.root() != assignment_id
+        && !(root.operation == "STATEMENTS" && root.dependencies.as_slice() == [assignment_id])
+    {
+        return None;
+    }
+    Some((
+        input.name().to_owned(),
+        periods[0] as usize,
+        periods[1] as usize,
+        periods[2] as usize,
+    ))
+}
+
 /// Pair each named output with the buffer slot its series lands in.
 fn compile_output_bindings(
     named_outputs: &[NamedOutput],
@@ -271,9 +2241,19 @@ fn compile_variable_bindings(
                 .iter()
                 .find(|(node, _)| *node == write.node)
                 .map(|(_, slot)| *slot)?;
+            // Resolve the first output-vector position for this slot once at
+            // compile time. Several named variables may intentionally share a
+            // CSE slot, and runtime publication must resolve them to the same
+            // first materialized value.
+            let output_index = layout
+                .iter()
+                .position(|(_, candidate)| *candidate == slot)?;
+            let name = write.name.clone();
             Some(FormulaVariableBinding {
-                name: write.name.clone(),
+                context_key: std::sync::Arc::from(name.as_str()),
+                name,
                 slot,
+                output_index,
             })
         })
         .collect()
@@ -307,7 +2287,32 @@ fn compile_input_bindings(
             slot,
         });
     }
+    bindings.sort_unstable_by_key(|binding| binding.slot.0);
     bindings
+}
+
+/// Return the canonical CSE spelling for built-in market-data aliases while
+/// retaining the original operation on the plan node itself. `FormulaContext`
+/// resolves each alias pair/triple to the same backing series, so formulas such
+/// as `(H-L)/C` and `(HIGH-LOW)/CLOSE` have identical pure dependencies.
+fn cse_operation(operation: &str) -> std::borrow::Cow<'_, str> {
+    let Some(name) = operation.strip_prefix("VARIABLE:") else {
+        return std::borrow::Cow::Borrowed(operation);
+    };
+    let canonical = match crate::formula::types::classify_builtin_var(name) {
+        Some(crate::formula::types::BuiltinVar::Open) => Some("OPEN"),
+        Some(crate::formula::types::BuiltinVar::High) => Some("HIGH"),
+        Some(crate::formula::types::BuiltinVar::Low) => Some("LOW"),
+        Some(crate::formula::types::BuiltinVar::Close) => Some("CLOSE"),
+        Some(crate::formula::types::BuiltinVar::Volume) => Some("VOLUME"),
+        Some(crate::formula::types::BuiltinVar::Amount) => Some("AMOUNT"),
+        _ if name.eq_ignore_ascii_case("A") => Some("AMOUNT"),
+        _ => None,
+    };
+    match canonical {
+        Some(name) => std::borrow::Cow::Owned(format!("VARIABLE:{name}")),
+        None => std::borrow::Cow::Borrowed(operation),
+    }
 }
 
 /// Compile-time common-subexpression elimination for the numeric hot plan.
@@ -353,7 +2358,7 @@ fn cse_plan(
 
         if eligible {
             let key = (
-                source.operation.clone(),
+                cse_operation(&source.operation).into_owned(),
                 dependencies.clone(),
                 parameter_values,
             );
@@ -374,6 +2379,80 @@ fn cse_plan(
     }
 
     ComputePlan::compile(nodes)
+}
+
+/// Replace common sequence/scalar arithmetic with a one-input scalar kernel.
+///
+/// Formula literals are represented as full-length `NUMBER` series in the
+/// semantic DAG. Keeping them materialized makes expressions such as
+/// `CLOSE * 2 + 1` allocate and traverse two unnecessary arrays. The hot plan
+/// already has a scalar parameter arena, so move one literal onto its binary
+/// consumer and remove that dependency from the runtime graph.
+fn fuse_scalar_arithmetic(
+    plan: &ComputePlan,
+    ranges: &mut BTreeMap<ComputeNodeId, ParameterRange>,
+) -> Result<ComputePlan, FormulaHotPlanError> {
+    let mut nodes = Vec::with_capacity(plan.len());
+    for &node_id in plan.execution_order() {
+        let source = plan
+            .node(node_id)
+            .expect("execution order only contains compiled nodes");
+        let mut operation = source.operation.clone();
+        let mut dependencies = source.dependencies.clone();
+
+        if dependencies.len() == 2 {
+            let arithmetic = match source.operation.as_str() {
+                "BINARY:Add" => Some("Add"),
+                "BINARY:Sub" => Some("Sub"),
+                "BINARY:Mul" => Some("Mul"),
+                "BINARY:Div" => Some("Div"),
+                _ => None,
+            };
+            if let Some(arithmetic) = arithmetic {
+                let scalar_side = dependencies.iter().position(|dependency| {
+                    plan.node(*dependency)
+                        .is_some_and(|node| node.operation == "NUMBER")
+                });
+                if let Some(side) = scalar_side {
+                    // Both operands being constants is better left to the
+                    // normal binary path; this optimization targets one scalar
+                    // beside an external or computed series.
+                    let other = dependencies[1 - side];
+                    let other_is_number = plan
+                        .node(other)
+                        .is_some_and(|node| node.operation == "NUMBER");
+                    if !other_is_number {
+                        let scalar_node = dependencies[side];
+                        let scalar_operation = match (arithmetic, side) {
+                            ("Sub", 0) => "Scalar:SubLeft",
+                            ("Sub", _) => "Scalar:SubRight",
+                            ("Div", 0) => "Scalar:DivLeft",
+                            ("Div", _) => "Scalar:DivRight",
+                            ("Add", _) => "Scalar:Add",
+                            ("Mul", _) => "Scalar:Mul",
+                            _ => unreachable!("only supported arithmetic reaches this arm"),
+                        };
+                        operation = scalar_operation.to_string();
+                        dependencies.clear();
+                        dependencies.push(other);
+                        let scalar_range = *ranges
+                            .get(&scalar_node)
+                            .expect("NUMBER nodes have bound parameter ranges");
+                        ranges.insert(node_id, scalar_range);
+                    }
+                }
+            }
+        }
+
+        nodes.push(ComputeNode::new(
+            node_id,
+            operation,
+            dependencies,
+            source.capabilities.clone(),
+        ));
+    }
+
+    ComputePlan::compile(nodes).map_err(|error| FormulaHotPlanError::Semantic(error))
 }
 
 /// One named output discovered while resolving formula plumbing.
@@ -731,7 +2810,7 @@ fn lower_compound(
         other => {
             return Err(unsupported(format!(
                 "unknown compound assignment operator `{other}`"
-            )))
+            )));
         }
     };
     // The node carries the two value operands, and — when it follows another
@@ -827,6 +2906,115 @@ fn prune_unreachable(
         .collect::<Vec<_>>();
 
     Ok(ComputePlan::compile(nodes)?)
+}
+
+/// Mark numeric literals that are consumed exclusively as scalar call
+/// parameters. Their buffers still have the full logical length, but only the
+/// first element is observable through the call sites below, so filling every
+/// element is wasted work. Literals retained as outputs/variables, used by
+/// element-wise operations, or shared with any non-scalar use keep the regular
+/// full-series `NUMBER` kernel.
+fn lower_scalar_number_outputs(
+    plan: &ComputePlan,
+    roots: &[ComputeNodeId],
+) -> Result<ComputePlan, FormulaHotPlanError> {
+    let mut scalar_only: BTreeSet<_> = plan
+        .execution_order()
+        .iter()
+        .filter_map(|&id| {
+            plan.node(id)
+                .is_some_and(|node| node.operation == "NUMBER")
+                .then_some(id)
+        })
+        .collect();
+
+    for &root in roots {
+        scalar_only.remove(&root);
+    }
+    for &id in plan.execution_order() {
+        let Some(node) = plan.node(id) else {
+            continue;
+        };
+        for (position, &dependency) in node.dependencies.iter().enumerate() {
+            if scalar_only.contains(&dependency)
+                && !is_scalar_call_parameter(&node.operation, position)
+            {
+                scalar_only.remove(&dependency);
+            }
+        }
+    }
+    if scalar_only.is_empty() {
+        return Ok(plan.clone());
+    }
+
+    let nodes = plan.execution_order().iter().map(|&id| {
+        let source = plan
+            .node(id)
+            .expect("execution order only contains compiled nodes");
+        ComputeNode::new(
+            source.id,
+            if scalar_only.contains(&id) {
+                "SCALAR:NUMBER"
+            } else {
+                source.operation.as_str()
+            },
+            source.dependencies.clone(),
+            source.capabilities.clone(),
+        )
+    });
+    Ok(ComputePlan::compile(nodes)?)
+}
+
+/// Whether a numeric call operand is read only through the dispatcher's scalar
+/// or period accessor. Keep this conservative: a false negative costs a fill;
+/// a false positive could change the values of a series operand.
+fn is_scalar_call_parameter(operation: &str, position: usize) -> bool {
+    match operation {
+        "CALL:MA"
+        | "CALL:EMA"
+        | "CALL:WMA"
+        | "CALL:HMA"
+        | "CALL:RMA"
+        | "CALL:MEDIAN"
+        | "CALL:ROLLING_RANGE"
+        | "CALL:KAMA"
+        | "CALL:RSI"
+        | "CALL:MOM"
+        | "CALL:ROC"
+        | "CALL:TRIX"
+        | "CALL:TRIMA"
+        | "CALL:STD"
+        | "CALL:STDDEV"
+        | "CALL:HHV"
+        | "CALL:LLV"
+        | "CALL:SUM"
+        | "CALL:VAR"
+        | "CALL:REF"
+        | "CALL:ROCP"
+        | "CALL:ROCR"
+        | "CALL:ROCR100"
+        | "CALL:RSQUARE"
+        | "CALL:RESI"
+        | "CALL:RANK_PCT"
+        | "CALL:STDDEV_SAMPLE"
+        | "CALL:LINEARREG_SLOPE"
+        | "CALL:ZSCORE" => position == 1,
+        "CALL:SMA" => position == 1 || position == 2,
+        "CALL:QUANTILE" | "CALL:BOLLUP" | "CALL:BOLLMID" | "CALL:BOLLDN" => {
+            position == 1 || position == 2
+        }
+        "CALL:ATR" | "CALL:NATR" | "CALL:CCI" => position == 3,
+        "CALL:VWMA" | "CALL:CORREL" | "CALL:ICHIMOKU_TENKAN" | "CALL:ICHIMOKU_KIJUN" => {
+            position == 2
+        }
+        "CALL:CMF" => position == 4,
+        "CALL:CHOP" | "CALL:SUPERTREND" => position == 3 || position == 4,
+        "CALL:FISHER" | "CALL:FISHER_SIGNAL" => position == 2,
+        "CALL:TSI" => position == 1 || position == 2,
+        "CALL:KDJ" | "CALL:KDJ_D" | "CALL:KDJ_J" => position == 3 || position == 4 || position == 5,
+        "CALL:MACD" | "CALL:DEA" => position == 1 || position == 2 || position == 3,
+        _ => false,
+    }
 }
 
 /// Bind exact numeric literals to NUMBER nodes without carrying literal strings
@@ -1002,6 +3190,24 @@ mod tests {
     }
 
     #[test]
+    fn pine_trix_plot_shape_uses_the_direct_momentum_plan() {
+        let pine =
+            crate::formula::pine::parse_pine(include_str!("../../../tests/pine_corpus/trix.pine"))
+                .unwrap();
+        let ast = crate::formula::pine::map_pine_to_alphata(&pine).unwrap();
+        let compiled = FormulaHotPlan::compile(&ast).unwrap();
+
+        let (close_slot, period, output_index, scalar_outputs) = compiled
+            .simple_pine_trix()
+            .expect("TRIX plot shape is recognized");
+        assert_eq!(close_slot, 0);
+        assert_eq!(period, 15);
+        assert_eq!(output_index, 0);
+        assert_eq!(scalar_outputs.len(), 2);
+        assert!(compiled.simple_pine_roc().is_none());
+    }
+
+    #[test]
     fn a_named_output_is_readable_as_a_local_variable() {
         // The single-colon form parses to a bare `AstNode::Output`, so the
         // plumbing pass is the only place that can record it as a variable
@@ -1126,6 +3332,53 @@ mod tests {
         assert_eq!(compiled.input_bindings()[0].slot(), InputSlot(0));
     }
 
+    #[test]
+    fn simple_atr_metadata_accepts_builtin_aliases_and_rejects_wrappers() {
+        let canonical = parse_formula("ATR(HIGH,LOW,CLOSE,14)").unwrap();
+        assert!(FormulaHotPlan::compile(&canonical)
+            .unwrap()
+            .simple_atr_input_slots()
+            .is_some());
+
+        let ast = parse_formula("ATR(H,L,C,14)").unwrap();
+        let compiled = FormulaHotPlan::compile(&ast).unwrap();
+        let input_slot = |kind| {
+            compiled
+                .input_bindings()
+                .iter()
+                .find(|binding| {
+                    crate::formula::types::classify_builtin_var(binding.name()) == Some(kind)
+                })
+                .unwrap()
+                .slot()
+                .0
+        };
+        assert_eq!(
+            compiled.simple_atr_input_slots(),
+            Some((
+                input_slot(crate::formula::types::BuiltinVar::High),
+                input_slot(crate::formula::types::BuiltinVar::Low),
+                input_slot(crate::formula::types::BuiltinVar::Close),
+                14,
+            ))
+        );
+
+        let wrapped = parse_formula("ATR(HIGH,LOW,CLOSE,14)+1").unwrap();
+        assert_eq!(
+            FormulaHotPlan::compile(&wrapped)
+                .unwrap()
+                .simple_atr_input_slots(),
+            None
+        );
+        let assigned = parse_formula("ATR14:=ATR(HIGH,LOW,CLOSE,14)").unwrap();
+        assert_eq!(
+            FormulaHotPlan::compile(&assigned)
+                .unwrap()
+                .simple_atr_input_slots(),
+            None
+        );
+    }
+
     /// A Pine script ending in `hline` must report its plotted series, not the
     /// marker constant.
     ///
@@ -1197,5 +3450,21 @@ mod tests {
             "the primary result must be the last value-producing statement (MA10)"
         );
         assert_eq!(roots[1].1, slots[0], "MA5 must follow as a named channel");
+
+        for binding in compiled.variables() {
+            assert_eq!(
+                roots[binding.output_index()].1,
+                binding.slot(),
+                "the precomputed publication index must resolve to its slot"
+            );
+            assert_eq!(
+                binding.output_index(),
+                roots
+                    .iter()
+                    .position(|(_, slot)| *slot == binding.slot())
+                    .unwrap(),
+                "shared slots must resolve to their first output position"
+            );
+        }
     }
 }

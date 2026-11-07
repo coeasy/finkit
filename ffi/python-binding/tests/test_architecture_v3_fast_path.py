@@ -79,6 +79,33 @@ def test_architecture_v3_benchmark_surface_uses_direct_ndarrays():
         assert result.shape == close.shape
 
 
+def test_bop_direct_native_path_and_normalized_fallbacks():
+    close = np.linspace(10.0, 20.0, 128, dtype=np.float64)
+    open_ = close - 0.1
+    high = close + 1.0
+    low = close - 1.0
+    expected = finkit._native.bop(open_, high, low, close)
+
+    np.testing.assert_array_equal(finkit.bop(open_, high, low, close), expected)
+    np.testing.assert_allclose(
+        finkit.bop(open_.astype(np.float32), high.astype(np.float32), low.astype(np.float32), close.astype(np.float32)),
+        expected,
+        rtol=1e-6,
+        atol=1e-6,
+    )
+    np.testing.assert_array_equal(
+        finkit.bop(open_.tolist(), high.tolist(), low.tolist(), close.tolist()), expected
+    )
+    reversed_inputs = tuple(values[::-1] for values in (open_, high, low, close))
+    normalized_reversed = tuple(np.ascontiguousarray(values) for values in reversed_inputs)
+    np.testing.assert_array_equal(
+        finkit.bop(*reversed_inputs), finkit._native.bop(*normalized_reversed)
+    )
+    with pytest.raises(finkit.InvalidParameterError):
+        finkit.bop(open_[:-1], high, low, close)
+    with pytest.raises(finkit.InsufficientDataError):
+        finkit.bop(open_[:0], high[:0], low[:0], close[:0])
+
 def test_default_mom_dispatch_preserves_keyword_and_normalized_inputs():
     close = np.linspace(10.0, 30.0, 128, dtype=np.float64)
     expected = finkit.mom(close, 10)

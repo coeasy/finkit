@@ -7,7 +7,14 @@
 //! check is independent of warm-up / length conventions across languages.
 
 use finkit::math::moving_avg::{ema, sma};
-use finkit_ffi_common::golden::{assert_close, EMA_GOLDEN, SMA_GOLDEN};
+
+// Keep one golden source for core and language binding tests without making
+// the kernel crate's test build depend on the FFI adapter crate.
+#[path = "../../ffi/ffi-common/src/golden.rs"]
+#[allow(dead_code)]
+mod golden;
+
+use golden::{assert_close, EMA_GOLDEN, SMA_GOLDEN};
 
 #[test]
 fn golden_sma_matches_core() {

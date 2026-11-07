@@ -91,7 +91,7 @@ def test_publishes_current_talib_catalog_contract():
         if matrix["semantic_profile"] in operation["semantic_profiles"]
     )
 
-    assert matrix["semantic_profile"] == "talib_0_8_0"
+    assert matrix["semantic_profile"] == "talib_0_8_1"
     assert len(talib_names) == matrix["surfaces"]["dispatcher_smoke"]["expected_count"]
     assert talib_names == sorted(matrix["surfaces"]["numeric_reference"]["indicators"])
     sma = next(operation for operation in catalog["operations"] if operation["name"] == "SMA")

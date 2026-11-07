@@ -104,8 +104,8 @@ parity, and do not read a missing parity gate as "unsupported".
 
 | Binding | Indicator surface (gated) | Formula surface | Research surface | Platform validation | Release state |
 | --- | --- | --- | --- | --- | --- |
-| Rust `core` | is the runtime | full; `FormulaEngine` selects/reports Tree or Plan | full | `cargo test -p finkit` | v0.1.15 `.crate` |
-| Python | 78 / 78 | exported; `formula_backend` and `formula_eval(..., backend=...)` | exported | CI `python-wheels` | v0.1.15 ABI3 wheels |
+| Rust `core` | is the runtime | full; `FormulaEngine` selects/reports Tree or Plan | full | `cargo test -p finkit` | v0.2.0 `.crate` |
+| Python | 78 / 78 | exported; `formula_backend` and `formula_eval(..., backend=...)` | exported | CI `python-wheels` | v0.2.0 ABI3 wheels |
 | Node | 78 / 78 | exported; `formulaBackend` and `formulaEval(..., backend?)` | exported | CI native smoke (`linux-x64`, `win32-x64-msvc`, `darwin-arm64`) | CI `.tgz` candidate (not on npm) |
 | C | 78 / 78 (extractor self-check anchor) | exported (`*_json`) | exported | CI CMake build/test/install | CI SDK candidate |
 | Go | 78 / 78 | exported | exported | CI `go test` + external-module consumer | source + CI candidate |
@@ -150,11 +150,11 @@ python3 scripts/audit_binding_parity.py --check         # CI gate
 python3 scripts/audit_binding_parity.py --update-baseline
 ```
 
-## v0.1.15 distribution contract
+## v0.2.0 distribution contract
 
-The `v0.1.15` tag and release workflow are the authoritative version contract:
+The `v0.2.0` tag and release workflow are the authoritative version contract:
 
-| Target | v0.1.15 release path | Installation path |
+| Target | v0.2.0 release path | Installation path |
 | --- | --- | --- |
 | Python | ABI3 wheels | GitHub Release wheel |
 | Rust | `.crate` asset | Release asset or git tag/source |
@@ -201,7 +201,7 @@ The current Node package manifest declares additional optional packages such as 
 
 ## Python
 
-Python remains the most complete binary-distribution path in v0.1.15. Four `cp38-abi3` wheels are built for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
+Python remains the most complete binary-distribution path in v0.2.0. Four `cp38-abi3` wheels are built for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
 
 Its indicator surface now matches the C binding exactly (78/78). The last seven
 were the classic price-action constructions — `darvas_box`, `renko`, `kagi`,
@@ -235,7 +235,7 @@ Use the release tag when a crates.io package is not independently verified:
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.15" }
+finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.2.0" }
 ```
 
 Or use a local checkout:

@@ -5,8 +5,20 @@ import * as finkit from '../index.mjs'
 
 const fixture = JSON.parse(readFileSync(new URL('../../../tests/contracts/talib_numeric_contract_v1.json', import.meta.url), 'utf8'))
 
+test('normalizes the previous TA-Lib profile identifier', () => {
+  const payload = JSON.parse(finkit.operationExecuteJson(JSON.stringify({
+    operation: 'SMA',
+    semantic_profile: 'talib_0_8_0',
+    input_order: ['CLOSE'],
+    inputs: { CLOSE: [1, 2, 3, 4] },
+    params: [2],
+  })))
+  assert.equal(payload.semantic_profile, 'talib_0_8_1')
+  assert.equal(payload.values.SMA[3], 3.5)
+})
+
 test('executes every TA-Lib numeric contract vector', () => {
-  assert.equal(fixture.semantic_profile, 'talib_0_8_0')
+  assert.equal(fixture.semantic_profile, 'talib_0_8_1')
   assert.equal(fixture.vectors.length, 201)
 
   for (const vector of fixture.vectors) {

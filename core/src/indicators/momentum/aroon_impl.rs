@@ -2,6 +2,84 @@
 
 use super::prelude::*;
 
+const AROON_DEQUE_CAPACITY: usize = 32;
+const AROON_DEQUE_MIN_PERIOD: usize = 7;
+
+#[derive(Clone, Copy)]
+struct MonotonicIndexDeque {
+    indices: [usize; AROON_DEQUE_CAPACITY],
+    head: usize,
+    len: usize,
+}
+
+impl MonotonicIndexDeque {
+    #[inline(always)]
+    fn new() -> Self {
+        Self {
+            indices: [0; AROON_DEQUE_CAPACITY],
+            head: 0,
+            len: 0,
+        }
+    }
+
+    #[inline(always)]
+    fn front(&self) -> Option<usize> {
+        (self.len != 0).then(|| self.indices[self.head])
+    }
+
+    #[inline(always)]
+    fn back(&self) -> Option<usize> {
+        (self.len != 0).then(|| self.indices[(self.head + self.len - 1) % AROON_DEQUE_CAPACITY])
+    }
+
+    #[inline(always)]
+    fn pop_front(&mut self) {
+        self.head = (self.head + 1) % AROON_DEQUE_CAPACITY;
+        self.len -= 1;
+    }
+
+    #[inline(always)]
+    fn pop_back(&mut self) {
+        self.len -= 1;
+    }
+
+    #[inline(always)]
+    fn push_back(&mut self, index: usize) {
+        debug_assert!(self.len < AROON_DEQUE_CAPACITY);
+        self.indices[(self.head + self.len) % AROON_DEQUE_CAPACITY] = index;
+        self.len += 1;
+    }
+}
+
+/// Maintain the newest maximum/minimum index in the active AROON window.
+/// NaNs are ignored, infinities remain valid, and popping equal values keeps
+/// the newest tie just like `ExtremeTracker`.
+#[inline(always)]
+fn advance_monotonic_deque<const WANT_MAX: bool>(
+    values: &[f64],
+    index: usize,
+    first_valid: usize,
+    deque: &mut MonotonicIndexDeque,
+) {
+    while deque.front().is_some_and(|old| old < first_valid) {
+        deque.pop_front();
+    }
+    let value = values[index];
+    if value.is_nan() {
+        return;
+    }
+    while deque.back().is_some_and(|old| {
+        if WANT_MAX {
+            values[old] <= value
+        } else {
+            values[old] >= value
+        }
+    }) {
+        deque.pop_back();
+    }
+    deque.push_back(index);
+}
+
 /// Aroon Indicator Result
 #[derive(Debug, Clone)]
 pub struct AroonResult {
@@ -33,29 +111,23 @@ pub struct AroonResult {
 /// let result = indicators::aroon(&high, &low, 5).unwrap();
 /// assert_eq!(result.aroon_up.len(), 10);
 /// ```
-/// Cached-index arg-extreme of the trailing window, shared by `AROON`,
+/// Cached-age arg-extreme of the trailing window, shared by `AROON`,
 /// `AROON_UP`/`AROON_DOWN` and `AROONOSC`.
 ///
-/// `idx` is the absolute index of the window's extreme. The window always ends
-/// at the current bar, so `i - idx` is the "age" `AROON` scales and, at the
-/// same time, the lane offset — the two are the same number, and that is what
-/// lets one recurrence serve all three outputs.
+/// The tracker stores the extreme's age rather than its absolute index. The
+/// window always ends at the current bar, so that age is exactly the offset
+/// `AROON` scales; for `AROONOSC`, the current index cancels and only the two
+/// ages' difference is needed.
 ///
-/// This is the cached-index strategy: one comparison per bar while `idx` stays
-/// inside `[i - period, i]`, and a rescan of at most `period + 1` bars when it
-/// leaves. It is the form that won the head-to-head measurements — a monotonic
-/// deque pays a mispredicted pop-back branch on every noisy bar, and a fused
-/// Van Herk–Gil–Werman block scan costs more in dynamically indexed tables than
-/// the rescans it removes (V4 plan §36).
-///
-/// `AROON`, its caller-owned form and `AROONOSC` used to carry three separate
-/// copies of this recurrence with three different `NaN` behaviours; there is
-/// now one, and it is the above — the state is a trait-free struct so the
-/// compiler keeps it in registers rather than re-deriving it per call site.
+/// This cached-extreme strategy does one comparison per bar while the cached
+/// extreme stays inside `[i - period, i]`, then rescans at most `period + 1`
+/// bars when it leaves. The public two-leg and oscillator APIs use this path.
+/// Single-leg formula calls use a fixed-capacity monotone deque for common
+/// periods; its extra queue maintenance lost on the public OHLCV benchmark.
 #[derive(Clone, Copy)]
 pub(crate) struct ExtremeTracker<const WANT_MAX: bool> {
     extreme: f64,
-    idx: usize,
+    age: usize,
     found: bool,
 }
 
@@ -68,7 +140,7 @@ impl<const WANT_MAX: bool> ExtremeTracker<WANT_MAX> {
             } else {
                 f64::INFINITY
             },
-            idx: 0,
+            age: 0,
             found: false,
         }
     }
@@ -82,10 +154,13 @@ impl<const WANT_MAX: bool> ExtremeTracker<WANT_MAX> {
     /// The comparison is against an infinite seed, so `NaN` — which fails both
     /// `>=` and `<=` — is skipped for free with no explicit test; that is the
     /// property all three previous copies relied on. `>=` / `<=` rather than
-    /// `>` / `<` keep the *newest* tied bar, which matters here because the
-    /// index, not only the value, is what gets reported.
+    /// `>` / `<` keep the *newest* tied bar, which resets its age and delays
+    /// the next rescan.
     #[inline(always)]
     fn advance(&mut self, values: &[f64], i: usize, value: f64, period: usize) {
+        if self.found {
+            self.age += 1;
+        }
         let wins = if WANT_MAX {
             value >= self.extreme
         } else {
@@ -93,13 +168,13 @@ impl<const WANT_MAX: bool> ExtremeTracker<WANT_MAX> {
         };
         if wins {
             self.extreme = value;
-            self.idx = i;
+            self.age = 0;
             self.found = true;
-        } else if self.found && self.idx + period < i {
+        } else if self.found && self.age > period {
             let (extreme, idx, found) =
                 crate::math::statistics::rescan_extreme_window::<WANT_MAX>(values, i - period, i);
             self.extreme = extreme;
-            self.idx = idx;
+            self.age = if found { i - idx } else { 0 };
             self.found = found;
         }
     }
@@ -107,9 +182,10 @@ impl<const WANT_MAX: bool> ExtremeTracker<WANT_MAX> {
     /// `100 * (period - age) / period`, or `NaN` when the window holds no
     /// finite bar.
     #[inline(always)]
-    fn aroon(&self, i: usize, period: usize, scale: f64) -> f64 {
+    fn aroon(&self, period: usize, scale: f64) -> f64 {
         if self.found {
-            (period - (i - self.idx)) as f64 * scale
+            debug_assert!(self.age <= period);
+            (period - self.age) as f64 * scale
         } else {
             f64::NAN
         }
@@ -153,11 +229,8 @@ pub fn aroon(high: &[f64], low: &[f64], period: usize) -> Result<AroonResult> {
 /// comparisons: the second pass re-walks the index arithmetic and the branch
 /// skeleton for no second result.
 ///
-/// What is *shared* between [`aroon`], this kernel and [`aroonosc`] is the
-/// recurrence — the private `ExtremeTracker` type — not the loop around it.
-/// Sharing the type is the point: three hand-copied recurrences with three
-/// different `NaN` behaviours cannot be kept in step, whereas these three
-/// differ only in which outputs they pick out of the same state.
+/// The cached-age path serves both legs in one walk. Single-leg formula calls
+/// have their own measured deque path in `aroon_leg_into`.
 #[inline]
 pub fn aroon_into(
     high: &[f64],
@@ -200,12 +273,58 @@ pub fn aroon_into(
         highs.advance(high, i, high_bar, period);
         lows.advance(low, i, low_bar, period);
         let (up, down) = if i >= period {
-            (highs.aroon(i, period, scale), lows.aroon(i, period, scale))
+            (highs.aroon(period, scale), lows.aroon(period, scale))
         } else {
             (f64::NAN, f64::NAN)
         };
         *up_slot = up;
         *down_slot = down;
+    }
+    Ok(())
+}
+
+/// Caller-owned single-leg AROON kernel used when a formula requests only one
+/// of the two columns. This keeps the same inclusive window and tie / NaN
+/// rules as [`aroon_into`] while avoiding work and storage for the unused leg.
+#[inline]
+pub(crate) fn aroon_leg_into<const WANT_MAX: bool>(
+    values: &[f64],
+    period: usize,
+    output: &mut [f64],
+) -> Result<()> {
+    if output.len() != values.len() {
+        return Err(TaError::InvalidParameter {
+            name: "output".to_string(),
+            constraint: "must have the same length as input".to_string(),
+        });
+    }
+    validate_input(values.len(), period + 1)?;
+
+    let scale = 100.0 / period as f64;
+    if (AROON_DEQUE_MIN_PERIOD..AROON_DEQUE_CAPACITY).contains(&period) {
+        let mut extremes = MonotonicIndexDeque::new();
+        for (index, slot) in output.iter_mut().enumerate() {
+            let first_valid = index.saturating_sub(period);
+            advance_monotonic_deque::<WANT_MAX>(values, index, first_valid, &mut extremes);
+            *slot = if index >= period {
+                extremes.front().map_or(f64::NAN, |extreme| {
+                    (period - (index - extreme)) as f64 * scale
+                })
+            } else {
+                f64::NAN
+            };
+        }
+        return Ok(());
+    }
+
+    let mut tracker = ExtremeTracker::<WANT_MAX>::new();
+    for (i, (&value, slot)) in values.iter().zip(output.iter_mut()).enumerate() {
+        tracker.advance(values, i, value, period);
+        *slot = if i >= period {
+            tracker.aroon(period, scale)
+        } else {
+            f64::NAN
+        };
     }
     Ok(())
 }
@@ -239,10 +358,10 @@ pub fn aroonosc(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>>
     // Both legs are tracked in this one pass rather than as two `AROON` columns
     // that are subtracted afterwards: the `_into` form would need two
     // intermediate 80 KB buffers per call. `AROONOSC = AROON_UP - AROON_DOWN`,
-    // and with `age = i - idx` the two `period` offsets cancel, so the result
-    // is `(idx_high - idx_low) * 100 / period` — a single scaled subtraction
-    // per bar over the same recurrence. The cast happens before the
-    // subtraction because the argmax may sit below the argmin; a window with no
+    // The current index cancels from the two ages, so the result is
+    // `(age_low - age_high) * 100 / period` — a single scaled subtraction
+    // per bar over the same recurrence. A signed integer difference handles
+    // either ordering with one conversion to `f64`; a window with no
     // finite bar on either side reports `NaN`, matching `AROON`.
     //
     // Every slot is written, warm-up prefix included, which is what lets
@@ -258,7 +377,7 @@ pub fn aroonosc(high: &[f64], low: &[f64], period: usize) -> Result<Array1<f64>>
         highs.advance(high, i, high_bar, period);
         lows.advance(low, i, low_bar, period);
         *slot = if i >= period && highs.found && lows.found {
-            (highs.idx as f64 - lows.idx as f64) * scale
+            (lows.age as isize - highs.age as isize) as f64 * scale
         } else {
             f64::NAN
         };

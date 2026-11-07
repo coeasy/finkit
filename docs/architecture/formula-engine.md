@@ -1,10 +1,11 @@
 # Finkit — Formula engine internals
 
 The formula engine compiles `MA(CLOSE, 20)`-style source into an executable
-compute plan. **The tree-walking interpreter is the current default backend and
-the reference implementation; the compiled-plan path is opt-in**
-(`FormulaExecutionMode::Plan`). Both are real production paths and neither is
-the other's fallback — see [Execution backends](#execution-backends) below.
+compute plan. **Auto is the current default backend policy**: it keeps cold,
+short, and unsupported formulas on the tree-walking reference implementation,
+and selects the compiled plan for measured eligible workloads.
+`FormulaExecutionMode::Tree` and `Plan` remain explicit choices — see
+[Execution backends](#execution-backends) below.
 
 > This page describes the *pipeline internals*. The observable execution
 > contract (ownership, warm-up, range/last/append, multi-path agreement and the
@@ -39,16 +40,17 @@ and never matched the code.
 fails with `FormulaError::BackendUnsupported` rather than silently running the
 other one.
 
-| | `Tree` (default) | `Plan` (opt-in) |
-|---|---|---|
-| Coverage | everything | only what lowers to a compute plan |
-| Failure | non-evaluable nodes error at runtime | unsupported formulas fail at **compile time** |
-| `ctx.variables` / `ctx.output_names` / `ctx.output_modifiers` | written back | written back |
-| Warm-up / streaming state | full | single-shot batch |
+| | `Auto` (default) | `Tree` | `Plan` |
+|---|---|---|---|
+| Coverage | chooses Tree or Plan by measured cost and plan support | everything | only what lowers to a compute plan |
+| Failure | unsupported plans use Tree | non-evaluable nodes error at runtime | unsupported formulas fail at **compile time** |
+| `ctx.variables` / `ctx.output_names` / `ctx.output_modifiers` | written back | written back | written back |
+| Warm-up / streaming state | uses Tree when Plan is ineligible | full | single-shot batch |
 
-`Plan` is **not** the default and flipping it is a deliberate release decision
-gated on coverage, numerical parity and a version-migration plan — it is not a
-pending "finish the kernels" task. The historical kernel gap was closed on
+`Plan` remains an explicit mode; the default `Auto` policy was adopted after
+the checked-in 60-case workload retained **60/60** parity and measured an
+aggregate long-history warm-path improvement. Some source-level APIs remain
+Tree-only and are handled by Auto's Tree route. The historical kernel gap was closed on
 2026-09-24 (`unified_dispatch.rs` routes every TA-Lib `CALL:<NAME>` kernel
 through `dispatch_modern_call`), and the **string-literal** story is now closed
 end to end:
@@ -99,16 +101,17 @@ flowchart TB
   ast -->|constant fold + CSE + DCE| opt[Optimised AST]
   opt -->|lower| graph[SemanticGraph]
   graph --> plan[ComputePlan]
-  opt -->|default backend| tree[Tree interpreter<br/>reference path]
+  opt -->|Auto default: cold or unsupported| tree[Tree interpreter<br/>reference path]
+  opt -->|Auto default: measured eligible| plan
   plan -->|eval_plan / Plan mode| exec[Plan executor<br/>UnifiedExecutor]
   tree --> out[Array1 result]
   exec --> out
 ```
 
-The two right-hand branches are peers. The tree interpreter is the default and
-the reference every differential gate compares against; the compiled plan
-(`ComputePlan` / `FormulaHotPlan` → `UnifiedExecutor`) is the opt-in production
-carrier.
+The two right-hand branches are peers. The tree interpreter remains the
+reference every differential gate compares against; Auto is the default
+selection policy, and the compiled plan (`ComputePlan` / `FormulaHotPlan` →
+`UnifiedExecutor`) is selected when the workload is eligible.
 
 ## Stages
 

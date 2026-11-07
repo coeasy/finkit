@@ -44,19 +44,20 @@ sequenceDiagram
 
 ## Formula engine
 
-The same AST feeds two peer backends. The **tree interpreter is the default**
-and the reference every differential gate compares against; the **compiled plan
-is opt-in** (`FormulaExecutionMode::Plan`) and is reached through
-`compile_plan` / `eval_plan` or by selecting the plan backend. Bytecode and
-`eval_jit` are frozen legacy modes, not part of the default pipeline.
+The same AST feeds two peer backends. **Auto is the default policy**: cold,
+short, and unsupported formulas use the Tree interpreter, while measured
+eligible workloads use the compiled plan. Tree remains the reference every
+differential gate compares against. Bytecode and `eval_jit` are frozen legacy
+modes, not part of the default pipeline.
 
 ```mermaid
 flowchart LR
   src[Formula source] --> p[pest parser]
   p --> ast[AST]
   ast --> opt[Optimizer]
-  opt -->|default| tree[Tree interpreter]
+  opt -->|Auto: cold or unsupported| tree[Tree interpreter]
   opt -->|lower| graph[SemanticGraph] --> plan[ComputePlan]
+  opt -->|Auto: measured eligible| plan
   plan --> exec[UnifiedExecutor]
   tree --> out[Array1 f64]
   exec --> out

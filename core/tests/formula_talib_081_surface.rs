@@ -6,7 +6,7 @@
 //! the numeric contract could not see -- that the *formula entry point*
 //! produces the same numbers as the library entry point.
 //!
-//! Every value here is compared against the checked-in TA-Lib 0.8.0 reference
+//! Every value here is compared against the checked-in TA-Lib 0.8.1 reference
 //! on the shared `ashare` fixture, so a regression in either the wrapper or the
 //! kernel fails this test.
 
@@ -399,7 +399,7 @@ fn load_golden(indicator: &str, output: &str) -> Vec<Option<f64>> {
     );
     assert_eq!(
         golden.metadata.talib_version,
-        "0.8.0",
+        "0.8.1",
         "golden {} reference version drifted",
         path.display()
     );

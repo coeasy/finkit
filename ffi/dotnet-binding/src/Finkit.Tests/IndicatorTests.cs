@@ -136,7 +136,7 @@ public class IndicatorTests
     {
         using var matrix = JsonDocument.Parse(File.ReadAllText(TalibCoverageMatrixPath()));
         var profile = matrix.RootElement.GetProperty("semantic_profile").GetString();
-        Assert.Equal("talib_0_8_0", profile);
+        Assert.Equal("talib_0_8_1", profile);
 
         var expected = matrix.RootElement
             .GetProperty("surfaces")
@@ -165,7 +165,7 @@ public class IndicatorTests
     {
         using var fixture = JsonDocument.Parse(File.ReadAllText(TalibNumericContractPath()));
         var root = fixture.RootElement;
-        Assert.Equal("talib_0_8_0", root.GetProperty("semantic_profile").GetString());
+        Assert.Equal("talib_0_8_1", root.GetProperty("semantic_profile").GetString());
         var vectors = root.GetProperty("vectors").EnumerateArray().ToArray();
         Assert.Equal(201, vectors.Length);
 

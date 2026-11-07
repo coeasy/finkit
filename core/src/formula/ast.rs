@@ -314,13 +314,13 @@ pub enum ColorSpec {
     Hex(String),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct LineStyle {
     pub width: u32,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DrawModifier {
     NoDraw,
@@ -335,7 +335,7 @@ pub enum DrawModifier {
     LevelLine,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum PointStyle {
     PointDot,
@@ -347,7 +347,7 @@ pub enum PointStyle {
     ColorStick,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct OutputModifier {
     pub line_style: Option<LineStyle>,

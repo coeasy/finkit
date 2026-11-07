@@ -63,6 +63,28 @@ pub fn stochrsi_with_ma_type(
             constraint: "must be greater than 0".to_string(),
         });
     }
+    // TA-Lib's default SMA case can use the fused zero-copy kernel directly.
+    // Keep short inputs on the general path so its established validation and
+    // insufficient-data errors remain unchanged.
+    if fastd_ma_type == MaType::Sma && input.len() >= timeperiod + fastk_period + fastd_period - 1 {
+        let mut fastk = crate::utils::uninit_output(input.len());
+        let mut fastd = crate::utils::uninit_output(input.len());
+        stochrsi_into(
+            input,
+            timeperiod,
+            fastk_period,
+            1,
+            fastd_period,
+            &mut fastk,
+            &mut fastd,
+        )?;
+        let output_start = timeperiod + fastk_period + fastd_period - 2;
+        fastk[..output_start].fill(f64::NAN);
+        return Ok(StochResult {
+            k: Array1::from(fastk),
+            d: Array1::from(fastd),
+        });
+    }
     let rsi_values = rsi(input, timeperiod)?;
     let rsi_slice = rsi_values.as_slice().unwrap();
     let rsi_start = timeperiod;

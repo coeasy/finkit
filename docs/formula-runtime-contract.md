@@ -29,7 +29,7 @@
 
 | 后端 | 语义 |
 |---|---|
-| `FormulaExecutionMode::Tree` | 默认后端，也是差分门里的参考实现。所有入口都能跑。 |
+| `FormulaExecutionMode::Tree` | 显式参考后端，也是差分门里的对照实现。所有受管辖入口都能跑。 |
 | `FormulaExecutionMode::Plan` | 生产载体。只有具备 plan kernel 的入口能跑；其余入口返回 `FormulaError::BackendUnsupported { backend, entry }`。 |
 
 **Tree-only 入口**（选定 Plan 时拒绝执行，而不是走 tree）——共 13 个：
@@ -133,7 +133,7 @@ LINEARREG(MA(CLOSE,5),9)
 
 ### 3.4 执行后端是契约，不是提示（`BackendUnsupported`）
 
-`FormulaExecutionMode::{Tree, Plan}` 是**后端选择契约**。源级 `eval*` 入口分成三类，该划分由 `core/tests/formula_execution_mode.rs` 机械校验：
+`FormulaExecutionMode::{Auto, Tree, Plan}` 是**后端选择契约**。Auto 是 Rust 引擎默认策略；Tree 与 Plan 可显式选择。源级 `eval*` 入口分成三类，该划分由 `core/tests/formula_execution_mode.rs` 机械校验：
 
 | 类别 | 入口 | 选择 `Plan` 时的行为 |
 |---|---|---|

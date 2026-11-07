@@ -1934,7 +1934,8 @@ let json = serde_json::to_string_pretty(&registry_document()).unwrap();
 
 公式引擎支持表达式计算，类似通达信/同花顺公式。
 
-Rust 的 `FormulaEngine` 默认使用 `FormulaExecutionMode::Tree`。可显式选择编译计划后端：
+Rust 的 `FormulaEngine` 默认使用 `FormulaExecutionMode::Auto`：冷公式和不支持的计划继续使用 Tree，
+适合的长历史重复公式按测量结果使用 Plan。也可显式选择 Tree 或 Plan：
 
 ```rust
 use finkit::formula::{FormulaEngine, FormulaExecutionMode};
@@ -1944,9 +1945,8 @@ engine.set_execution_mode(FormulaExecutionMode::Plan);
 let result = engine.eval("MA(CLOSE, 20)", &mut context)?;
 ```
 
-Plan 与 Tree 在仓库公式语料上逐值一致，但性能依方言和公式结构而异；当前测量中 Plan
-适合 Pine 语料，国内终端语料仍较慢，因此暂不作为默认。部分入口明确仅支持 Tree，选择
-Plan 时会返回 `BackendUnsupported`；完整入口分类见[公式入口矩阵](architecture/formula-entry-matrix.md)。
+仓库 60 个公式在 Tree 与 Plan 间逐值一致；长历史 Auto 汇总约比 Tree 快 9%。部分入口明确仅支持
+Tree，显式选择 Plan 时会返回 `BackendUnsupported`；完整入口分类见[公式入口矩阵](architecture/formula-entry-matrix.md)。
 
 Rust `FormulaContext` 中的 `EM_REF`、`BLOCKDATA`、`BLOCKINDEX`、`BLOCKAVG` 会从上下文的
 `EmData` / `BlockData` 读取字符串索引所指向的外部序列。未提供相应 host 数据时返回全 `NaN`；

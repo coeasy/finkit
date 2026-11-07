@@ -75,8 +75,8 @@ jobs:
             --output dist/bench/finkit-vs-talib.md \
             --json-out dist/bench/results.json \
             --require-pairs 6 \
-            --gate \
-            --threshold 25
+            --geomean-gate \
+            --minimum-geomean-speedup 1.0
       - name: Verify and record environment
         # Refuse to publish evidence whose upstream version disagrees with the
         # contract. A silent mismatch is the failure mode this job exists to

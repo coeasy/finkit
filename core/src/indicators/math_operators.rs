@@ -299,13 +299,15 @@ pub fn sum(data: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_window(data, period)?;
 
     let len = data.len();
-    let mut output = init_output(len);
+    let mut output = crate::utils::uninit_output(len);
     if period == 1 {
         for (i, v) in data.iter().enumerate() {
             output[i] = *v;
         }
-        return Ok(output);
+        return Ok(Array1::from(output));
     }
+
+    output[..period - 1].fill(f64::NAN);
 
     // 初始化第一个窗口
     let mut acc: f64 = data[..period].iter().sum();
@@ -316,7 +318,7 @@ pub fn sum(data: &[f64], period: usize) -> Result<Array1<f64>> {
         acc += data[i] - data[i - period];
         output[i] = acc;
     }
-    Ok(output)
+    Ok(Array1::from(output))
 }
 
 /// 滚动窗口内最大值的索引 MAXINDEX
@@ -359,24 +361,40 @@ pub fn maxindex(data: &[f64], period: usize) -> Result<Array1<i64>> {
         return Ok(output);
     }
 
-    let mut candidates = VecDeque::with_capacity(period);
+    // A fixed-size ring avoids VecDeque's per-operation bounds/indexing work.
+    // The queue never contains more than one index per input element in the
+    // active window, so a `period`-sized buffer is sufficient.
+    let mut candidates = vec![0_usize; period];
+    let mut head = 0_usize;
+    let mut count = 0_usize;
     for i in 0..len {
-        while candidates
-            .front()
-            .is_some_and(|&candidate| candidate + period <= i)
-        {
-            candidates.pop_front();
+        if count > 0 && candidates[head] + period <= i {
+            head += 1;
+            if head == period {
+                head = 0;
+            }
+            count -= 1;
         }
-        while candidates
-            .back()
-            .is_some_and(|&candidate| data[candidate] < data[i])
-        {
-            candidates.pop_back();
+        while count > 0 {
+            let mut back = head + count - 1;
+            if back >= period {
+                back -= period;
+            }
+            if data[candidates[back]] < data[i] {
+                count -= 1;
+            } else {
+                break;
+            }
         }
-        candidates.push_back(i);
+        let mut tail = head + count;
+        if tail >= period {
+            tail -= period;
+        }
+        candidates[tail] = i;
+        count += 1;
         if i + 1 >= period {
             let start = i + 1 - period;
-            output[i] = (candidates[0] - start) as i64;
+            output[i] = (candidates[head] - start) as i64;
         }
     }
     Ok(output)
@@ -466,9 +484,22 @@ pub fn minindex(data: &[f64], period: usize) -> Result<Array1<i64>> {
 /// assert_eq!(maxs[2], 4.0);
 /// ```
 pub fn minmax(data: &[f64], period: usize) -> Result<(Array1<f64>, Array1<f64>)> {
-    let min_arr = min(data, period)?;
-    let max_arr = max(data, period)?;
-    Ok((min_arr, max_arr))
+    validate_window(data, period)?;
+    if period <= 512 {
+        let mut minimum = crate::utils::uninit_output(data.len());
+        let mut maximum = crate::utils::uninit_output(data.len());
+        minimum[..period - 1].fill(f64::NAN);
+        maximum[..period - 1].fill(f64::NAN);
+        if crate::math::statistics::van_herk_minmax_pair_into(
+            data,
+            period,
+            &mut minimum,
+            &mut maximum,
+        ) {
+            return Ok((Array1::from_vec(minimum), Array1::from_vec(maximum)));
+        }
+    }
+    Ok((min(data, period)?, max(data, period)?))
 }
 
 /// 滚动窗口最小值与最大值的索引 MINMAXINDEX
@@ -492,9 +523,55 @@ pub fn minmax(data: &[f64], period: usize) -> Result<(Array1<f64>, Array1<f64>)>
 /// assert_eq!(max_idx[2], 2); // [3,1,4] -> max 4 at offset 2
 /// ```
 pub fn minmaxindex(data: &[f64], period: usize) -> Result<(Array1<i64>, Array1<i64>)> {
-    let min_idx = minindex(data, period)?;
-    let max_idx = maxindex(data, period)?;
-    Ok((min_idx, max_idx))
+    validate_window(data, period)?;
+    let len = data.len();
+    let mut min_output = vec![-1_i64; len];
+    let mut max_output = vec![-1_i64; len];
+
+    if period == 1 {
+        min_output.fill(0);
+        max_output.fill(0);
+        return Ok((Array1::from_vec(min_output), Array1::from_vec(max_output)));
+    }
+
+    let mut min_candidates = VecDeque::with_capacity(period);
+    let mut max_candidates = VecDeque::with_capacity(period);
+    for i in 0..len {
+        while min_candidates
+            .front()
+            .is_some_and(|&candidate| candidate + period <= i)
+        {
+            min_candidates.pop_front();
+        }
+        while min_candidates
+            .back()
+            .is_some_and(|&candidate| data[candidate] > data[i])
+        {
+            min_candidates.pop_back();
+        }
+        min_candidates.push_back(i);
+
+        while max_candidates
+            .front()
+            .is_some_and(|&candidate| candidate + period <= i)
+        {
+            max_candidates.pop_front();
+        }
+        while max_candidates
+            .back()
+            .is_some_and(|&candidate| data[candidate] < data[i])
+        {
+            max_candidates.pop_back();
+        }
+        max_candidates.push_back(i);
+
+        if i + 1 >= period {
+            let start = i + 1 - period;
+            min_output[i] = (min_candidates[0] - start) as i64;
+            max_output[i] = (max_candidates[0] - start) as i64;
+        }
+    }
+    Ok((Array1::from_vec(min_output), Array1::from_vec(max_output)))
 }
 
 // ---------------------------------------------------------------------------
@@ -874,6 +951,56 @@ mod tests {
     fn test_minindex_zero_period() {
         let data = vec![1.0, 2.0, 3.0];
         assert!(minindex(&data, 0).is_err());
+    }
+
+    #[test]
+    fn minmax_matches_separate_extrema_with_missing_values() {
+        let finite = (0..2048)
+            .map(|index| (index as f64 * 0.173).sin() * 10.0 + (index % 17) as f64)
+            .collect::<Vec<_>>();
+        let mut with_missing = finite.clone();
+        for index in [0, 15, 31, 255, 1023, 2047] {
+            with_missing[index] = f64::NAN;
+        }
+        with_missing[64] = f64::INFINITY;
+        with_missing[128] = f64::NEG_INFINITY;
+        let all_nan = vec![f64::NAN; 64];
+
+        for (data, period) in [
+            (&finite, 1),
+            (&finite, 2),
+            (&finite, 30),
+            (&finite, 64),
+            (&finite, 65),
+            (&finite, 512),
+            (&finite, 513),
+            (&finite, 2048),
+            (&with_missing, 30),
+            (&with_missing, 513),
+            (&all_nan, 14),
+        ] {
+            let (actual_min, actual_max) = minmax(data, period).unwrap();
+            let expected_min = min(data, period).unwrap();
+            let expected_max = max(data, period).unwrap();
+            for index in 0..data.len() {
+                if expected_min[index].is_nan() {
+                    assert!(actual_min[index].is_nan(), "min period={period}, i={index}");
+                } else {
+                    assert_eq!(
+                        actual_min[index], expected_min[index],
+                        "min period={period}, i={index}"
+                    );
+                }
+                if expected_max[index].is_nan() {
+                    assert!(actual_max[index].is_nan(), "max period={period}, i={index}");
+                } else {
+                    assert_eq!(
+                        actual_max[index], expected_max[index],
+                        "max period={period}, i={index}"
+                    );
+                }
+            }
+        }
     }
 
     // ------------------------- 长度验证 -------------------------

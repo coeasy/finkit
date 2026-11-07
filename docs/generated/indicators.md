@@ -3,7 +3,7 @@
 > **SSOT** — auto-generated from `core/src/indicators/mod.rs` and submodule `pub fn` exports.
 > Do not edit manually. Regenerate: `python scripts/gen_ssot_docs.py --generate`
 
-Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: **389**
+Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: **392**
 
 ## astock
 
@@ -435,6 +435,7 @@ Modules exported from `indicators/mod.rs`: **36** | Public indicator functions: 
 | `supertrend` |
 | `supertrend_default` |
 | `supertrend_multi` |
+| `supertrend_talib_compat` |
 | `wow_direction` |
 
 ## sweep
@@ -470,6 +471,7 @@ _No `pub fn` exports in this module file._
 | `eri` |
 | `fosc` |
 | `fractal` |
+| `fractal_i32` |
 | `kc` |
 | `kdj` |
 | `marketfi` |
@@ -478,6 +480,7 @@ _No `pub fn` exports in this module file._
 | `pvo` |
 | `qstick` |
 | `rma_profile` |
+| `rolling_minmax` |
 | `rvi_profile` |
 | `rvol` |
 | `smi` |

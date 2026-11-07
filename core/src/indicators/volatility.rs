@@ -26,9 +26,15 @@ fn validate_output(input_len: usize, output_len: usize) -> Result<()> {
 
 #[inline]
 fn true_range_at(high: &[f64], low: &[f64], close: &[f64], index: usize) -> f64 {
-    let h = high[index];
-    let l = low[index];
-    let previous_close = close[index - 1];
+    // All callers validate equal lengths and invoke this only for an index in
+    // `1..len`, so these three hot-path loads are in bounds.
+    let (h, l, previous_close) = unsafe {
+        (
+            *high.get_unchecked(index),
+            *low.get_unchecked(index),
+            *close.get_unchecked(index - 1),
+        )
+    };
     (h - l)
         .max((h - previous_close).abs())
         .max((l - previous_close).abs())
@@ -38,7 +44,7 @@ fn true_range_at(high: &[f64], low: &[f64], close: &[f64], index: usize) -> f64 
 pub fn atr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_ohlc(high, low, close)?;
     validate_input(high.len(), period + 1)?;
-    let mut output = Array1::<f64>::zeros(high.len());
+    let mut output = Array1::from(crate::utils::uninit_output(high.len()));
     atr_into(
         high,
         low,
@@ -94,10 +100,15 @@ pub fn atr_into(
     output[period] = previous_atr;
 
     let inverse_period = 1.0 / period as f64;
-    for index in (period + 1)..high.len() {
+    let output_ptr = output.as_mut_ptr();
+    let mut index = period + 1;
+    while index < high.len() {
         let true_range = true_range_at(high, low, close, index);
         previous_atr += (true_range - previous_atr) * inverse_period;
-        output[index] = previous_atr;
+        unsafe {
+            *output_ptr.add(index) = previous_atr;
+        }
+        index += 1;
     }
     Ok(())
 }
@@ -106,7 +117,7 @@ pub fn atr_into(
 pub fn natr(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result<Array1<f64>> {
     validate_ohlc(high, low, close)?;
     validate_input(high.len(), period + 1)?;
-    let mut output = Array1::<f64>::zeros(high.len());
+    let mut output = Array1::from(crate::utils::uninit_output(high.len()));
     natr_into(
         high,
         low,
@@ -165,15 +176,22 @@ pub fn natr_into(
     };
 
     let inverse_period = 1.0 / period as f64;
-    for index in (period + 1)..high.len() {
+    let output_ptr = output.as_mut_ptr();
+    let close_ptr = close.as_ptr();
+    let mut index = period + 1;
+    while index < high.len() {
         let true_range = true_range_at(high, low, close, index);
         previous_atr += (true_range - previous_atr) * inverse_period;
-        let current_close = close[index];
-        output[index] = if !crate::utils::is_zero(current_close) {
+        let current_close = unsafe { *close_ptr.add(index) };
+        let current_natr = if !crate::utils::is_zero(current_close) {
             previous_atr / current_close * 100.0
         } else {
             0.0
         };
+        unsafe {
+            *output_ptr.add(index) = current_natr;
+        }
+        index += 1;
     }
     Ok(())
 }

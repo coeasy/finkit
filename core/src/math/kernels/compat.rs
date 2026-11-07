@@ -248,11 +248,134 @@ pub fn rolling_correlation_into(
     output: &mut [f64],
 ) -> Result<(), KernelCompatError> {
     validate_pair(left, right, window, output)?;
-    output.fill(f64::NAN);
     if window > left.len() {
+        output.fill(f64::NAN);
         return Ok(());
     }
 
+    // TA_CORREL uses shifted sums and periodically rebuilds each window. The
+    // older raw-price sums drift noticeably on long histories (especially when
+    // prices have a large level and small day-to-day changes). Keep the legacy
+    // finite-window NaN behavior for non-finite data, but use the stable TA-Lib
+    // update order on the common finite path.
+    let lookback = window - 1;
+    let inv_period = 1.0 / window as f64;
+    let mut output_index = 0usize;
+    let mut shift_left = left[0];
+    let mut shift_right = right[0];
+    let mut sum_left = 0.0;
+    let mut sum_right = 0.0;
+    let mut sum_left_sq = 0.0;
+    let mut sum_right_sq = 0.0;
+    let mut sum_product = 0.0;
+    for index in 0..lookback {
+        let current_left = left[index];
+        let current_right = right[index];
+        if !current_left.is_finite() || !current_right.is_finite() {
+            return rolling_correlation_non_finite_into(left, right, window, output);
+        }
+        let x = current_left - shift_left;
+        let y = current_right - shift_right;
+        sum_left += x;
+        sum_left_sq += x * x;
+        sum_product += x * y;
+        sum_right += y;
+        sum_right_sq += y * y;
+    }
+
+    output[..lookback].fill(f64::NAN);
+    let mut bars_since_reseed = 32usize.saturating_mul(window);
+    let mut leaving_left = 0.0;
+    let mut leaving_right = 0.0;
+    for today in lookback..left.len() {
+        let current_left = left[today];
+        let current_right = right[today];
+        if !current_left.is_finite() || !current_right.is_finite() {
+            return rolling_correlation_non_finite_into(left, right, window, output);
+        }
+        let x = current_left - shift_left;
+        let y = current_right - shift_right;
+        sum_left += x;
+        sum_left_sq += x * x;
+        sum_product += x * y;
+        sum_right += y;
+        sum_right_sq += y * y;
+
+        let mut variance_left = sum_left_sq - sum_left * sum_left * inv_period;
+        let mut variance_right = sum_right_sq - sum_right * sum_right * inv_period;
+        let mut covariance = sum_product - sum_left * sum_right * inv_period;
+        bars_since_reseed = bars_since_reseed.saturating_sub(1);
+        if variance_left < 1e-6 * sum_left_sq
+            || variance_right < 1e-6 * sum_right_sq
+            || leaving_left > 1e6 * sum_left_sq
+            || leaving_right > 1e6 * sum_right_sq
+            || bars_since_reseed == 0
+        {
+            bars_since_reseed = 32usize.saturating_mul(window);
+            let window_start = today + 1 - window;
+            let mut raw_sum_left = 0.0;
+            let mut raw_sum_right = 0.0;
+            for index in window_start..=today {
+                raw_sum_left += left[index];
+                raw_sum_right += right[index];
+            }
+            shift_left = raw_sum_left * inv_period;
+            shift_right = raw_sum_right * inv_period;
+            sum_left = 0.0;
+            sum_right = 0.0;
+            sum_left_sq = 0.0;
+            sum_right_sq = 0.0;
+            sum_product = 0.0;
+            for index in window_start..=today {
+                let x = left[index] - shift_left;
+                let y = right[index] - shift_right;
+                sum_left += x;
+                sum_left_sq += x * x;
+                sum_product += x * y;
+                sum_right += y;
+                sum_right_sq += y * y;
+            }
+            variance_left = sum_left_sq - sum_left * sum_left * inv_period;
+            variance_right = sum_right_sq - sum_right * sum_right * inv_period;
+            covariance = sum_product - sum_left * sum_right * inv_period;
+            if variance_left < 0.0 {
+                variance_left = 0.0;
+            }
+            if variance_right < 0.0 {
+                variance_right = 0.0;
+            }
+        }
+
+        let mut value = f64::NAN;
+        let variance_product = variance_left * variance_right;
+        if variance_left > 1e-14 * sum_left_sq
+            && variance_right > 1e-14 * sum_right_sq
+            && variance_product > 0.0
+        {
+            value = (covariance / variance_product.sqrt()).clamp(-1.0, 1.0);
+        }
+        output[today] = value;
+
+        let trailing_left = left[output_index] - shift_left;
+        let trailing_right = right[output_index] - shift_right;
+        output_index += 1;
+        leaving_left = trailing_left * trailing_left;
+        leaving_right = trailing_right * trailing_right;
+        sum_left -= trailing_left;
+        sum_left_sq -= leaving_left;
+        sum_product -= trailing_left * trailing_right;
+        sum_right -= trailing_right;
+        sum_right_sq -= leaving_right;
+    }
+    Ok(())
+}
+
+fn rolling_correlation_non_finite_into(
+    left: &[f64],
+    right: &[f64],
+    window: usize,
+    output: &mut [f64],
+) -> Result<(), KernelCompatError> {
     let mut ring = vec![(0.0, 0.0, false); window];
     let mut cursor = 0usize;
     let mut count = 0usize;
@@ -297,6 +420,7 @@ pub fn rolling_correlation_into(
             cursor = 0;
         }
 
+        let mut value = f64::NAN;
         if count == window && invalid == 0 {
             let size = window as f64;
             let var_left = sum_left_sq - sum_left * sum_left / size;
@@ -312,9 +436,10 @@ pub fn rolling_correlation_into(
                 && !crate::math::degenerate_variance(var_right, sum_right_sq, size)
             {
                 let covariance = sum_product - sum_left * sum_right / size;
-                output[index] = covariance / (var_left * var_right).sqrt();
+                value = covariance / (var_left * var_right).sqrt();
             }
         }
+        output[index] = value;
     }
     Ok(())
 }

@@ -37,7 +37,7 @@
 - `golden_example.rs` - 黄金测试框架示例
 - `golden_reference.rs` - 跨语言 golden：AlphaTA 核心必须复现 canonical 输出
 - `accuracy_check.rs` - 精度核对
-- `talib_coverage_matrix.rs` - 版本化 TA-Lib 覆盖矩阵契约
+- `talib_coverage_matrix.rs` - 核心 TA-Lib 公式 surface 与 golden 名册一致性
 - `talib_semantic_contract.rs` - TA-Lib 语义契约
 - `common/golden_loader.rs` - 黄金测试数据加载器
 

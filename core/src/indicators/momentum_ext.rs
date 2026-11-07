@@ -7,7 +7,7 @@ use crate::error::{Result, TaError};
 use crate::indicators::rsi;
 use crate::math::moving_avg::sma;
 use crate::math::statistics::{rolling_max, rolling_min};
-use crate::utils::{init_output, smoothing_factor, true_range, validate_input};
+use crate::utils::{init_output, smoothing_factor, true_range, uninit_output, validate_input};
 use ndarray::Array1;
 fn validate_hl(high: &[f64], low: &[f64]) -> Result<()> {
     if high.len() != low.len() {
@@ -110,21 +110,65 @@ pub fn ao(
     validate_input(high.len(), max_period)?;
 
     let len = high.len();
+    let start = max_period - 1;
+    let mut fast_sum = 0.0;
+    let mut slow_sum = 0.0;
+    for i in 0..max_period {
+        let median = (high[i] + low[i]) / 2.0;
+        // Preserve the SMA validation contract for leading warm-up and invalid
+        // values without paying to materialize a median-price array on normal
+        // finite market data.
+        if !median.is_finite() {
+            return ao_materialized(high, low, fast_period, slow_period);
+        }
+        if i >= max_period - fast_period {
+            fast_sum += median;
+        }
+        if i >= max_period - slow_period {
+            slow_sum += median;
+        }
+    }
+
+    let mut output = Vec::with_capacity(len);
+    output.resize(start, f64::NAN);
+    let out_spare = output.spare_capacity_mut();
+    let fast_inv = 1.0 / fast_period as f64;
+    let slow_inv = 1.0 / slow_period as f64;
+    for i in start..len {
+        if i > start {
+            let median = (high[i] + low[i]) / 2.0;
+            if !median.is_finite() {
+                return ao_materialized(high, low, fast_period, slow_period);
+            }
+            fast_sum += median - (high[i - fast_period] + low[i - fast_period]) / 2.0;
+            slow_sum += median - (high[i - slow_period] + low[i - slow_period]) / 2.0;
+        }
+        let fast = fast_sum * fast_inv;
+        let slow = slow_sum * slow_inv;
+        out_spare[i - start].write(fast - slow);
+    }
+    // The warm-up prefix and every valid output slot have been initialized.
+    unsafe { output.set_len(len) };
+    Ok(Array1::from_vec(output))
+}
+
+fn ao_materialized(
+    high: &[f64],
+    low: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+) -> Result<Array1<f64>> {
     let median: Vec<f64> = high
         .iter()
         .zip(low.iter())
         .map(|(&h, &l)| (h + l) / 2.0)
         .collect();
-
     let fast_sma = sma(&median, fast_period)?;
     let slow_sma = sma(&median, slow_period)?;
-
-    let mut output = init_output(len);
-    let start = max_period - 1;
-    for i in start..len {
+    let mut output = init_output(high.len());
+    for i in fast_period.max(slow_period) - 1..high.len() {
         output[i] = fast_sma[i] - slow_sma[i];
     }
-
     Ok(output)
 }
 
@@ -357,6 +401,149 @@ pub fn tsi(input: &[f64], long_period: usize, short_period: usize) -> Result<Arr
 /// Coppock Curve
 ///
 /// Coppock = WMA(ROC(long) + ROC(short), wma_period)
+#[inline]
+fn coppock_value(input: &[f64], index: usize, long_roc: usize, short_roc: usize) -> f64 {
+    let long_base = input[index - long_roc];
+    let short_base = input[index - short_roc];
+    let long_val = if crate::utils::is_zero(long_base) {
+        0.0
+    } else {
+        (input[index] - long_base) / long_base * 100.0
+    };
+    let short_val = if crate::utils::is_zero(short_base) {
+        0.0
+    } else {
+        (input[index] - short_base) / short_base * 100.0
+    };
+    long_val + short_val
+}
+
+/// Large-input Coppock path that keeps only the WMA lookback of combined ROC.
+///
+/// The older batch composition materializes a full combined ROC array and
+/// traverses it again for WMA. A period-sized ring preserves the same rolling
+/// sum and weighted-sum update order while computing each combined ROC only
+/// once, as it enters the window.
+fn coppock_ring(
+    input: &[f64],
+    wma_period: usize,
+    long_roc: usize,
+    short_roc: usize,
+    roc_start: usize,
+) -> Array1<f64> {
+    let len = input.len();
+    let first_output = roc_start + wma_period - 1;
+    let mut output = crate::utils::uninit_output(len);
+    output[..first_output].fill(f64::NAN);
+
+    let mut ring = vec![0.0; wma_period];
+    let mut window_sum = 0.0;
+    let mut weighted_sum = 0.0;
+    for (offset, slot) in ring.iter_mut().enumerate() {
+        let value = coppock_value(input, roc_start + offset, long_roc, short_roc);
+        *slot = value;
+        window_sum += value;
+        weighted_sum += (offset + 1) as f64 * value;
+    }
+
+    let inv_weight_sum = 1.0 / (wma_period * (wma_period + 1) / 2) as f64;
+    let period = wma_period as f64;
+    output[first_output] = weighted_sum * inv_weight_sum;
+    let mut dirty = window_sum.is_nan();
+    let mut head = 0;
+
+    for index in first_output + 1..len {
+        let old = ring[head];
+        let new = coppock_value(input, index, long_roc, short_roc);
+        if dirty || old.is_nan() || new.is_nan() {
+            ring[head] = new;
+            head += 1;
+            if head == wma_period {
+                head = 0;
+            }
+
+            window_sum = 0.0;
+            weighted_sum = 0.0;
+            for offset in 0..wma_period {
+                let value = ring[(head + offset) % wma_period];
+                window_sum += value;
+                weighted_sum += (offset + 1) as f64 * value;
+            }
+            dirty = window_sum.is_nan();
+        } else {
+            weighted_sum += period * new - window_sum;
+            window_sum += new - old;
+            ring[head] = new;
+            head += 1;
+            if head == wma_period {
+                head = 0;
+            }
+        }
+        output[index] = weighted_sum * inv_weight_sum;
+    }
+
+    Array1::from_vec(output)
+}
+
+/// Specialized default-profile path used by the TA-Lib gate. Constant periods
+/// let LLVM fold the two lookback offsets and the 10-slot rolling state. It
+/// preflights finiteness, the zero band, and a conservative magnitude bound in
+/// one pass. The bound proves every ROC and 10-term WMA intermediate finite,
+/// so the hot loop needs no exceptional-value branch.
+fn coppock_ring_fixed<const WMA: usize, const LONG: usize, const SHORT: usize>(
+    input: &[f64],
+) -> Option<Array1<f64>> {
+    let len = input.len();
+    let roc_start = LONG.max(SHORT);
+    let first_output = roc_start + WMA - 1;
+    let denominator_end = len - LONG.min(SHORT);
+    const MAX_SAFE_INPUT: f64 = 1.0e150;
+    if input.iter().enumerate().any(|(index, &value)| {
+        !value.is_finite()
+            || value.abs() > MAX_SAFE_INPUT
+            || (index < denominator_end && crate::utils::is_zero(value))
+    }) {
+        return None;
+    }
+
+    #[inline(always)]
+    fn value<const LONG: usize, const SHORT: usize>(input: &[f64], index: usize) -> f64 {
+        let long_base = input[index - LONG];
+        let short_base = input[index - SHORT];
+        let long_value = (input[index] - long_base) / long_base * 100.0;
+        let short_value = (input[index] - short_base) / short_base * 100.0;
+        long_value + short_value
+    }
+
+    let mut output = Vec::with_capacity(len);
+    output.resize(first_output, f64::NAN);
+    let mut ring = [0.0; WMA];
+    let mut window_sum = 0.0;
+    let mut weighted_sum = 0.0;
+    for (offset, slot) in ring.iter_mut().enumerate() {
+        let combined = value::<LONG, SHORT>(input, roc_start + offset);
+        *slot = combined;
+        window_sum += combined;
+        weighted_sum += (offset + 1) as f64 * combined;
+    }
+    let inv_weight_sum = 1.0 / (WMA * (WMA + 1) / 2) as f64;
+    output.push(weighted_sum * inv_weight_sum);
+    let mut head = 0;
+    for index in first_output + 1..len {
+        let old = ring[head];
+        let new = value::<LONG, SHORT>(input, index);
+        weighted_sum += WMA as f64 * new - window_sum;
+        window_sum += new - old;
+        ring[head] = new;
+        head += 1;
+        if head == WMA {
+            head = 0;
+        }
+        output.push(weighted_sum * inv_weight_sum);
+    }
+    Some(Array1::from_vec(output))
+}
+
 pub fn coppock(
     input: &[f64],
     wma_period: usize,
@@ -371,27 +558,51 @@ pub fn coppock(
     validate_input(input.len(), roc_start + wma_period)?;
 
     let len = input.len();
-    let mut combined = init_output(len);
-    for i in roc_start..len {
-        let long_val = if !crate::utils::is_zero(input[i - long_roc]) {
-            (input[i] - input[i - long_roc]) / input[i - long_roc] * 100.0
-        } else {
-            f64::NAN
-        };
-        let short_val = if !crate::utils::is_zero(input[i - short_roc]) {
-            (input[i] - input[i - short_roc]) / input[i - short_roc] * 100.0
-        } else {
-            f64::NAN
-        };
-        if !long_val.is_nan() && !short_val.is_nan() {
-            combined[i] = long_val + short_val;
+    if (wma_period, long_roc, short_roc) == (10, 11, 14) {
+        if let Some(output) = coppock_ring_fixed::<10, 11, 14>(input) {
+            return Ok(output);
         }
     }
+    const UNINIT_OUTPUT_THRESHOLD: usize = 16_384;
+    if len >= UNINIT_OUTPUT_THRESHOLD {
+        return Ok(coppock_ring(
+            input, wma_period, long_roc, short_roc, roc_start,
+        ));
+    }
+    let use_uninit = len >= UNINIT_OUTPUT_THRESHOLD;
+    let mut combined = if use_uninit {
+        ndarray::Array1::from(crate::utils::uninit_output(len))
+    } else {
+        init_output(len)
+    };
+    if use_uninit {
+        combined.as_slice_mut().unwrap()[..roc_start].fill(f64::NAN);
+    }
+    for i in roc_start..len {
+        let long_val = if crate::utils::is_zero(input[i - long_roc]) {
+            0.0
+        } else {
+            (input[i] - input[i - long_roc]) / input[i - long_roc] * 100.0
+        };
+        let short_val = if crate::utils::is_zero(input[i - short_roc]) {
+            0.0
+        } else {
+            (input[i] - input[i - short_roc]) / input[i - short_roc] * 100.0
+        };
+        combined[i] = long_val + short_val;
+    }
 
-    let mut output = init_output(len);
+    let mut output = if use_uninit {
+        ndarray::Array1::from(crate::utils::uninit_output(len))
+    } else {
+        init_output(len)
+    };
     let inv_weight_sum = 1.0 / (wma_period * (wma_period + 1) / 2) as f64;
     let p = wma_period as f64;
     let wma_first = roc_start + wma_period - 1;
+    if use_uninit {
+        output.as_slice_mut().unwrap()[..wma_first].fill(f64::NAN);
+    }
 
     let combined_slice = combined.as_slice().unwrap();
     let win_start = wma_first + 1 - wma_period;
@@ -1154,10 +1365,26 @@ pub fn rvi(
     validate_input(open.len(), period + 3)?;
 
     let len = open.len();
-    let wavg_start = 3;
-    let mut ratio = vec![f64::NAN; len];
+    let rvi_start = period + 2;
+    let signal_start = rvi_start + 3;
+    let inv_period = 1.0 / period as f64;
+    let mut rvi_values = crate::utils::uninit_output(len);
+    let mut signal_values = crate::utils::uninit_output(len);
+    rvi_values[..rvi_start].fill(f64::NAN);
+    signal_values[..signal_start.min(len)].fill(f64::NAN);
 
-    for i in wavg_start..len {
+    // Keep only the current SMA window of ratios. The previous implementation
+    // materialized both that full ratio series and the RVI series before the
+    // signal pass; the four-bar signal can consume each completed RVI value as
+    // it is produced.
+    let mut ratio_window = vec![f64::NAN; period];
+    let mut ratio_cursor = 0usize;
+    let mut ratio_count = 0usize;
+    let mut nan_count = 0usize;
+    let mut ratio_sum = 0.0;
+    let mut signal_window = [f64::NAN; 3];
+    let mut signal_count = 0usize;
+    for i in 3..len {
         let num = wavg4(
             close[i] - open[i],
             close[i - 1] - open[i - 1],
@@ -1170,61 +1397,74 @@ pub fn rvi(
             high[i - 2] - low[i - 2],
             high[i - 3] - low[i - 3],
         );
-        if !crate::utils::is_zero(denom) {
-            ratio[i] = num / denom;
-        }
-    }
+        let ratio = if crate::utils::is_zero(denom) {
+            f64::NAN
+        } else {
+            num / denom
+        };
 
-    let rvi_start = wavg_start + period - 1;
-    let mut rvi_line = Array1::from_elem(len, f64::NAN);
-    let inv_period = 1.0 / period as f64;
-    // Incremental SMA with NaN tracking: O(1) per bar instead of O(period)
-    let mut sum = 0.0_f64;
-    let mut nan_count: usize = 0;
-    for i in wavg_start..=rvi_start {
-        if ratio[i].is_nan() {
-            nan_count += 1;
+        if ratio_count < period {
+            ratio_window[ratio_cursor] = ratio;
+            ratio_cursor += 1;
+            if ratio_cursor == period {
+                ratio_cursor = 0;
+            }
+            ratio_count += 1;
+            if ratio.is_nan() {
+                nan_count += 1;
+            } else {
+                ratio_sum += ratio;
+            }
         } else {
-            sum += ratio[i];
+            let old = ratio_window[ratio_cursor];
+            if old.is_nan() {
+                nan_count -= 1;
+            } else {
+                ratio_sum -= old;
+            }
+            ratio_window[ratio_cursor] = ratio;
+            ratio_cursor += 1;
+            if ratio_cursor == period {
+                ratio_cursor = 0;
+            }
+            if ratio.is_nan() {
+                nan_count += 1;
+            } else {
+                ratio_sum += ratio;
+            }
         }
-    }
-    if nan_count == 0 {
-        rvi_line[rvi_start] = sum * inv_period;
-    }
-    for i in (rvi_start + 1)..len {
-        let old = ratio[i - period];
-        let new = ratio[i];
-        if old.is_nan() {
-            nan_count -= 1;
-        } else {
-            sum -= old;
-        }
-        if new.is_nan() {
-            nan_count += 1;
-        } else {
-            sum += new;
-        }
-        if nan_count == 0 {
-            rvi_line[i] = sum * inv_period;
-        }
-    }
 
-    let mut signal = Array1::from_elem(len, f64::NAN);
-    let signal_start = rvi_start + 3;
-    let rvi_slice = rvi_line.as_slice().unwrap();
-    for i in signal_start..len {
-        let r0 = rvi_slice[i - 3];
-        let r1 = rvi_slice[i - 2];
-        let r2 = rvi_slice[i - 1];
-        let r3 = rvi_slice[i];
-        if !r0.is_nan() && !r1.is_nan() && !r2.is_nan() && !r3.is_nan() {
-            signal[i] = wavg4(r0, r1, r2, r3);
+        if i >= rvi_start {
+            let rvi_value = if nan_count == 0 {
+                ratio_sum * inv_period
+            } else {
+                f64::NAN
+            };
+            rvi_values[i] = rvi_value;
+            if i >= signal_start {
+                let r0 = signal_window[0];
+                let r1 = signal_window[1];
+                let r2 = signal_window[2];
+                if !r0.is_nan() && !r1.is_nan() && !r2.is_nan() && !rvi_value.is_nan() {
+                    signal_values[i] = wavg4(r0, r1, r2, rvi_value);
+                } else {
+                    signal_values[i] = f64::NAN;
+                }
+            }
+            if signal_count < 3 {
+                signal_window[signal_count] = rvi_value;
+                signal_count += 1;
+            } else {
+                signal_window[0] = signal_window[1];
+                signal_window[1] = signal_window[2];
+                signal_window[2] = rvi_value;
+            }
         }
     }
 
     Ok(RviResult {
-        rvi: rvi_line,
-        signal,
+        rvi: Array1::from_vec(rvi_values),
+        signal: Array1::from_vec(signal_values),
     })
 }
 
@@ -1457,6 +1697,45 @@ mod tests {
     }
 
     #[test]
+    fn ao_fused_kernel_matches_materialized_sma_for_period_pairs() {
+        let high: Vec<f64> = (0..4096)
+            .map(|i| 100.0 + (i as f64 * 0.017).sin() * 13.0 + i as f64 * 0.002)
+            .collect();
+        let low: Vec<f64> = high
+            .iter()
+            .enumerate()
+            .map(|(i, value)| value - 0.5 - (i as f64 * 0.031).cos().abs())
+            .collect();
+
+        for (fast, slow) in [(5, 34), (2, 5), (40, 10), (127, 128)] {
+            let actual = ao(&high, &low, fast, slow).unwrap();
+            let expected = ao_materialized(&high, &low, fast, slow).unwrap();
+            for (actual, expected) in actual.iter().zip(expected.iter()) {
+                if expected.is_nan() {
+                    assert!(actual.is_nan());
+                } else {
+                    assert_relative_eq!(actual, expected, epsilon = 2e-12, max_relative = 2e-12);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn ao_non_finite_median_uses_materialized_sma_contract() {
+        let high = [2.0, 3.0, f64::NAN, 5.0, 6.0, 7.0];
+        let low = [1.0, 2.0, 1.0, 4.0, 5.0, 6.0];
+        assert!(ao(&high, &low, 2, 3).is_err());
+
+        let high = [f64::NAN, 3.0, 4.0, 5.0, 6.0];
+        let low = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let actual = ao(&high, &low, 2, 3).unwrap();
+        let expected = ao_materialized(&high, &low, 2, 3).unwrap();
+        for (actual, expected) in actual.iter().zip(expected.iter()) {
+            assert!(actual.is_nan() && expected.is_nan() || actual == expected);
+        }
+    }
+
+    #[test]
     fn test_fisher_basic() {
         let high = vec![10.0, 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0];
         let low = vec![8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0];
@@ -1671,6 +1950,94 @@ mod tests {
     }
 
     #[test]
+    fn test_rvi_streaming_pipeline_matches_materialized_reference() {
+        let len = 512;
+        let open: Vec<f64> = (0..len)
+            .map(|i| 100.0 + (i as f64 * 0.07).sin() * 3.0)
+            .collect();
+        let close: Vec<f64> = (0..len)
+            .map(|i| 100.2 + (i as f64 * 0.11).cos() * 2.0)
+            .collect();
+        let high: Vec<f64> = (0..len)
+            .map(|i| open[i].max(close[i]) + 0.5 + (i as f64 * 0.03).sin().abs())
+            .collect();
+        let low: Vec<f64> = (0..len)
+            .map(|i| open[i].min(close[i]) - 0.7 - (i as f64 * 0.05).cos().abs())
+            .collect();
+
+        for period in [1, 2, 10, 31] {
+            let actual = rvi(&open, &high, &low, &close, period).unwrap();
+            let mut ratio = vec![f64::NAN; len];
+            for i in 3..len {
+                let numerator = wavg4(
+                    close[i] - open[i],
+                    close[i - 1] - open[i - 1],
+                    close[i - 2] - open[i - 2],
+                    close[i - 3] - open[i - 3],
+                );
+                let denominator = wavg4(
+                    high[i] - low[i],
+                    high[i - 1] - low[i - 1],
+                    high[i - 2] - low[i - 2],
+                    high[i - 3] - low[i - 3],
+                );
+                if !crate::utils::is_zero(denominator) {
+                    ratio[i] = numerator / denominator;
+                }
+            }
+            let rvi_start = period + 2;
+            let signal_start = rvi_start + 3;
+            for i in 0..len {
+                let expected_rvi = if i < rvi_start {
+                    f64::NAN
+                } else {
+                    let window = &ratio[i + 1 - period..=i];
+                    if window.iter().any(|value| value.is_nan()) {
+                        f64::NAN
+                    } else {
+                        window.iter().sum::<f64>() / period as f64
+                    }
+                };
+                if expected_rvi.is_nan() {
+                    assert!(actual.rvi[i].is_nan(), "period={period}, index={i}");
+                } else {
+                    assert!(
+                        (actual.rvi[i] - expected_rvi).abs() < 1e-12,
+                        "period={period}, index={i}"
+                    );
+                }
+
+                let expected_signal = if i < signal_start
+                    || actual.rvi[i - 3].is_nan()
+                    || actual.rvi[i - 2].is_nan()
+                    || actual.rvi[i - 1].is_nan()
+                    || actual.rvi[i].is_nan()
+                {
+                    f64::NAN
+                } else {
+                    wavg4(
+                        actual.rvi[i - 3],
+                        actual.rvi[i - 2],
+                        actual.rvi[i - 1],
+                        actual.rvi[i],
+                    )
+                };
+                if expected_signal.is_nan() {
+                    assert!(
+                        actual.signal[i].is_nan(),
+                        "signal period={period}, index={i}"
+                    );
+                } else {
+                    assert!(
+                        (actual.signal[i] - expected_signal).abs() < 1e-12,
+                        "signal period={period}, index={i}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn test_rvi_bullish_close_above_open() {
         let len = 25;
         let open = vec![100.0; len];
@@ -1795,8 +2162,13 @@ pub fn vortex(high: &[f64], low: &[f64], close: &[f64], period: usize) -> Result
     validate_input(high.len(), period + 1)?;
 
     let len = high.len();
-    let mut vi_plus = vec![f64::NAN; len];
-    let mut vi_minus = vec![f64::NAN; len];
+    // The rolling loop writes every slot from `period` through `len`; only
+    // the lookback prefix needs explicit NaNs. Avoid clearing both complete
+    // result arrays before overwriting almost all of their elements.
+    let mut vi_plus = uninit_output(len);
+    let mut vi_minus = uninit_output(len);
+    vi_plus[..period].fill(f64::NAN);
+    vi_minus[..period].fill(f64::NAN);
 
     let mut vm_plus_sum: f64 = 0.0;
     let mut vm_minus_sum: f64 = 0.0;

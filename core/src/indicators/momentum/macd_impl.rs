@@ -49,6 +49,12 @@ pub fn macd(
             constraint: "less than slow_period".to_string(),
         });
     }
+    if signal_period == 0 {
+        return Err(TaError::InvalidParameter {
+            name: "signal_period".to_string(),
+            constraint: "greater than 0".to_string(),
+        });
+    }
     if let Some(idx) = input.iter().position(|v| !v.is_finite()) {
         #[cfg(feature = "metrics")]
         crate::metrics::input_rejected("macd", "non_finite");
@@ -80,9 +86,9 @@ pub(crate) fn macd_inner(
     signal_period: usize,
 ) -> Result<MacdResult> {
     let len = input.len();
-    // All three outputs are written completely below. Keep them uninitialized
-    // until each slot receives its final value so the public owned-array path
-    // does not pay three full NaN-fill passes before the MACD recurrences.
+    // The fused kernel writes every output slot once. The MACD line values
+    // needed to seed the signal EMA are accumulated as scalars, so we do not
+    // materialize and reread a full intermediate MACD series.
     let mut macd_line = Vec::with_capacity(len);
     let mut signal = Vec::with_capacity(len);
     let mut hist = Vec::with_capacity(len);
@@ -92,93 +98,87 @@ pub(crate) fn macd_inner(
         hist.set_len(len);
     }
 
-    if len == 0 {
-        return Ok(MacdResult {
-            macd: Array1::from_vec(macd_line),
-            signal: Array1::from_vec(signal),
-            hist: Array1::from_vec(hist),
-        });
-    }
-
-    // TA-Lib MACD DEFAULT 兼容模式（TA_MACD.c）:
-    // 1. slow EMA 种子 = SMA(input[0..slow_period])
-    // 2. fast EMA 种子 = SMA(input[slow-fast..slow]) — slow 窗口最后 fast 个值
-    // 3. EMA 递推用 FMA: fma(val - prev, k, prev)
-    // 4. Signal 种子 = SMA(前 signal_period 个 MACD 值)
-    let fast_k = 2.0 / (fast_period as f64 + 1.0);
-    let slow_k = 2.0 / (slow_period as f64 + 1.0);
-    let signal_k = 2.0 / (signal_period as f64 + 1.0);
-
-    // 累积 slow-only 部分（前 slow_period - fast_period 个值）
-    let offset = slow_period - fast_period;
-    let mut slow_sum: f64 = 0.0;
-    for i in 0..offset {
-        slow_sum += input[i];
-    }
-    // 累积共享部分（接下来 fast_period 个值），同时建立 fast 种子
-    let mut fast_sum: f64 = 0.0;
-    for i in offset..slow_period {
-        fast_sum += input[i];
-        slow_sum += input[i];
-    }
-    let mut prev_slow = slow_sum / slow_period as f64;
-    let mut prev_fast = fast_sum / fast_period as f64;
-
-    let macd_start = slow_period - 1;
-
-    for value in &mut macd_line[..macd_start.min(len)] {
-        *value = f64::NAN;
-    }
-    let signal_start = macd_start + signal_period - 1;
-    for value in &mut signal[..signal_start.min(len)] {
-        *value = f64::NAN;
-    }
-    for value in &mut hist[..signal_start.min(len)] {
-        *value = f64::NAN;
-    }
-
-    // 种子点处的 MACD 值
-    let mut macd_val = prev_fast - prev_slow;
-    macd_line[macd_start] = macd_val;
-
-    // EMA 递推：使用 FMA 精确匹配 TA-Lib 的浮点舍入路径
-    for i in slow_period..len {
-        let val = input[i];
-        prev_fast = (val - prev_fast) * fast_k + prev_fast;
-        prev_slow = (val - prev_slow) * slow_k + prev_slow;
-        macd_val = prev_fast - prev_slow;
-        macd_line[i] = macd_val;
-    }
-
-    // Signal line：SMA 种子 + FMA 递推
-    if len > signal_start {
-        let mut sig_sum: f64 = 0.0;
-        for i in macd_start..=signal_start {
-            sig_sum += macd_line[i];
-        }
-        let mut prev_signal = sig_sum / signal_period as f64;
-        signal[signal_start] = prev_signal;
-        hist[signal_start] = macd_line[signal_start] - prev_signal;
-
-        for i in (signal_start + 1)..len {
-            let m = macd_line[i];
-            prev_signal = (m - prev_signal) * signal_k + prev_signal;
-            signal[i] = prev_signal;
-            hist[i] = m - prev_signal;
-        }
-    }
-
-    // Public TA-Lib contract: MACD, signal and histogram share one lookback.
-    // Earlier MACD values are internal signal-seed intermediates, not outputs.
-    for index in macd_start..signal_start.min(len) {
-        macd_line[index] = f64::NAN;
-    }
+    macd_fused_kernel(
+        input,
+        fast_period,
+        slow_period,
+        signal_period,
+        &mut macd_line,
+        &mut signal,
+        &mut hist,
+    );
 
     Ok(MacdResult {
         macd: Array1::from_vec(macd_line),
         signal: Array1::from_vec(signal),
         hist: Array1::from_vec(hist),
     })
+}
+
+/// Run the TA-Lib MACD recurrence while streaming its MACD values directly
+/// into the signal seed and outputs. Every output element is initialized here;
+/// pre-signal MACD values stay private scalars because the public API masks them
+/// as warm-up values anyway.
+#[inline]
+fn macd_fused_kernel(
+    input: &[f64],
+    fast_period: usize,
+    slow_period: usize,
+    signal_period: usize,
+    macd_line: &mut [f64],
+    signal: &mut [f64],
+    histogram: &mut [f64],
+) {
+    let len = input.len();
+    let macd_start = slow_period - 1;
+    let signal_start = macd_start + signal_period - 1;
+    let warmup_end = signal_start.min(len);
+    macd_line[..warmup_end].fill(f64::NAN);
+    signal[..warmup_end].fill(f64::NAN);
+    histogram[..warmup_end].fill(f64::NAN);
+    if len <= signal_start {
+        return;
+    }
+
+    let fast_k = 2.0 / (fast_period as f64 + 1.0);
+    let slow_k = 2.0 / (slow_period as f64 + 1.0);
+    let signal_k = 2.0 / (signal_period as f64 + 1.0);
+    let offset = slow_period - fast_period;
+    let mut slow_sum = 0.0;
+    for &value in &input[..offset] {
+        slow_sum += value;
+    }
+    let mut fast_sum = 0.0;
+    for &value in &input[offset..slow_period] {
+        fast_sum += value;
+        slow_sum += value;
+    }
+    let mut previous_fast = fast_sum / fast_period as f64;
+    let mut previous_slow = slow_sum / slow_period as f64;
+    let mut signal_seed = 0.0;
+    let mut previous_signal = 0.0;
+
+    for i in macd_start..len {
+        if i > macd_start {
+            let value = input[i];
+            previous_fast = (value - previous_fast) * fast_k + previous_fast;
+            previous_slow = (value - previous_slow) * slow_k + previous_slow;
+        }
+        let macd_value = previous_fast - previous_slow;
+        if i < signal_start {
+            signal_seed += macd_value;
+            continue;
+        }
+
+        macd_line[i] = macd_value;
+        previous_signal = if i == signal_start {
+            (signal_seed + macd_value) / signal_period as f64
+        } else {
+            (macd_value - previous_signal) * signal_k + previous_signal
+        };
+        signal[i] = previous_signal;
+        histogram[i] = macd_value - previous_signal;
+    }
 }
 
 /// MACD with controllable MA type (MACDEXT)
@@ -324,50 +324,10 @@ pub fn macdfix_with_signal(input: &[f64], signal_period: usize) -> Result<MacdRe
     }
     validate_input(input.len(), 26 + signal_period - 1)?;
     let len = input.len();
-    let mut macd_line = vec![f64::NAN; len];
-    let mut signal = vec![f64::NAN; len];
-    let mut hist = vec![f64::NAN; len];
-
-    // MACDFIX uses the fixed TA-Lib smoothing constants 0.15 and 0.075,
-    // rather than recomputing 2/(period+1) as the general MACD path does.
-    // The distinction is small but accumulates enough to fail parity.
-    let fast_period = 12;
-    let slow_period = 26;
-    let fast_k = 0.15;
-    let slow_k = 0.075;
-    let signal_k = 2.0 / (signal_period as f64 + 1.0);
-    let mut slow_sum = 0.0;
-    for &value in &input[..slow_period] {
-        slow_sum += value;
-    }
-    let mut fast_sum = 0.0;
-    for &value in &input[slow_period - fast_period..slow_period] {
-        fast_sum += value;
-    }
-    let mut fast = fast_sum / fast_period as f64;
-    let mut slow = slow_sum / slow_period as f64;
-    let first_macd = slow_period - 1;
-    let mut macd_value = fast - slow;
-    macd_line[first_macd] = macd_value;
-    for (i, &value) in input.iter().enumerate().skip(slow_period) {
-        fast = (value - fast) * fast_k + fast;
-        slow = (value - slow) * slow_k + slow;
-        macd_value = fast - slow;
-        macd_line[i] = macd_value;
-    }
-
-    let first_output = first_macd + signal_period - 1;
-    let mut signal_value =
-        macd_line[first_macd..=first_output].iter().sum::<f64>() / signal_period as f64;
-    signal[first_output] = signal_value;
-    hist[first_output] = macd_line[first_output] - signal_value;
-    for i in first_output + 1..len {
-        signal_value = (macd_line[i] - signal_value) * signal_k + signal_value;
-        signal[i] = signal_value;
-        hist[i] = macd_line[i] - signal_value;
-    }
-    // TA-Lib only exposes the stable signal zone for MACDFIX.
-    macd_line[..first_output].fill(f64::NAN);
+    let mut macd_line = crate::utils::uninit_output(len);
+    let mut signal = crate::utils::uninit_output(len);
+    let mut hist = crate::utils::uninit_output(len);
+    macdfix_kernel_into(input, signal_period, &mut macd_line, &mut signal, &mut hist);
     Ok(MacdResult {
         macd: Array1::from_vec(macd_line),
         signal: Array1::from_vec(signal),
@@ -398,8 +358,18 @@ pub fn macdfix_into(
             constraint: "must each have the same length as input".to_string(),
         });
     }
-    let len = input.len();
+    macdfix_kernel_into(input, signal_period, macd_line, signal, hist);
+    Ok(())
+}
 
+#[inline]
+fn macdfix_kernel_into(
+    input: &[f64],
+    signal_period: usize,
+    macd_line: &mut [f64],
+    signal: &mut [f64],
+    hist: &mut [f64],
+) {
     let mut slow_sum = 0.0;
     for &value in &input[..26] {
         slow_sum += value;
@@ -410,33 +380,33 @@ pub fn macdfix_into(
     }
     let mut fast = fast_sum / 12.0;
     let mut slow = slow_sum / 26.0;
-    let first_macd = 25;
-    let mut macd_value = fast - slow;
-    macd_line[first_macd] = macd_value;
-    for (i, &value) in input.iter().enumerate().skip(26) {
-        fast = (value - fast) * 0.15 + fast;
-        slow = (value - slow) * 0.075 + slow;
-        macd_value = fast - slow;
-        macd_line[i] = macd_value;
-    }
-
-    let first_output = first_macd + signal_period - 1;
+    let first_output = 25 + signal_period - 1;
+    macd_line[..first_output].fill(f64::NAN);
     signal[..first_output].fill(f64::NAN);
     hist[..first_output].fill(f64::NAN);
-    let mut signal_value =
-        macd_line[first_macd..=first_output].iter().sum::<f64>() / signal_period as f64;
-    signal[first_output] = signal_value;
-    hist[first_output] = macd_line[first_output] - signal_value;
     let signal_k = 2.0 / (signal_period as f64 + 1.0);
-    for i in first_output + 1..len {
-        signal_value = (macd_line[i] - signal_value) * signal_k + signal_value;
+    let mut signal_seed = 0.0;
+    let mut signal_value = 0.0;
+    for (i, &value) in input.iter().enumerate().skip(25) {
+        if i >= 26 {
+            fast = (value - fast) * 0.15 + fast;
+            slow = (value - slow) * 0.075 + slow;
+        }
+        let macd_value = fast - slow;
+        if i < first_output {
+            signal_seed += macd_value;
+            continue;
+        }
+
+        macd_line[i] = macd_value;
+        if i == first_output {
+            signal_value = (signal_seed + macd_value) / signal_period as f64;
+        } else {
+            signal_value = (macd_value - signal_value) * signal_k + signal_value;
+        }
         signal[i] = signal_value;
-        hist[i] = macd_line[i] - signal_value;
+        hist[i] = macd_value - signal_value;
     }
-    // TA-Lib only exposes the stable signal zone for MACDFIX; the earlier
-    // MACD state is used internally to seed the signal but remains NaN.
-    macd_line[..first_output].fill(f64::NAN);
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -480,76 +450,15 @@ pub fn macd_into(
         });
     }
 
-    // TA-Lib MACD DEFAULT 兼容模式 — 与 macd_inner() 逐位一致。
-    // 1. slow EMA 种子 = SMA(input[0..slow_period])
-    // 2. fast EMA 种子 = SMA(input[slow-fast..slow])
-    // 3. EMA 递推用 FMA: fma(val - prev, k, prev)
-    // 4. Signal 种子 = SMA(前 signal_period 个 MACD 值)
-    let fast_k = 2.0 / (fast_period as f64 + 1.0);
-    let slow_k = 2.0 / (slow_period as f64 + 1.0);
-    let signal_k = 2.0 / (signal_period as f64 + 1.0);
-
-    // 累积 slow-only 部分
-    let offset = slow_period - fast_period;
-    let mut slow_sum: f64 = 0.0;
-    for i in 0..offset {
-        slow_sum += input[i];
-    }
-    // 累积共享部分，同时建立 fast 种子
-    let mut fast_sum: f64 = 0.0;
-    for i in offset..slow_period {
-        fast_sum += input[i];
-        slow_sum += input[i];
-    }
-    let mut prev_slow = slow_sum / slow_period as f64;
-    let mut prev_fast = fast_sum / fast_period as f64;
-
-    let macd_start = slow_period - 1;
-
-    // 种子点处的 MACD 值
-    let mut macd_val = prev_fast - prev_slow;
-    macd_line[macd_start] = macd_val;
-
-    // EMA 递推：FMA
-    for i in slow_period..len {
-        let val = input[i];
-        prev_fast = (val - prev_fast) * fast_k + prev_fast;
-        prev_slow = (val - prev_slow) * slow_k + prev_slow;
-        macd_val = prev_fast - prev_slow;
-        macd_line[i] = macd_val;
-    }
-
-    // Signal line：SMA 种子 + FMA 递推
-    let signal_start = macd_start + signal_period - 1;
-    if len > signal_start {
-        let mut sig_sum: f64 = 0.0;
-        for i in macd_start..=signal_start {
-            sig_sum += macd_line[i];
-        }
-        let mut prev_signal = sig_sum / signal_period as f64;
-        signal[signal_start] = prev_signal;
-        histogram[signal_start] = macd_line[signal_start] - prev_signal;
-
-        for i in (signal_start + 1)..len {
-            let m = macd_line[i];
-            prev_signal = (m - prev_signal) * signal_k + prev_signal;
-            signal[i] = prev_signal;
-            histogram[i] = m - prev_signal;
-        }
-    }
-
-    // 预热区填 NaN
-    for i in 0..macd_start.min(len) {
-        macd_line[i] = f64::NAN;
-    }
-    for i in 0..signal_start.min(len) {
-        signal[i] = f64::NAN;
-        histogram[i] = f64::NAN;
-    }
-
-    // Same TA-Lib public lookback as macd(): pre-signal values are seed state.
-    macd_line[macd_start..signal_start].fill(f64::NAN);
-
+    macd_fused_kernel(
+        input,
+        fast_period,
+        slow_period,
+        signal_period,
+        macd_line,
+        signal,
+        histogram,
+    );
     Ok(())
 }
 

@@ -6,16 +6,16 @@ This guide is the shortest path from a fresh machine to a verified Finkit calcul
 
 Finkit is a high-performance financial indicator, formula, factor, and streaming-computation library. It is not a broker, order-routing system, or full research platform.
 
-The workspace currently targets **v0.2.0**. The latest published GitHub Release is **v0.1.15**; use that release for downloadable assets, or build the v0.2.0 workspace from source.
+The workspace currently targets **v0.3.0**. The latest published GitHub Release is **v0.2.0**; use that release for downloadable assets, or build the v0.3.0 workspace from source.
 
-The published `v0.1.15` Release contains:
+The published `v0.2.0` Release contains:
 
 - Python ABI3 wheels for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64;
-- `finkit-0.1.15.crate`;
+- `finkit-0.2.0.crate`;
 - `finkit-cli-linux-x86_64`;
 - `SHA256SUMS`.
 
-Node.js, Java/JNI, and C/C++ are validated from source by CI but are not claimed as public registry packages. The v0.2.0 publish workflow is prepared, but publication and clean-consumer smoke tests are still release steps.
+Node.js, Java/JNI, and C/C++ are validated from source by CI but are not claimed as public registry packages. The v0.3.0 publish workflow is prepared, but publication and clean-consumer smoke tests are still release steps.
 
 ## 2. Core data rules
 
@@ -30,14 +30,14 @@ Before using any API, keep these rules consistent across languages:
 
 ## 3. Fastest start: Python
 
-Download the wheel matching your platform from the published GitHub `v0.1.15` Release, then install it locally:
+Download the wheel matching your platform from the published GitHub `v0.2.0` Release, then install it locally:
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install ./finkit-0.1.15-<platform>.whl
+python -m pip install ./finkit-0.2.0-<platform>.whl
 ```
 
-To try the unreleased v0.2.0 workspace instead, build the binding from source as described in [installation.md](installation.md).
+To try the unreleased v0.3.0 workspace instead, build the binding from source as described in [installation.md](installation.md).
 
 Verify the installation:
 
@@ -119,7 +119,7 @@ Until a registry package is independently verified, use the release tag or a loc
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.1.15" }
+finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.2.0" }
 ```
 
 Example:

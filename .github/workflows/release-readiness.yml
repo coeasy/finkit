@@ -1,9 +1,10 @@
 # Release readiness aggregator (V4 plan §22 / P0-07).
 #
-# A tag may only be created when every required release workflow succeeded on
+# A tag may only be created when every pre-release workflow succeeded on
 # exactly the commit being tagged. This workflow re-checks that contract after
 # each required workflow finishes and re-aggregates the full matrix for the
-# SHA. It is advisory evidence for humans AND the machine-checkable gate:
+# SHA. Tag-driven asset workflows run after the tag exists and are validated
+# separately. This is advisory evidence for humans AND the machine-checkable gate:
 # `scripts/release_readiness_aggregate.py` exits non-zero (NO RELEASE) unless
 # every required workflow is green on the same SHA.
 #
@@ -21,7 +22,6 @@ on:
       - Multilang cross-platform
       - Multilang release
       - Competitive benchmark
-      - Release installers
     types: [completed]
   workflow_dispatch:
     inputs:

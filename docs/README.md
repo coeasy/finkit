@@ -2,7 +2,7 @@
 
 This directory is the canonical documentation set for Finkit.
 
-Finkit is a Rust-powered quantitative finance engine for technical analysis, reusable formulas, factor graphs, streaming computation, feature engineering, and research workflows. The documentation deliberately separates **published v0.1.15 distribution facts** from **v0.2.0 release-candidate source and CI candidates** so unreleased work is never presented as already published.
+Finkit is a Rust-powered quantitative finance engine for technical analysis, reusable formulas, factor graphs, streaming computation, feature engineering, and research workflows. As of 2026-11-06, the latest public GitHub Release is **v0.2.0**; this repository targets **v0.3.0**. A candidate tag or passing local test is not itself proof that every package is available. See the [release page](https://github.com/coeasy/finkit/releases) for the current public release record.
 
 ## Start here
 
@@ -27,10 +27,13 @@ Choose the path that matches your goal:
 | Diagnose failures | [Troubleshooting](troubleshooting.md) |
 | 查看当前架构与重构总纲 | [架构、开发细节与分层重构总纲 V5](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) |
 | 查看历史全链路审查记录（2026-10-13） | [架构审查与发布整改](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) |
-| 查看当前项目功能、架构与重构建议 | [项目功能、架构与重构审查（2026-10-18）](PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md) |
+| 查看当前项目功能、架构与重构建议 | [项目功能、架构与重构审查（2026-10-23）](PROJECT_FUNCTIONALITY_ARCHITECTURE_REVIEW_2026-10-23.md) |
+| 查看项目架构、开发细节问题与分阶段优化方案（2026-10-26） | [架构与重构方案（2026-10-26）](PROJECT_ARCHITECTURE_DETAILED_REVIEW_AND_REFACTOR_PLAN_2026-10-26.md) |
+| 查看 TA-Lib 全量兼容、五种公式系统与逐项性能重构路线 | [TA-Lib parity 与公式方言重构方案](TA_LIB_PARITY_AND_FORMULA_DIALECT_REFACTOR_PLAN_2026-10-23.md) |
 | 查看 Tree / Plan 入口边界 | [公式入口矩阵](architecture/formula-entry-matrix.md) |
 | 查看核心工作流与端到端覆盖 | [核心工作流矩阵](architecture/workflow-matrix.md) |
 | 查看当前实现状态（可信矩阵） | [架构现状矩阵](architecture/status-matrix.md) |
+| 查看 core 模块边界与变更影响 | [Core 模块边界](architecture/core-module-boundaries.md) |
 
 ## Product model
 
@@ -65,14 +68,14 @@ Two properties are contracts rather than aspirations:
 
 Path agreement alone is not evidence of correctness: two paths that are wrong in the same way still agree. Numerical gates therefore pair agreement with **absolute-property assertions** (exact finite-value counts, identities, non-degeneracy) and **duplicate-implementation cross-checks**. Details in [formula-runtime-contract.md](formula-runtime-contract.md) §3.1–§3.2.
 
-## Published v0.1.15 contract
+## Published v0.2.0 contract
 
-The GitHub `v0.1.15` Release is the authoritative distribution contract for the current published version.
+The GitHub `v0.2.0` Release is the authoritative distribution contract for the current published version.
 
 Its release assets include:
 
 - four Python `cp38-abi3` wheels for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64;
-- `finkit-0.1.15.crate`;
+- `finkit-0.2.0.crate`;
 - `finkit-cli-linux-x86_64`;
 - `SHA256SUMS`.
 
@@ -90,7 +93,7 @@ The active next-release work expands the reusable runtime and factor-research st
 - retained materializations for caller-owned range/into updates;
 - reuse-first Factor Research integration built on canonical returns/statistics/regression/rank/risk/calendar infrastructure.
 
-These capabilities are next-release development facts and are not retroactively claimed as published v0.1.15 assets.
+These capabilities are next-release development facts and are not retroactively claimed as published v0.2.0 assets.
 
 ## Multi-language validation model
 
@@ -187,7 +190,8 @@ moved out of the working tree (see below); nothing here is a second baseline.
 | Document | Purpose |
 | --- | --- |
 | [FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) | 架构与实现背景总纲 —— 分层架构地图、开发细节、V4 遗留项基线核验 |
-| [PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md](PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md) | **当前项目范围审查与重构总纲** —— 功能闭环、实现缺口、结构问题与阶段计划 |
+| [PROJECT_FUNCTIONALITY_ARCHITECTURE_REVIEW_2026-10-23.md](PROJECT_FUNCTIONALITY_ARCHITECTURE_REVIEW_2026-10-23.md) | 最新项目审查快照（`5252c15b` / `v0.2.0`）—— 功能地图、端到端判断、覆盖统计可信度与后续重构建议 |
+| [PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md](PROJECT_REVIEW_AND_REFACTOR_PLAN_2026-10-18.md) | 历史审查快照 —— 以 2026-10-18 候选工作树和当时的 CI 状态为准，不代表当前 release |
 | [benchmark-baselines/architecture-v3-installed-wheel.json](benchmark-baselines/architecture-v3-installed-wheel.json) | Architecture v3 安装 wheel 性能门槛的三次独立 Actions 基准与 10% 非回归容差 |
 | [ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) | 历史审查记录 —— 三轮逻辑/贯通核查、整改进展、发布验证及当时限制 |
 
@@ -282,4 +286,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last product/documentation review: 2026-10-18. Workspace target: v0.2.0 candidate. Latest published distribution baseline: v0.1.15._
+_Last product/documentation review: 2026-10-18. Workspace target: v0.2.0 candidate. Latest published distribution baseline: v0.2.0._

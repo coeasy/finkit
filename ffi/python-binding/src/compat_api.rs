@@ -3,6 +3,7 @@
 //! dictionary construction and lets the Rust kernels remain the single source
 //! of numerical semantics for both the batch and Python APIs.
 
+use crate::conversion::PY_GIL_RELEASE_THRESHOLD;
 use ::finkit::indicators;
 use ::finkit::math::moving_avg;
 use ::finkit::patterns::candlestick;
@@ -10,9 +11,96 @@ use numpy::{PyArray1, PyReadonlyArray1};
 use pyo3::prelude::*;
 use std::mem::MaybeUninit;
 
+pub const NUMPY_DIRECT_NAMES: &[&str] = &[
+    "add",
+    "div",
+    "max",
+    "min",
+    "minmax",
+    "ha",
+    "mult",
+    "qstick",
+    "sub",
+    "nvi",
+    "pvi",
+    "pvt",
+    "marketfi",
+    "wad",
+    "cdl2crows",
+    "cdl3blackcrows",
+    "cdl3inside",
+    "cdl3linestrike",
+    "cdl3outside",
+    "cdl3starsinsouth",
+    "cdl3whitesoldiers",
+    "cdlabandonedbaby",
+    "cdladvanceblock",
+    "cdlbelthold",
+    "cdlbreakaway",
+    "cdlclosingmarubozu",
+    "cdlconcealbabyswall",
+    "cdlcounterattack",
+    "cdldarkcloudcover",
+    "cdldoji",
+    "cdldojistar",
+    "cdldragonflydoji",
+    "cdlengulfing",
+    "cdleveningdojistar",
+    "cdleveningstar",
+    "cdlgapsidesidewhite",
+    "cdlgravestonedoji",
+    "cdlhammer",
+    "cdlhangingman",
+    "cdlharami",
+    "cdlharamicross",
+    "cdlhighwave",
+    "cdlhikkake",
+    "cdlhikkakemod",
+    "cdlhomingpigeon",
+    "cdlidentical3crows",
+    "cdlinneck",
+    "cdlinvertedhammer",
+    "cdlkicking",
+    "cdlkickingbylength",
+    "cdlladderbottom",
+    "cdllongleggeddoji",
+    "cdllongline",
+    "cdlmarubozu",
+    "cdlmatchinglow",
+    "cdlmathold",
+    "cdlmorningdojistar",
+    "cdlmorningstar",
+    "cdlonneck",
+    "cdlpiercing",
+    "cdlrickshawman",
+    "cdlrisefall3methods",
+    "cdlseparatinglines",
+    "cdlshootingstar",
+    "cdlshortline",
+    "cdlspinningtop",
+    "cdlstalledpattern",
+    "cdlsticksandwich",
+    "cdltakuri",
+    "cdltasukigap",
+    "cdlthrusting",
+    "cdltristar",
+    "cdlunique3river",
+    "cdlupsidegap2crows",
+    "cdlxsidegap3methods",
+];
+
 #[inline]
 fn value_error(error: impl std::fmt::Display) -> PyErr {
     PyErr::new::<pyo3::exceptions::PyValueError, _>(error.to_string())
+}
+
+#[inline]
+fn run_kernel<T: Send>(py: Python<'_>, input_len: usize, kernel: impl FnOnce() -> T + Send) -> T {
+    if input_len >= PY_GIL_RELEASE_THRESHOLD {
+        py.detach(kernel)
+    } else {
+        kernel()
+    }
 }
 
 fn talib_ma_type(matype: i32) -> PyResult<indicators::MaType> {
@@ -74,10 +162,318 @@ macro_rules! unary_period {
             timeperiod: usize,
         ) -> PyResult<Bound<'py, PyArray1<f64>>> {
             let real = real.as_slice().map_err(value_error)?;
-            let values = py
-                .detach(|| $kernel(real, timeperiod))
+            let values = run_kernel(py, real.len(), || $kernel(real, timeperiod))
                 .map_err(value_error)?
                 .into_raw_vec();
+            Ok(PyArray1::from_vec(py, values))
+        }
+    };
+}
+
+#[pyfunction(name = "cmou")]
+#[pyo3(signature = (real, timeperiod=14))]
+fn cmou_compat<'py>(
+    py: Python<'py>,
+    real: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let real = real.as_slice().map_err(value_error)?;
+    let compute = || indicators::cmou(real, timeperiod);
+    let values = if real.len() <= 16_384 {
+        compute()
+    } else {
+        py.detach(compute)
+    }
+    .map_err(value_error)?
+    .into_raw_vec();
+    Ok(PyArray1::from_vec(py, values))
+}
+
+macro_rules! unary_two_periods {
+    ($rust_name:ident, $py_name:literal, $kernel:path, $arg1:ident, $default0:literal, $arg2:ident, $default1:literal) => {
+        #[pyfunction(name = $py_name)]
+        #[pyo3(signature = (real, $arg1=$default0, $arg2=$default1))]
+        fn $rust_name<'py>(
+            py: Python<'py>,
+            real: PyReadonlyArray1<'py, f64>,
+            $arg1: usize,
+            $arg2: usize,
+        ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+            let real = real.as_slice().map_err(value_error)?;
+            let values = py
+                .detach(|| $kernel(real, $arg1, $arg2))
+                .map_err(value_error)?
+                .into_raw_vec();
+            Ok(PyArray1::from_vec(py, values))
+        }
+    };
+}
+
+macro_rules! binary_period {
+    ($rust_name:ident, $py_name:literal, $kernel:path, $arg0:ident, $arg1:ident, $default:literal) => {
+        #[pyfunction(name = $py_name)]
+        #[pyo3(signature = ($arg0, $arg1, timeperiod=$default))]
+        fn $rust_name<'py>(
+            py: Python<'py>,
+            $arg0: PyReadonlyArray1<'py, f64>,
+            $arg1: PyReadonlyArray1<'py, f64>,
+            timeperiod: usize,
+        ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+            let $arg0 = $arg0.as_slice().map_err(value_error)?;
+            let $arg1 = $arg1.as_slice().map_err(value_error)?;
+            let values = run_kernel(py, $arg0.len(), || $kernel($arg0, $arg1, timeperiod))
+                .map_err(value_error)?
+                .into_raw_vec();
+            Ok(PyArray1::from_vec(py, values))
+        }
+    };
+}
+
+macro_rules! binary_no_params {
+    ($rust_name:ident, $py_name:literal, $kernel:path) => {
+        #[pyfunction(name = $py_name)]
+        fn $rust_name<'py>(
+            py: Python<'py>,
+            real0: PyReadonlyArray1<'py, f64>,
+            real1: PyReadonlyArray1<'py, f64>,
+        ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+            let real0 = real0.as_slice().map_err(value_error)?;
+            let real1 = real1.as_slice().map_err(value_error)?;
+            let values = run_kernel(py, real0.len(), || $kernel(real0, real1))
+                .map_err(value_error)?
+                .into_raw_vec();
+            Ok(PyArray1::from_vec(py, values))
+        }
+    };
+}
+
+macro_rules! three_no_params {
+    ($rust_name:ident, $py_name:literal, $kernel:path) => {
+        #[pyfunction(name = $py_name)]
+        fn $rust_name<'py>(
+            py: Python<'py>,
+            real0: PyReadonlyArray1<'py, f64>,
+            real1: PyReadonlyArray1<'py, f64>,
+            real2: PyReadonlyArray1<'py, f64>,
+        ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+            let real0 = real0.as_slice().map_err(value_error)?;
+            let real1 = real1.as_slice().map_err(value_error)?;
+            let real2 = real2.as_slice().map_err(value_error)?;
+            let values = run_kernel(py, real0.len(), || $kernel(real0, real1, real2))
+                .map_err(value_error)?
+                .into_raw_vec();
+            Ok(PyArray1::from_vec(py, values))
+        }
+    };
+}
+
+macro_rules! hl_fast_slow {
+    ($rust_name:ident, $py_name:literal, $kernel:path, $fast:literal, $slow:literal) => {
+        #[pyfunction(name = $py_name)]
+        #[pyo3(signature = (high, low, fastperiod=$fast, slowperiod=$slow))]
+        fn $rust_name<'py>(
+            py: Python<'py>,
+            high: PyReadonlyArray1<'py, f64>,
+            low: PyReadonlyArray1<'py, f64>,
+            fastperiod: usize,
+            slowperiod: usize,
+        ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+            let high = high.as_slice().map_err(value_error)?;
+            let low = low.as_slice().map_err(value_error)?;
+            let values = py
+                .detach(|| $kernel(high, low, fastperiod, slowperiod))
+                .map_err(value_error)?
+                .into_raw_vec();
+            Ok(PyArray1::from_vec(py, values))
+        }
+    };
+}
+
+macro_rules! hl_two_periods {
+    ($rust_name:ident, $py_name:literal, $kernel:path, $default0:literal, $default1:literal) => {
+        #[pyfunction(name = $py_name)]
+        #[pyo3(signature = (high, low, timeperiod=$default0, rocperiod=$default1))]
+        fn $rust_name<'py>(
+            py: Python<'py>,
+            high: PyReadonlyArray1<'py, f64>,
+            low: PyReadonlyArray1<'py, f64>,
+            timeperiod: usize,
+            rocperiod: usize,
+        ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+            let high = high.as_slice().map_err(value_error)?;
+            let low = low.as_slice().map_err(value_error)?;
+            let values = py
+                .detach(|| $kernel(high, low, timeperiod, rocperiod))
+                .map_err(value_error)?
+                .into_raw_vec();
+            Ok(PyArray1::from_vec(py, values))
+        }
+    };
+}
+
+macro_rules! hl_three_periods {
+    ($rust_name:ident, $py_name:literal, $kernel:path, $d0:literal, $d1:literal, $d2:literal) => {
+        #[pyfunction(name = $py_name)]
+        #[pyo3(signature = (high, low, fastperiod=$d0, slowperiod=$d1, signalperiod=$d2))]
+        fn $rust_name<'py>(
+            py: Python<'py>,
+            high: PyReadonlyArray1<'py, f64>,
+            low: PyReadonlyArray1<'py, f64>,
+            fastperiod: usize,
+            slowperiod: usize,
+            signalperiod: usize,
+        ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+            let high = high.as_slice().map_err(value_error)?;
+            let low = low.as_slice().map_err(value_error)?;
+            let values = py
+                .detach(|| $kernel(high, low, fastperiod, slowperiod, signalperiod))
+                .map_err(value_error)?
+                .into_raw_vec();
+            Ok(PyArray1::from_vec(py, values))
+        }
+    };
+}
+
+macro_rules! hlc_periods {
+    ($rust_name:ident, $py_name:literal, $kernel:path, $d0:literal, $d1:literal, $dev:literal) => {
+        #[pyfunction(name = $py_name)]
+        #[pyo3(signature = (high, low, close, timeperiod=$d0, atrperiod=$d1, nbdev=$dev))]
+        fn $rust_name<'py>(
+            py: Python<'py>,
+            high: PyReadonlyArray1<'py, f64>,
+            low: PyReadonlyArray1<'py, f64>,
+            close: PyReadonlyArray1<'py, f64>,
+            timeperiod: usize,
+            atrperiod: usize,
+            nbdev: f64,
+        ) -> PyResult<(
+            Bound<'py, PyArray1<f64>>,
+            Bound<'py, PyArray1<f64>>,
+            Bound<'py, PyArray1<f64>>,
+        )> {
+            let high = high.as_slice().map_err(value_error)?;
+            let low = low.as_slice().map_err(value_error)?;
+            let close = close.as_slice().map_err(value_error)?;
+            let result = py
+                .detach(|| $kernel(high, low, close, timeperiod, atrperiod, nbdev))
+                .map_err(value_error)?;
+            Ok((
+                PyArray1::from_vec(py, result.upperband.into_raw_vec()),
+                PyArray1::from_vec(py, result.middleband.into_raw_vec()),
+                PyArray1::from_vec(py, result.lowerband.into_raw_vec()),
+            ))
+        }
+    };
+}
+
+macro_rules! four_periods_three_outputs {
+    ($rust_name:ident, $py_name:literal, $kernel:path, $fast:literal, $slow:literal, $slowtype:literal, $signal:literal, $signaltype:literal) => {
+        #[pyfunction(name = $py_name)]
+        #[pyo3(signature = (high, low, close, fastk_period=$fast, slowk_period=$slow, slowk_matype=$slowtype, slowd_period=$signal, slowd_matype=$signaltype))]
+        fn $rust_name<'py>(
+            py: Python<'py>,
+            high: PyReadonlyArray1<'py, f64>,
+            low: PyReadonlyArray1<'py, f64>,
+            close: PyReadonlyArray1<'py, f64>,
+            fastk_period: usize,
+            slowk_period: usize,
+            slowk_matype: usize,
+            slowd_period: usize,
+            slowd_matype: usize,
+        ) -> PyResult<(
+            Bound<'py, PyArray1<f64>>,
+            Bound<'py, PyArray1<f64>>,
+            Bound<'py, PyArray1<f64>>,
+        )> {
+            let high = high.as_slice().map_err(value_error)?;
+            let low = low.as_slice().map_err(value_error)?;
+            let close = close.as_slice().map_err(value_error)?;
+            let result = py
+                .detach(|| $kernel(high, low, close, fastk_period, slowk_period, slowk_matype, slowd_period, slowd_matype))
+                .map_err(value_error)?;
+            Ok((
+                PyArray1::from_vec(py, result.k.into_raw_vec()),
+                PyArray1::from_vec(py, result.d.into_raw_vec()),
+                PyArray1::from_vec(py, result.j.into_raw_vec()),
+            ))
+        }
+    };
+}
+
+macro_rules! hlc_period_two_outputs {
+    ($rust_name:ident, $py_name:literal, $kernel:path, $default:literal) => {
+        #[pyfunction(name = $py_name)]
+        #[pyo3(signature = (high, low, close, timeperiod=$default))]
+        fn $rust_name<'py>(
+            py: Python<'py>,
+            high: PyReadonlyArray1<'py, f64>,
+            low: PyReadonlyArray1<'py, f64>,
+            close: PyReadonlyArray1<'py, f64>,
+            timeperiod: usize,
+        ) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+            let high = high.as_slice().map_err(value_error)?;
+            let low = low.as_slice().map_err(value_error)?;
+            let close = close.as_slice().map_err(value_error)?;
+            let result = py
+                .detach(|| $kernel(high, low, close, timeperiod))
+                .map_err(value_error)?;
+            Ok((
+                PyArray1::from_vec(py, result.bullpower.into_raw_vec()),
+                PyArray1::from_vec(py, result.bearpower.into_raw_vec()),
+            ))
+        }
+    };
+}
+
+macro_rules! ohlc_four_outputs {
+    ($rust_name:ident, $py_name:literal, $kernel:path) => {
+        #[pyfunction(name = $py_name)]
+        fn $rust_name<'py>(
+            py: Python<'py>,
+            open: PyReadonlyArray1<'py, f64>,
+            high: PyReadonlyArray1<'py, f64>,
+            low: PyReadonlyArray1<'py, f64>,
+            close: PyReadonlyArray1<'py, f64>,
+        ) -> PyResult<(
+            Bound<'py, PyArray1<f64>>,
+            Bound<'py, PyArray1<f64>>,
+            Bound<'py, PyArray1<f64>>,
+            Bound<'py, PyArray1<f64>>,
+        )> {
+            let open = open.as_slice().map_err(value_error)?;
+            let high = high.as_slice().map_err(value_error)?;
+            let low = low.as_slice().map_err(value_error)?;
+            let close = close.as_slice().map_err(value_error)?;
+            let result = run_kernel(py, open.len(), || $kernel(open, high, low, close))
+                .map_err(value_error)?;
+            Ok((
+                PyArray1::from_vec(py, result.ha_open.into_raw_vec()),
+                PyArray1::from_vec(py, result.ha_high.into_raw_vec()),
+                PyArray1::from_vec(py, result.ha_low.into_raw_vec()),
+                PyArray1::from_vec(py, result.ha_close.into_raw_vec()),
+            ))
+        }
+    };
+}
+
+macro_rules! hlc_first_value {
+    ($rust_name:ident, $py_name:literal, $kernel:path, $first:expr) => {
+        #[pyfunction(name = $py_name)]
+        fn $rust_name<'py>(
+            py: Python<'py>,
+            high: PyReadonlyArray1<'py, f64>,
+            low: PyReadonlyArray1<'py, f64>,
+            close: PyReadonlyArray1<'py, f64>,
+        ) -> PyResult<Bound<'py, PyArray1<f64>>> {
+            let high = high.as_slice().map_err(value_error)?;
+            let low = low.as_slice().map_err(value_error)?;
+            let close = close.as_slice().map_err(value_error)?;
+            let mut values = run_kernel(py, high.len(), || $kernel(high, low, close))
+                .map_err(value_error)?
+                .into_raw_vec();
+            if let Some(first) = values.first_mut() {
+                *first = $first;
+            }
             Ok(PyArray1::from_vec(py, values))
         }
     };
@@ -110,8 +506,7 @@ macro_rules! binary_transform {
         ) -> PyResult<Bound<'py, PyArray1<f64>>> {
             let real0 = real0.as_slice().map_err(value_error)?;
             let real1 = real1.as_slice().map_err(value_error)?;
-            let values = py
-                .detach(|| $kernel(real0, real1))
+            let values = run_kernel(py, real0.len(), || $kernel(real0, real1))
                 .map_err(value_error)?
                 .into_raw_vec();
             Ok(PyArray1::from_vec(py, values))
@@ -133,10 +528,11 @@ macro_rules! candle {
             let high = high.as_slice().map_err(value_error)?;
             let low = low.as_slice().map_err(value_error)?;
             let close = close.as_slice().map_err(value_error)?;
-            let values = py
-                .detach(|| candlestick::$kernel(open, high, low, close))
-                .map_err(value_error)?
-                .into_raw_vec();
+            let values = run_kernel(py, open.len(), || {
+                candlestick::$kernel(open, high, low, close)
+            })
+            .map_err(value_error)?
+            .into_raw_vec();
             Ok(PyArray1::from_vec(py, values))
         }
     };
@@ -264,6 +660,236 @@ unary_period!(
 unary_period!(max_value, "max", indicators::max, 30);
 unary_period!(min_value, "min", indicators::min, 30);
 unary_period!(sum_value, "sum", indicators::sum, 30);
+unary_period!(avgdev, "avgdev", indicators::avgdev, 14);
+unary_period!(dpo, "dpo", indicators::dpo, 20);
+unary_period!(er, "er", indicators::efficiency_ratio, 10);
+unary_period!(fosc, "fosc", indicators::fosc, 5);
+unary_period!(percentrank, "percentrank", indicators::percent_rank, 100);
+unary_period!(rma, "rma", indicators::rma_profile, 30);
+unary_period!(vhf, "vhf", indicators::vhf, 28);
+unary_period!(hma, "hma", moving_avg::hma, 20);
+unary_period!(zlema, "zlema", moving_avg::zlema, 30);
+unary_two_periods!(
+    rvi_compat,
+    "rvi",
+    indicators::rvi_profile,
+    timeperiod,
+    14,
+    stddevperiod,
+    10
+);
+unary_period!(rvol, "rvol", indicators::rvol, 20);
+hl_period!(minus_dm, "minus_dm", indicators::minus_dm_with_period, 14);
+hl_period!(plus_dm, "plus_dm", indicators::plus_dm_with_period, 14);
+hl_period!(adr, "adr", indicators::talib_ext::adr, 14);
+binary_period!(
+    qstick,
+    "qstick",
+    indicators::talib_ext::qstick,
+    open,
+    close,
+    10
+);
+hl_fast_slow!(ao, "ao", indicators::ao, 5, 34);
+hl_fast_slow!(massi, "massi", indicators::massi, 9, 25);
+hl_two_periods!(cvi, "cvi", indicators::cvi, 10, 10);
+binary_period!(efi, "efi", indicators::efi, close, volume, 13);
+binary_period!(vwma, "vwma", moving_avg::vwma, close, volume, 30);
+binary_no_params!(nvi, "nvi", indicators::nvi);
+binary_no_params!(pvi, "pvi", indicators::pvi);
+binary_no_params!(pvt, "pvt", indicators::pvt);
+three_no_params!(marketfi, "marketfi", indicators::marketfi);
+hlc_first_value!(wad, "wad", indicators::wad, 0.0);
+unary_two_periods!(
+    tsi_compat,
+    "tsi",
+    indicators::tsi,
+    firstperiod,
+    25,
+    secondperiod,
+    13
+);
+hl_three_periods!(ac, "ac", indicators::talib_ext::ac, 5, 34, 5);
+hlc_period_two_outputs!(eri, "eri", indicators::talib_ext::eri, 13);
+hlc_periods!(kc, "kc", indicators::talib_ext::kc, 20, 10, 2.0);
+four_periods_three_outputs!(kdj, "kdj", indicators::talib_ext::kdj, 9, 3, 13, 3, 13);
+binary_period!(imi, "imi", indicators::imi, open, close, 14);
+ohlc_four_outputs!(heikin_ashi_compat, "ha", indicators::heikin_ashi);
+
+#[pyfunction(name = "fractal")]
+#[pyo3(signature = (high, low, leftbars=2, rightbars=2))]
+fn fractal_compat<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    leftbars: usize,
+    rightbars: usize,
+) -> PyResult<(Bound<'py, PyArray1<i32>>, Bound<'py, PyArray1<i32>>)> {
+    let high = high.as_slice().map_err(value_error)?;
+    let low = low.as_slice().map_err(value_error)?;
+    let (swinghigh, swinglow) = py
+        .detach(|| indicators::talib_ext::fractal_i32(high, low, leftbars, rightbars))
+        .map_err(value_error)?;
+    Ok((
+        PyArray1::from_vec(py, swinghigh.into_raw_vec()),
+        PyArray1::from_vec(py, swinglow.into_raw_vec()),
+    ))
+}
+
+#[pyfunction(name = "accbands")]
+#[pyo3(signature = (high, low, close, timeperiod=20))]
+fn accbands<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<(
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+)> {
+    let high = high.as_slice().map_err(value_error)?;
+    let low = low.as_slice().map_err(value_error)?;
+    let close = close.as_slice().map_err(value_error)?;
+    let result = py
+        .detach(|| indicators::accbands(high, low, close, timeperiod))
+        .map_err(value_error)?;
+    Ok((
+        PyArray1::from_vec(py, result.upper.into_raw_vec()),
+        PyArray1::from_vec(py, result.middle.into_raw_vec()),
+        PyArray1::from_vec(py, result.lower.into_raw_vec()),
+    ))
+}
+
+#[pyfunction(name = "cmf")]
+#[pyo3(signature = (high, low, close, volume, timeperiod=20))]
+fn cmf_compat<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+    volume: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let high = high.as_slice().map_err(value_error)?;
+    let low = low.as_slice().map_err(value_error)?;
+    let close = close.as_slice().map_err(value_error)?;
+    let volume = volume.as_slice().map_err(value_error)?;
+    let values = run_kernel(py, high.len(), || {
+        indicators::cmf(high, low, close, volume, timeperiod)
+    })
+    .map_err(value_error)?
+    .into_raw_vec();
+    Ok(PyArray1::from_vec(py, values))
+}
+
+#[pyfunction(name = "coppock")]
+#[pyo3(signature = (real, wmaperiod=10, roc1period=11, roc2period=14))]
+fn coppock_compat<'py>(
+    py: Python<'py>,
+    real: PyReadonlyArray1<'py, f64>,
+    wmaperiod: usize,
+    roc1period: usize,
+    roc2period: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let real = real.as_slice().map_err(value_error)?;
+    let values = py
+        .detach(|| indicators::coppock(real, wmaperiod, roc1period, roc2period))
+        .map_err(value_error)?
+        .into_raw_vec();
+    Ok(PyArray1::from_vec(py, values))
+}
+
+#[pyfunction(name = "cumsum")]
+fn cumsum_compat<'py>(
+    py: Python<'py>,
+    real: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let real = real.as_slice().map_err(value_error)?;
+    let mut values = vec![0.0; real.len()];
+    py.detach(|| ::finkit::math::simd_ops::simd_cumsum(real, &mut values));
+    Ok(PyArray1::from_vec(py, values))
+}
+
+#[pyfunction(name = "percentile")]
+#[pyo3(signature = (real, timeperiod=30, percentile=50.0))]
+fn percentile_compat<'py>(
+    py: Python<'py>,
+    real: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+    percentile: f64,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let real = real.as_slice().map_err(value_error)?;
+    let values = py
+        .detach(|| indicators::percentile(real, timeperiod, percentile))
+        .map_err(value_error)?
+        .into_raw_vec();
+    Ok(PyArray1::from_vec(py, values))
+}
+
+#[pyfunction(name = "pvo")]
+#[pyo3(signature = (real, fastperiod=12, slowperiod=26, matype=1))]
+fn pvo_compat<'py>(
+    py: Python<'py>,
+    real: PyReadonlyArray1<'py, f64>,
+    fastperiod: usize,
+    slowperiod: usize,
+    matype: i32,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let real = real.as_slice().map_err(value_error)?;
+    let ma_type = talib_ma_type(matype)?;
+    let values = py
+        .detach(|| {
+            let fast = indicators::ma(real, fastperiod, ma_type)?;
+            let slow = indicators::ma(real, slowperiod, ma_type)?;
+            let mut output = vec![f64::NAN; real.len()];
+            for i in fastperiod.max(slowperiod).saturating_sub(1)..real.len() {
+                output[i] = if slow[i] == 0.0 {
+                    0.0
+                } else {
+                    (fast[i] - slow[i]) / slow[i] * 100.0
+                };
+            }
+            Ok::<_, ::finkit::error::TaError>(output)
+        })
+        .map_err(value_error)?;
+    Ok(PyArray1::from_vec(py, values))
+}
+
+#[pyfunction(name = "smi")]
+#[pyo3(signature = (high, low, close, timeperiod=13, fastperiod=2, slowperiod=25, signalperiod=9))]
+fn smi_compat<'py>(
+    py: Python<'py>,
+    high: PyReadonlyArray1<'py, f64>,
+    low: PyReadonlyArray1<'py, f64>,
+    close: PyReadonlyArray1<'py, f64>,
+    timeperiod: usize,
+    fastperiod: usize,
+    slowperiod: usize,
+    signalperiod: usize,
+) -> PyResult<(Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>)> {
+    let high = high.as_slice().map_err(value_error)?;
+    let low = low.as_slice().map_err(value_error)?;
+    let close = close.as_slice().map_err(value_error)?;
+    let result = py
+        .detach(|| {
+            indicators::talib_ext::smi(
+                high,
+                low,
+                close,
+                timeperiod,
+                fastperiod,
+                slowperiod,
+                signalperiod,
+            )
+        })
+        .map_err(value_error)?;
+    Ok((
+        PyArray1::from_vec(py, result.smi.into_raw_vec()),
+        PyArray1::from_vec(py, result.smisignal.into_raw_vec()),
+    ))
+}
 
 unary_transform!(acos, "acos", indicators::acos);
 unary_transform!(asin, "asin", indicators::asin);
@@ -792,8 +1418,10 @@ fn cdl3outside<'py>(
     unsafe { raw_output.set_len(len) };
     let output =
         unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<i32>(), len) };
-    py.detach(|| candlestick::cdl_3outside_into(open, high, low, close, output))
-        .map_err(value_error)?;
+    run_kernel(py, len, || {
+        candlestick::cdl_3outside_into(open, high, low, close, output)
+    })
+    .map_err(value_error)?;
     let ptr = raw_output.as_mut_ptr().cast::<i32>();
     let capacity = raw_output.capacity();
     std::mem::forget(raw_output);
@@ -819,8 +1447,10 @@ fn cdldojistar<'py>(
     unsafe { raw_output.set_len(len) };
     let output =
         unsafe { std::slice::from_raw_parts_mut(raw_output.as_mut_ptr().cast::<i32>(), len) };
-    py.detach(|| candlestick::cdl_doji_star_into(open, high, low, close, output))
-        .map_err(value_error)?;
+    run_kernel(py, len, || {
+        candlestick::cdl_doji_star_into(open, high, low, close, output)
+    })
+    .map_err(value_error)?;
     let ptr = raw_output.as_mut_ptr().cast::<i32>();
     let capacity = raw_output.capacity();
     std::mem::forget(raw_output);
@@ -949,6 +1579,47 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         max_value,
         min_value,
         sum_value,
+        avgdev,
+        dpo,
+        er,
+        fosc,
+        percentrank,
+        rma,
+        vhf,
+        hma,
+        zlema,
+        rvi_compat,
+        cmou_compat,
+        rvol,
+        minus_dm,
+        plus_dm,
+        adr,
+        qstick,
+        ao,
+        massi,
+        cvi,
+        efi,
+        vwma,
+        nvi,
+        pvi,
+        pvt,
+        marketfi,
+        wad,
+        tsi_compat,
+        ac,
+        eri,
+        fractal_compat,
+        kc,
+        kdj,
+        imi,
+        heikin_ashi_compat,
+        accbands,
+        cmf_compat,
+        coppock_compat,
+        cumsum_compat,
+        percentile_compat,
+        pvo_compat,
+        smi_compat,
         acos,
         asin,
         atan,

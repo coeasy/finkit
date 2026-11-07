@@ -29,9 +29,10 @@ fn compute_hash(source: &str) -> u64 {
 /// 公式缓存管理器（O(1) 真 LRU 策略）
 ///
 /// Entries are stored behind `Arc` so a hit can be handed out without cloning
-/// the AST. The tree-walker is the **default** backend and every `eval*` entry
-/// point on it compiled through `get_cloned` before this, deep-copying the
-/// whole `AstNode` on each call. Measured at a 250-bar screening window that
+/// the AST. Tree remains the reference backend, and Auto selects it for cold
+/// or unsupported formulas. Those `eval*` calls compiled through `get_cloned`
+/// before this, deep-copying the whole `AstNode` on each call. Measured at a
+/// 250-bar screening window that
 /// clone was a measurable share of a sub-microsecond evaluation (see
 /// `core/examples/plan_cache_probe.rs`).
 ///

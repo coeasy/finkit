@@ -35,7 +35,7 @@ DEFAULT_OUTPUT_DIR = ROOT / "tests" / "golden" / "talib"
 FIXTURES_SCRIPT = ROOT / "scripts" / "gen_test_fixtures.py"
 
 GENERATOR_VERSION = "1.0.0"
-PINNED_TALIB_PYTHON_VERSION = "0.8.0"
+PINNED_TALIB_PYTHON_VERSION = "0.8.1"
 
 # Three fixture datasets: A-share daily, crypto minute, synthetic waves.
 DATASET_IDS = ("ashare", "crypto", "synthetic")

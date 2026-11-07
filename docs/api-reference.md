@@ -13,7 +13,7 @@ cross-language parity tests.
 ```json
 {
   "operation": "SMA",
-  "semantic_profile": "talib_0_8_0",
+  "semantic_profile": "talib_0_8_1",
   "input_order": ["CLOSE"],
   "inputs": {"CLOSE": [1, 2, 3]},
   "params": [2]
@@ -23,7 +23,7 @@ cross-language parity tests.
 The result is a versioned envelope with `operation`, `operation_id`,
 `semantic_profile`, `primary`, `shape` and named `values`. Non-finite numeric
 values are JSON `null`. `core_registry` uses the canonical Formula/Core
-semantics; `talib_0_8_0` is explicit and only succeeds for operations listed by
+semantics; `talib_0_8_1` is explicit and only succeeds for operations listed by
 the catalog's `semantic_profiles` field. Unsupported profile/function pairs
 return a structured error instead of silently falling back.
 
@@ -542,12 +542,12 @@ it is the declared vocabulary (see [Category Slugs](#category-slugs) above).
 ### Installation
 
 Finkit is distributed as Python ABI3 wheels attached to the published GitHub
-`v0.1.15` Release. Download the wheel for your platform and install it locally,
+`v0.2.0` Release. Download the wheel for your platform and install it locally,
 or build the current v0.2.0 workspace from source with `maturin` (see
 [installation.md](installation.md)):
 
 ```bash
-python -m pip install ./finkit-0.1.15-<matching-platform>.whl
+python -m pip install ./finkit-0.2.0-<matching-platform>.whl
 ```
 
 ### Functions

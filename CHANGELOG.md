@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.3.0] - 2026-11-06
+
+### Added
+
+- Expanded the TA-Lib-compatible indicator surface and its generated numeric
+  contracts across Rust and language bindings.
+- Added formula execution workload coverage and adaptive Tree/Plan routing for
+  measured formula shapes.
+
+### Changed
+
+- Improved rolling statistics, moving-average, volume, momentum, chart-pattern,
+  and formula execution paths, including shared scans and allocation reuse.
+- Updated formula performance documentation with current-source benchmarks and
+  explicit Tree/Plan parity results.
+
+### Fixed
+
+- Corrected TA-Lib edge behavior and output initialization for indicator and
+  binding compatibility paths.
+- Preserved exact formula outputs while routing measured slow cases to the
+  faster backend.
+
 ## [0.2.0] - 2026-10-18
 
 This release closes the gap between "the engine can compute it"

@@ -130,7 +130,7 @@ pub fn adosc(
     }
     validate_input(high.len(), slow_period)?;
 
-    let mut output = Array1::<f64>::zeros(high.len());
+    let mut output = Array1::from(crate::utils::uninit_output(high.len()));
     crate::math::volume_kernels::adosc_into(
         high,
         low,
