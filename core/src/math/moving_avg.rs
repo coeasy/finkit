@@ -837,11 +837,24 @@ fn wma_inner(input: &[f64], period: usize) -> Result<Array1<f64>> {
 /// used by the retired SIMD compatibility path.
 #[inline]
 fn wma_kernel_into(input: &[f64], period: usize, output: &mut [f64]) {
-    let len = input.len();
     // Start after any leading warm-up run (see `math::leading_warmup`): the seed
     // below indexes from zero, so a `NaN` there would poison `period_sub` /
     // `period_sum` for the whole series. `start == 0` is the original loop.
     let start = leading_warmup(input);
+    wma_kernel_from_start(input, period, output, start);
+}
+
+/// Run the WMA kernel for an input with no leading warm-up values.
+///
+/// The caller validates the period, output length, and input values. This lets
+/// composite indicators share one validation pass across several WMA stages.
+pub(crate) fn wma_finite_into(input: &[f64], period: usize, output: &mut [f64]) {
+    wma_kernel_from_start(input, period, output, 0);
+}
+
+#[inline]
+fn wma_kernel_from_start(input: &[f64], period: usize, output: &mut [f64], start: usize) {
+    let len = input.len();
     crate::utils::simd_fill_nan(&mut output[..(start + period - 1).min(len)]);
     if start + period > len {
         return;

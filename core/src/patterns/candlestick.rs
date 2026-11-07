@@ -1048,9 +1048,9 @@ pub fn morning_doji_star(
         output[i] = if first_black
             && gap_down
             && current_white
-            && first_body > body_long.average()
-            && second_body <= body_doji.average() * doji_pct
-            && third_body > body_short.average()
+            && first_body > body_long.average_full()
+            && second_body <= body_doji.average_full() * doji_pct
+            && third_body > body_short.average_full()
             && close[i] > close[i - 2] + first_body * 0.3
         {
             100

@@ -2140,6 +2140,10 @@ pub fn hma(input: &[f64], period: usize) -> Result<Array1<f64>> {
     }
     validate_input(input.len(), period)?;
 
+    if input.iter().all(|value| value.is_finite()) {
+        return hma_finite(input, period);
+    }
+
     let half_period = period / 2;
     let sqrt_period = (period as f64).sqrt().round() as usize;
     let wma_half = moving_avg::wma(input, half_period)?;
@@ -2173,6 +2177,33 @@ pub fn hma(input: &[f64], period: usize) -> Result<Array1<f64>> {
     let mut output = Vec::with_capacity(len);
     output.resize(hma_start, f64::NAN);
     output.extend_from_slice(&hma_inner.as_slice().unwrap()[sqrt_period - 1..]);
+    Ok(Array1::from_vec(output))
+}
+
+fn hma_finite(input: &[f64], period: usize) -> Result<Array1<f64>> {
+    let len = input.len();
+    let half_period = period / 2;
+    let sqrt_period = (period as f64).sqrt().round() as usize;
+    let diff_start = period - 1;
+    let diff_len = len - diff_start;
+    let hma_start = diff_start + sqrt_period - 1;
+    if diff_len < sqrt_period || hma_start >= len {
+        return Ok(init_output(len));
+    }
+
+    let mut half = crate::utils::uninit_output(len);
+    let mut full = crate::utils::uninit_output(len);
+    moving_avg::wma_finite_into(input, half_period, &mut half);
+    moving_avg::wma_finite_into(input, period, &mut full);
+
+    for i in diff_start..len {
+        half[i] = 2.0 * half[i] - full[i];
+    }
+    moving_avg::wma_finite_into(&half[diff_start..], sqrt_period, &mut full[..diff_len]);
+
+    let mut output = crate::utils::uninit_output(len);
+    output[..hma_start].fill(f64::NAN);
+    output[hma_start..].copy_from_slice(&full[sqrt_period - 1..diff_len]);
     Ok(Array1::from_vec(output))
 }
 
