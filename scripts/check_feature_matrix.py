@@ -99,7 +99,7 @@ ERROR_RE = re.compile(r"^error(?:\[[A-Z0-9]+\])?:", re.MULTILINE)
 
 def run_check(extra: list[str]) -> tuple[int, int, str]:
     """Return (exit_code, parsed_error_count, tail)."""
-    cmd = ["cargo", "check", "-p", "finkit", "--locked", *extra]
+    cmd = ["cargo", "check", "-p", "qx-finkit", "--locked", *extra]
     env = dict(os.environ, CARGO_INCREMENTAL="0", CARGO_TERM_COLOR="never")
     try:
         proc = subprocess.run(
