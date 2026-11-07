@@ -100,10 +100,15 @@ pub fn atr_into(
     output[period] = previous_atr;
 
     let inverse_period = 1.0 / period as f64;
-    for index in (period + 1)..high.len() {
+    let output_ptr = output.as_mut_ptr();
+    let mut index = period + 1;
+    while index < high.len() {
         let true_range = true_range_at(high, low, close, index);
-        previous_atr = (true_range - previous_atr).mul_add(inverse_period, previous_atr);
-        output[index] = previous_atr;
+        previous_atr += (true_range - previous_atr) * inverse_period;
+        unsafe {
+            *output_ptr.add(index) = previous_atr;
+        }
+        index += 1;
     }
     Ok(())
 }
@@ -171,15 +176,22 @@ pub fn natr_into(
     };
 
     let inverse_period = 1.0 / period as f64;
-    for index in (period + 1)..high.len() {
+    let output_ptr = output.as_mut_ptr();
+    let close_ptr = close.as_ptr();
+    let mut index = period + 1;
+    while index < high.len() {
         let true_range = true_range_at(high, low, close, index);
-        previous_atr = (true_range - previous_atr).mul_add(inverse_period, previous_atr);
-        let current_close = close[index];
-        output[index] = if !crate::utils::is_zero(current_close) {
+        previous_atr += (true_range - previous_atr) * inverse_period;
+        let current_close = unsafe { *close_ptr.add(index) };
+        let current_natr = if !crate::utils::is_zero(current_close) {
             previous_atr / current_close * 100.0
         } else {
             0.0
         };
+        unsafe {
+            *output_ptr.add(index) = current_natr;
+        }
+        index += 1;
     }
     Ok(())
 }

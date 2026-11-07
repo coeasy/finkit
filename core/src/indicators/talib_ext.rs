@@ -100,9 +100,16 @@ pub fn rma_profile(input: &[f64], p: usize) -> Result<Array1<f64>> {
     let mut value = input[..p].iter().sum::<f64>() / p as f64;
     out[p - 1] = value;
     let inv = 1.0 / p as f64;
-    for (slot, &sample) in out[p..].iter_mut().zip(&input[p..]) {
-        value = (sample - value).mul_add(inv, value);
-        *slot = value;
+    let input_ptr = input.as_ptr();
+    let output_ptr = out.as_mut_ptr();
+    let mut index = p;
+    while index < input.len() {
+        unsafe {
+            let sample = *input_ptr.add(index);
+            value += (sample - value) * inv;
+            *output_ptr.add(index) = value;
+        }
+        index += 1;
     }
     Ok(Array1::from_vec(out))
 }
@@ -452,7 +459,7 @@ pub fn efi(close: &[f64], volume: &[f64], p: usize) -> Result<Array1<f64>> {
     let alpha = 2.0 / (p as f64 + 1.0);
     for i in start + 1..len {
         let force = (close[i] - close[i - 1]) * volume[i];
-        value = (force - value).mul_add(alpha, value);
+        value += (force - value) * alpha;
         out[i] = value;
     }
     Ok(Array1::from_vec(out))
@@ -844,7 +851,7 @@ fn kc_finite_fused(
         let true_range = (high[i] - low[i])
             .max((high[i] - close[i - 1]).abs())
             .max((low[i] - close[i - 1]).abs());
-        atr = (true_range - atr).mul_add(inverse_atr_period, atr);
+        atr += (true_range - atr) * inverse_atr_period;
         middle[i] = ema;
         upper[i] = ema + dev * atr;
         lower[i] = ema - dev * atr;
@@ -1006,7 +1013,7 @@ pub fn kdj(
                 k_valid = true;
             }
         } else {
-            k_value = (raw - k_value).mul_add(inverse_slow, k_value);
+            k_value += (raw - k_value) * inverse_slow;
         }
 
         if !k_valid {
@@ -1021,7 +1028,7 @@ pub fn kdj(
                 d_valid = true;
             }
         } else {
-            d_value = (k_value - d_value).mul_add(inverse_signal, d_value);
+            d_value += (k_value - d_value) * inverse_signal;
         }
 
         if d_valid {
