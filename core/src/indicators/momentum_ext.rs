@@ -1365,10 +1365,24 @@ pub fn rvi(
     validate_input(open.len(), period + 3)?;
 
     let len = open.len();
-    let wavg_start = 3;
-    let mut ratio = vec![f64::NAN; len];
+    let rvi_start = period + 2;
+    let signal_start = rvi_start + 3;
+    let inv_period = 1.0 / period as f64;
+    let mut rvi_values = crate::utils::uninit_output(len);
+    let mut signal_values = crate::utils::uninit_output(len);
+    rvi_values[..rvi_start].fill(f64::NAN);
+    signal_values[..signal_start.min(len)].fill(f64::NAN);
 
-    for i in wavg_start..len {
+    // Keep only the current SMA window of ratios. The previous implementation
+    // materialized both that full ratio series and the RVI series before the
+    // signal pass; the four-bar signal can consume each completed RVI value as
+    // it is produced.
+    let mut ratio_window = vec![f64::NAN; period];
+    let mut ratio_cursor = 0usize;
+    let mut ratio_count = 0usize;
+    let mut nan_count = 0usize;
+    let mut ratio_sum = 0.0;
+    for i in 3..len {
         let num = wavg4(
             close[i] - open[i],
             close[i - 1] - open[i - 1],
@@ -1381,61 +1395,66 @@ pub fn rvi(
             high[i - 2] - low[i - 2],
             high[i - 3] - low[i - 3],
         );
-        if !crate::utils::is_zero(denom) {
-            ratio[i] = num / denom;
-        }
-    }
+        let ratio = if crate::utils::is_zero(denom) {
+            f64::NAN
+        } else {
+            num / denom
+        };
 
-    let rvi_start = wavg_start + period - 1;
-    let mut rvi_line = Array1::from_elem(len, f64::NAN);
-    let inv_period = 1.0 / period as f64;
-    // Incremental SMA with NaN tracking: O(1) per bar instead of O(period)
-    let mut sum = 0.0_f64;
-    let mut nan_count: usize = 0;
-    for i in wavg_start..=rvi_start {
-        if ratio[i].is_nan() {
-            nan_count += 1;
+        if ratio_count < period {
+            ratio_window[ratio_cursor] = ratio;
+            ratio_cursor += 1;
+            if ratio_cursor == period {
+                ratio_cursor = 0;
+            }
+            ratio_count += 1;
+            if ratio.is_nan() {
+                nan_count += 1;
+            } else {
+                ratio_sum += ratio;
+            }
         } else {
-            sum += ratio[i];
+            let old = ratio_window[ratio_cursor];
+            if old.is_nan() {
+                nan_count -= 1;
+            } else {
+                ratio_sum -= old;
+            }
+            ratio_window[ratio_cursor] = ratio;
+            ratio_cursor += 1;
+            if ratio_cursor == period {
+                ratio_cursor = 0;
+            }
+            if ratio.is_nan() {
+                nan_count += 1;
+            } else {
+                ratio_sum += ratio;
+            }
         }
-    }
-    if nan_count == 0 {
-        rvi_line[rvi_start] = sum * inv_period;
-    }
-    for i in (rvi_start + 1)..len {
-        let old = ratio[i - period];
-        let new = ratio[i];
-        if old.is_nan() {
-            nan_count -= 1;
-        } else {
-            sum -= old;
-        }
-        if new.is_nan() {
-            nan_count += 1;
-        } else {
-            sum += new;
-        }
-        if nan_count == 0 {
-            rvi_line[i] = sum * inv_period;
-        }
-    }
 
-    let mut signal = Array1::from_elem(len, f64::NAN);
-    let signal_start = rvi_start + 3;
-    let rvi_slice = rvi_line.as_slice().unwrap();
-    for i in signal_start..len {
-        let r0 = rvi_slice[i - 3];
-        let r1 = rvi_slice[i - 2];
-        let r2 = rvi_slice[i - 1];
-        let r3 = rvi_slice[i];
-        if !r0.is_nan() && !r1.is_nan() && !r2.is_nan() && !r3.is_nan() {
-            signal[i] = wavg4(r0, r1, r2, r3);
+        if i >= rvi_start {
+            let rvi_value = if nan_count == 0 {
+                ratio_sum * inv_period
+            } else {
+                f64::NAN
+            };
+            rvi_values[i] = rvi_value;
+            if i >= signal_start {
+                let r0 = rvi_values[i - 3];
+                let r1 = rvi_values[i - 2];
+                let r2 = rvi_values[i - 1];
+                if !r0.is_nan() && !r1.is_nan() && !r2.is_nan() && !rvi_value.is_nan() {
+                    signal_values[i] = wavg4(r0, r1, r2, rvi_value);
+                } else {
+                    signal_values[i] = f64::NAN;
+                }
+            }
         }
     }
 
     Ok(RviResult {
-        rvi: rvi_line,
-        signal,
+        rvi: Array1::from_vec(rvi_values),
+        signal: Array1::from_vec(signal_values),
     })
 }
 
@@ -1918,6 +1937,94 @@ mod tests {
         assert!(!result.rvi[first_rvi].is_nan());
         assert!(result.signal[first_signal - 1].is_nan());
         assert!(!result.signal[first_signal].is_nan());
+    }
+
+    #[test]
+    fn test_rvi_streaming_pipeline_matches_materialized_reference() {
+        let len = 512;
+        let open: Vec<f64> = (0..len)
+            .map(|i| 100.0 + (i as f64 * 0.07).sin() * 3.0)
+            .collect();
+        let close: Vec<f64> = (0..len)
+            .map(|i| 100.2 + (i as f64 * 0.11).cos() * 2.0)
+            .collect();
+        let high: Vec<f64> = (0..len)
+            .map(|i| open[i].max(close[i]) + 0.5 + (i as f64 * 0.03).sin().abs())
+            .collect();
+        let low: Vec<f64> = (0..len)
+            .map(|i| open[i].min(close[i]) - 0.7 - (i as f64 * 0.05).cos().abs())
+            .collect();
+
+        for period in [1, 2, 10, 31] {
+            let actual = rvi(&open, &high, &low, &close, period).unwrap();
+            let mut ratio = vec![f64::NAN; len];
+            for i in 3..len {
+                let numerator = wavg4(
+                    close[i] - open[i],
+                    close[i - 1] - open[i - 1],
+                    close[i - 2] - open[i - 2],
+                    close[i - 3] - open[i - 3],
+                );
+                let denominator = wavg4(
+                    high[i] - low[i],
+                    high[i - 1] - low[i - 1],
+                    high[i - 2] - low[i - 2],
+                    high[i - 3] - low[i - 3],
+                );
+                if !crate::utils::is_zero(denominator) {
+                    ratio[i] = numerator / denominator;
+                }
+            }
+            let rvi_start = period + 2;
+            let signal_start = rvi_start + 3;
+            for i in 0..len {
+                let expected_rvi = if i < rvi_start {
+                    f64::NAN
+                } else {
+                    let window = &ratio[i + 1 - period..=i];
+                    if window.iter().any(|value| value.is_nan()) {
+                        f64::NAN
+                    } else {
+                        window.iter().sum::<f64>() / period as f64
+                    }
+                };
+                if expected_rvi.is_nan() {
+                    assert!(actual.rvi[i].is_nan(), "period={period}, index={i}");
+                } else {
+                    assert!(
+                        (actual.rvi[i] - expected_rvi).abs() < 1e-12,
+                        "period={period}, index={i}"
+                    );
+                }
+
+                let expected_signal = if i < signal_start
+                    || actual.rvi[i - 3].is_nan()
+                    || actual.rvi[i - 2].is_nan()
+                    || actual.rvi[i - 1].is_nan()
+                    || actual.rvi[i].is_nan()
+                {
+                    f64::NAN
+                } else {
+                    wavg4(
+                        actual.rvi[i - 3],
+                        actual.rvi[i - 2],
+                        actual.rvi[i - 1],
+                        actual.rvi[i],
+                    )
+                };
+                if expected_signal.is_nan() {
+                    assert!(
+                        actual.signal[i].is_nan(),
+                        "signal period={period}, index={i}"
+                    );
+                } else {
+                    assert!(
+                        (actual.signal[i] - expected_signal).abs() < 1e-12,
+                        "signal period={period}, index={i}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
