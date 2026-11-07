@@ -327,48 +327,7 @@ pub fn macdfix_with_signal(input: &[f64], signal_period: usize) -> Result<MacdRe
     let mut macd_line = crate::utils::uninit_output(len);
     let mut signal = crate::utils::uninit_output(len);
     let mut hist = crate::utils::uninit_output(len);
-
-    // MACDFIX uses the fixed TA-Lib smoothing constants 0.15 and 0.075,
-    // rather than recomputing 2/(period+1) as the general MACD path does.
-    // The distinction is small but accumulates enough to fail parity.
-    let fast_period = 12;
-    let slow_period = 26;
-    let fast_k = 0.15;
-    let slow_k = 0.075;
-    let signal_k = 2.0 / (signal_period as f64 + 1.0);
-    let mut slow_sum = 0.0;
-    for &value in &input[..slow_period] {
-        slow_sum += value;
-    }
-    let mut fast_sum = 0.0;
-    for &value in &input[slow_period - fast_period..slow_period] {
-        fast_sum += value;
-    }
-    let mut fast = fast_sum / fast_period as f64;
-    let mut slow = slow_sum / slow_period as f64;
-    let first_macd = slow_period - 1;
-    let mut macd_value = fast - slow;
-    macd_line[first_macd] = macd_value;
-    for (i, &value) in input.iter().enumerate().skip(slow_period) {
-        fast = (value - fast) * fast_k + fast;
-        slow = (value - slow) * slow_k + slow;
-        macd_value = fast - slow;
-        macd_line[i] = macd_value;
-    }
-
-    let first_output = first_macd + signal_period - 1;
-    signal[..first_output].fill(f64::NAN);
-    hist[..first_output].fill(f64::NAN);
-    let mut signal_value =
-        macd_line[first_macd..=first_output].iter().sum::<f64>() / signal_period as f64;
-    macd_line[..first_output].fill(f64::NAN);
-    signal[first_output] = signal_value;
-    hist[first_output] = macd_line[first_output] - signal_value;
-    for i in first_output + 1..len {
-        signal_value = (macd_line[i] - signal_value) * signal_k + signal_value;
-        signal[i] = signal_value;
-        hist[i] = macd_line[i] - signal_value;
-    }
+    macdfix_kernel_into(input, signal_period, &mut macd_line, &mut signal, &mut hist);
     Ok(MacdResult {
         macd: Array1::from_vec(macd_line),
         signal: Array1::from_vec(signal),
@@ -399,8 +358,18 @@ pub fn macdfix_into(
             constraint: "must each have the same length as input".to_string(),
         });
     }
-    let len = input.len();
+    macdfix_kernel_into(input, signal_period, macd_line, signal, hist);
+    Ok(())
+}
 
+#[inline]
+fn macdfix_kernel_into(
+    input: &[f64],
+    signal_period: usize,
+    macd_line: &mut [f64],
+    signal: &mut [f64],
+    hist: &mut [f64],
+) {
     let mut slow_sum = 0.0;
     for &value in &input[..26] {
         slow_sum += value;
@@ -411,33 +380,33 @@ pub fn macdfix_into(
     }
     let mut fast = fast_sum / 12.0;
     let mut slow = slow_sum / 26.0;
-    let first_macd = 25;
-    let mut macd_value = fast - slow;
-    macd_line[first_macd] = macd_value;
-    for (i, &value) in input.iter().enumerate().skip(26) {
-        fast = (value - fast) * 0.15 + fast;
-        slow = (value - slow) * 0.075 + slow;
-        macd_value = fast - slow;
-        macd_line[i] = macd_value;
-    }
-
-    let first_output = first_macd + signal_period - 1;
+    let first_output = 25 + signal_period - 1;
+    macd_line[..first_output].fill(f64::NAN);
     signal[..first_output].fill(f64::NAN);
     hist[..first_output].fill(f64::NAN);
-    let mut signal_value =
-        macd_line[first_macd..=first_output].iter().sum::<f64>() / signal_period as f64;
-    signal[first_output] = signal_value;
-    hist[first_output] = macd_line[first_output] - signal_value;
     let signal_k = 2.0 / (signal_period as f64 + 1.0);
-    for i in first_output + 1..len {
-        signal_value = (macd_line[i] - signal_value) * signal_k + signal_value;
+    let mut signal_seed = 0.0;
+    let mut signal_value = 0.0;
+    for (i, &value) in input.iter().enumerate().skip(25) {
+        if i >= 26 {
+            fast = (value - fast) * 0.15 + fast;
+            slow = (value - slow) * 0.075 + slow;
+        }
+        let macd_value = fast - slow;
+        if i < first_output {
+            signal_seed += macd_value;
+            continue;
+        }
+
+        macd_line[i] = macd_value;
+        if i == first_output {
+            signal_value = (signal_seed + macd_value) / signal_period as f64;
+        } else {
+            signal_value = (macd_value - signal_value) * signal_k + signal_value;
+        }
         signal[i] = signal_value;
-        hist[i] = macd_line[i] - signal_value;
+        hist[i] = macd_value - signal_value;
     }
-    // TA-Lib only exposes the stable signal zone for MACDFIX; the earlier
-    // MACD state is used internally to seed the signal but remains NaN.
-    macd_line[..first_output].fill(f64::NAN);
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------

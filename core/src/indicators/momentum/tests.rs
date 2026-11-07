@@ -340,6 +340,25 @@ fn test_macdfix() {
 }
 
 #[test]
+fn test_macdfix_fused_outputs_match_owned_api() {
+    let input = (0..512)
+        .map(|index| 100.0 + index as f64 * 0.01 + (index as f64 * 0.037).sin())
+        .collect::<Vec<_>>();
+
+    for signal_period in [1, 2, 9, 17] {
+        let expected = macdfix_with_signal(&input, signal_period).unwrap();
+        let mut macd = vec![0.0; input.len()];
+        let mut signal = vec![0.0; input.len()];
+        let mut hist = vec![0.0; input.len()];
+        macdfix_into(&input, signal_period, &mut macd, &mut signal, &mut hist).unwrap();
+
+        assert_array_matches_slice(&expected.macd, &macd);
+        assert_array_matches_slice(&expected.signal, &signal);
+        assert_array_matches_slice(&expected.hist, &hist);
+    }
+}
+
+#[test]
 fn test_ppo() {
     let input: Vec<f64> = (1..=30).map(|x| x as f64).collect();
     let result = ppo(&input, 12, 26).unwrap();
