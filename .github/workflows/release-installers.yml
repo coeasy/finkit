@@ -124,7 +124,7 @@ jobs:
             slug: linux-x64
             # `native` always succeeds; deb/rpm need tooling installed below.
             targets: "native deb rpm"
-          - os: macos-14
+          - os: macos-15
             name: macos (native + pkg + dmg)
             slug: macos-arm64
             targets: "native pkg dmg"

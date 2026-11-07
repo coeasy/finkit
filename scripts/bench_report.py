@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any
@@ -99,11 +100,13 @@ def render_markdown(benchmarks: dict[str, dict[str, Any]]) -> str:
             f"{row['talib_us']:.2f} | {row['speedup']:.2f}x | {row['status']} |"
         )
     faster = sum(1 for row in benchmarks.values() if row["finkit_us"] <= row["talib_us"])
+    geomean = geometric_mean_speedup(benchmarks)
     lines.extend(
         [
             "",
             f"- **Total paired benchmarks**: {len(benchmarks)}",
             f"- **Finkit faster or equal on this run**: {faster}",
+            f"- **Full-set geometric mean speedup**: {geomean:.4f}x" if geomean is not None else "- **Full-set geometric mean speedup**: unavailable (invalid speedup data)",
             "",
             "Do not convert one machine snapshot into a universal performance claim. Re-run the suite on the target deployment hardware.",
             "",
@@ -125,6 +128,35 @@ def gate_vs_talib(benchmarks: dict[str, dict[str, Any]], threshold: float) -> li
         for key, row in benchmarks.items()
         if row["finkit_us"] > row["talib_us"] * (1.0 + threshold / 100.0)
     ]
+
+
+def geometric_mean_speedup(benchmarks: dict[str, dict[str, Any]]) -> float | None:
+    """Return the geometric mean of valid positive Finkit/TA-Lib speedups."""
+    if not benchmarks:
+        return None
+    speedups: list[float] = []
+    for key, row in benchmarks.items():
+        try:
+            value = float(row["speedup"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not math.isfinite(value) or value <= 0:
+            return None
+        speedups.append(value)
+    return math.exp(sum(math.log(value) for value in speedups) / len(speedups))
+
+
+def gate_vs_geomean(
+    benchmarks: dict[str, dict[str, Any]], minimum: float
+) -> tuple[list[str], float | None]:
+    geomean = geometric_mean_speedup(benchmarks)
+    if geomean is None:
+        return (["no valid positive finite paired speedups"], None)
+    if not math.isfinite(minimum) or minimum <= 0:
+        return ([f"minimum geometric mean must be finite and positive (got {minimum})"], geomean)
+    if geomean <= minimum:
+        return ([f"geometric mean {geomean:.4f}x must be greater than {minimum:.4f}x"], geomean)
+    return ([], geomean)
 
 
 def gate_vs_baseline(criterion_dir: Path, baseline_path: Path, scale: str, threshold: float) -> list[str]:
@@ -162,6 +194,12 @@ def main() -> int:
     parser.add_argument("--threshold", type=float, default=20.0)
     parser.add_argument("--baseline", default=str(DEFAULT_BASELINE))
     parser.add_argument("--gate", action="store_true")
+    parser.add_argument(
+        "--geomean-gate",
+        action="store_true",
+        help="require the full paired set's geometric mean speedup to exceed the minimum",
+    )
+    parser.add_argument("--minimum-geomean-speedup", type=float, default=1.0)
     parser.add_argument("--regression-gate", action="store_true")
     parser.add_argument("--sla-1m", action="store_true")
     parser.add_argument(
@@ -206,6 +244,11 @@ def main() -> int:
             f"TA-Lib comparison gate ({args.threshold:.1f}%)",
             gate_vs_talib(benchmarks, args.threshold),
         )
+    if args.geomean_gate:
+        failures, geomean = gate_vs_geomean(benchmarks, args.minimum_geomean_speedup)
+        if geomean is not None:
+            print(f"Full-set geometric mean speedup: {geomean:.4f}x ({len(benchmarks)} paired rows)")
+        return run_gate("TA-Lib full-set geometric-mean gate", failures)
     if args.regression_gate:
         return run_gate(
             "Benchmark regression gate (5.0%)",

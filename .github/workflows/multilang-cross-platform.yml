@@ -125,7 +125,7 @@ jobs:
 
   node-macos:
     needs: version-contract
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
     env:
       RUSTFLAGS: "-D warnings"
@@ -219,7 +219,7 @@ jobs:
 
   dotnet-macos:
     needs: version-contract
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 45
     env:
       RUSTFLAGS: "-D warnings"

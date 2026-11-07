@@ -315,6 +315,8 @@ jobs:
         run: python scripts/test_check_coverage.py
       - name: Test strict per-indicator benchmark gate
         run: python scripts/test_benchmark_gate_contract.py
+      - name: Test full-set TA-Lib benchmark gate
+        run: python scripts/test_bench_report.py
       - name: Report indicator coverage across registry / streaming / batch
         # Diagnostic only: exact symbols and explicitly reviewed aliases are
         # reported separately. This is not a numeric correctness/parity gate.
