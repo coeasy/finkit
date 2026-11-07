@@ -3058,7 +3058,10 @@ mod tests {
     #[test]
     #[ignore]
     fn generate_indicator_registry_json() {
-        let json = serde_json::to_string_pretty(&registry_document()).expect("serialize registry");
+        let json = format!(
+            "{}\n",
+            serde_json::to_string_pretty(&registry_document()).expect("serialize registry")
+        );
         fs::write(docs_registry_path(), json).expect("write indicator_registry.json");
     }
 }
