@@ -806,6 +806,7 @@ fn kc_finite_fused(
     let len = close.len();
     let first = (p - 1).max(atr_p);
     let alpha = crate::utils::smoothing_factor(p);
+    let inverse_atr_period = 1.0 / atr_p as f64;
     let mut middle = crate::utils::uninit_output(len);
     let mut upper = crate::utils::uninit_output(len);
     let mut lower = crate::utils::uninit_output(len);
@@ -843,7 +844,7 @@ fn kc_finite_fused(
         let true_range = (high[i] - low[i])
             .max((high[i] - close[i - 1]).abs())
             .max((low[i] - close[i - 1]).abs());
-        atr += (true_range - atr) / atr_p as f64;
+        atr += (true_range - atr) * inverse_atr_period;
         middle[i] = ema;
         upper[i] = ema + dev * atr;
         lower[i] = ema - dev * atr;

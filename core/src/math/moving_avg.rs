@@ -366,11 +366,12 @@ pub fn rma_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
         return Ok(());
     }
 
+    let inverse_period = 1.0 / period as f64;
     for (slot, &value) in output[index..].iter_mut().zip(&input[index..]) {
         if value.is_nan() {
             *slot = f64::NAN;
         } else {
-            previous += (value - previous) / period as f64;
+            previous += (value - previous) * inverse_period;
             *slot = previous;
         }
     }
