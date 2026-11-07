@@ -942,12 +942,9 @@ fn van_herk_body<const WANT_MAX: bool, const FIXED_WINDOW: usize>(
 /// and give the same answer for every input, so no gating is needed to keep
 /// them in agreement:
 ///
-/// * **Cached index** — `window <= EXTREMA_CACHE_LIMIT`. One comparison per side
-///   per bar, rescanning only when an extrema leaves the window. This is what
-///   makes the TA-Lib C `TA_MAX`/`TA_MIN` fast path fast.
-/// * **Monotonic ring** — oversized windows. Every bar is inserted and removed
-///   at most once, which bounds the worst case the cached index would otherwise
-///   pay in rescans.
+/// * **Monotonic ring** — every bar is inserted and removed at most once. This
+///   avoids rescanning a full window whenever a trailing high or low expires,
+///   which is common on the steadily trending price series used by callers.
 ///
 /// Missing bars are dropped by both: neither can hold an extrema, and a window
 /// whose bars are all missing emits `NaN`.
@@ -969,84 +966,7 @@ pub(crate) fn rolling_minmax_visit(
     let warm_high_at = first_finite(high).map_or(high.len(), |start| start + window - 1);
     let warm_low_at = first_finite(low).map_or(low.len(), |start| start + window - 1);
 
-    if window <= EXTREMA_CACHE_LIMIT {
-        rolling_minmax_cached(high, low, window, warm_high_at, warm_low_at, emit);
-        return;
-    }
-
     rolling_minmax_ring(high, low, window, warm_high_at, warm_low_at, emit);
-}
-
-/// Fused high/low form of [`rolling_extreme_cached`].
-///
-/// The two legs warm up independently: `warm_high_at` and `warm_low_at` may
-/// differ when only one leg opens with a missing run, which keeps each extreme
-/// from being reported from a partially populated window.
-#[inline]
-fn rolling_minmax_cached(
-    high: &[f64],
-    low: &[f64],
-    window: usize,
-    warm_high_at: usize,
-    warm_low_at: usize,
-    mut emit: impl FnMut(usize, f64, f64),
-) {
-    let mut highest = f64::NEG_INFINITY;
-    let mut highest_index = 0usize;
-    let mut has_high = false;
-    let mut lowest = f64::INFINITY;
-    let mut lowest_index = 0usize;
-    let mut has_low = false;
-    let high_ptr = high.as_ptr();
-    let low_ptr = low.as_ptr();
-
-    macro_rules! track {
-        ($i:expr) => {{
-            let candidate_high = unsafe { *high_ptr.add($i) };
-            let candidate_low = unsafe { *low_ptr.add($i) };
-
-            if candidate_high >= highest {
-                highest = candidate_high;
-                highest_index = $i;
-                has_high = true;
-            } else if has_high && highest_index + window <= $i {
-                let (rescanned, position, found) =
-                    rescan_extreme_window::<true>(high, $i + 1 - window, $i);
-                highest = rescanned;
-                highest_index = position;
-                has_high = found;
-            }
-
-            if candidate_low <= lowest {
-                lowest = candidate_low;
-                lowest_index = $i;
-                has_low = true;
-            } else if has_low && lowest_index + window <= $i {
-                let (rescanned, position, found) =
-                    rescan_extreme_window::<false>(low, $i + 1 - window, $i);
-                lowest = rescanned;
-                lowest_index = position;
-                has_low = found;
-            }
-        }};
-    }
-
-    let tracked_end = warm_high_at.min(warm_low_at).min(high.len());
-    let emit_from = warm_high_at.max(warm_low_at).min(high.len());
-    for i in 0..tracked_end {
-        track!(i);
-    }
-    for i in tracked_end..emit_from {
-        track!(i);
-    }
-    for i in emit_from..high.len() {
-        track!(i);
-        emit(
-            i,
-            if has_high { highest } else { f64::NAN },
-            if has_low { lowest } else { f64::NAN },
-        );
-    }
 }
 
 /// Monotonic-queue form of [`rolling_minmax_visit`].

@@ -535,40 +535,54 @@ fn test_ultosc_empty_window_is_zero_not_accumulator_residue() {
 
 #[test]
 fn test_macd_into_matches_macd() {
-    let input: Vec<f64> = (1..=50).map(|x| x as f64).collect();
-    let expected = macd(&input, 12, 26, 9).unwrap();
-    let mut macd_out = vec![0.0; input.len()];
-    let mut signal_out = vec![0.0; input.len()];
-    let mut hist_out = vec![0.0; input.len()];
-    macd_into(
-        &input,
-        12,
-        26,
-        9,
-        &mut macd_out,
-        &mut signal_out,
-        &mut hist_out,
-    )
-    .unwrap();
-    for i in 0..input.len() {
-        let em = expected.macd[i];
-        let am = macd_out[i];
-        if em.is_nan() {
-            assert!(am.is_nan());
-        } else {
-            assert!((em - am).abs() < 1e-9, "macd mismatch at {i}: {em} vs {am}");
-        }
-        let es = expected.signal[i];
-        let as_ = signal_out[i];
-        if es.is_nan() {
-            assert!(as_.is_nan());
-        } else {
-            assert!(
-                (es - as_).abs() < 1e-9,
-                "signal mismatch at {i}: {es} vs {as_}"
-            );
+    let input: Vec<f64> = (0..160)
+        .map(|i| 100.0 + i as f64 * 0.13 + (i as f64 * 0.31).sin())
+        .collect();
+    for signal_period in [1, 2, 9, 17] {
+        let expected = macd(&input, 12, 26, signal_period).unwrap();
+        let mut macd_out = vec![0.0; input.len()];
+        let mut signal_out = vec![0.0; input.len()];
+        let mut hist_out = vec![0.0; input.len()];
+        macd_into(
+            &input,
+            12,
+            26,
+            signal_period,
+            &mut macd_out,
+            &mut signal_out,
+            &mut hist_out,
+        )
+        .unwrap();
+        for (label, expected, actual) in [
+            (
+                "macd",
+                expected.macd.as_slice().unwrap(),
+                macd_out.as_slice(),
+            ),
+            (
+                "signal",
+                expected.signal.as_slice().unwrap(),
+                signal_out.as_slice(),
+            ),
+            (
+                "histogram",
+                expected.hist.as_slice().unwrap(),
+                hist_out.as_slice(),
+            ),
+        ] {
+            for (i, (&expected, &actual)) in expected.iter().zip(actual).enumerate() {
+                if expected.is_nan() {
+                    assert!(actual.is_nan(), "{label} NaN mismatch at {i}");
+                } else {
+                    assert!(
+                        (expected - actual).abs() < 1e-9,
+                        "{label} mismatch at {i}: {expected} vs {actual}"
+                    );
+                }
+            }
         }
     }
+    assert!(macd(&input, 12, 26, 0).is_err());
 }
 
 // ===========================================================================

@@ -337,27 +337,41 @@ pub fn rma_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
 
     let mut seed_sum = 0.0;
     let mut seed_count = 0usize;
-    let mut previous: Option<f64> = None;
+    let mut index = 0usize;
+    let mut previous = 0.0;
 
-    for (index, &value) in input.iter().enumerate() {
+    // Keep the seed phase separate from the steady-state recurrence. The old
+    // loop tested the optional state on every sample, even though the common
+    // case enters the recurrence once and never returns to seeding.
+    while index < input.len() && seed_count < period {
+        let value = input[index];
         if value.is_nan() {
             output[index] = f64::NAN;
+            index += 1;
             continue;
         }
-        if let Some(prev) = previous {
-            let current = prev + (value - prev) / period as f64;
-            output[index] = current;
-            previous = Some(current);
+        seed_sum += value;
+        seed_count += 1;
+        if seed_count == period {
+            previous = seed_sum / period as f64;
+            output[index] = previous;
         } else {
-            seed_sum += value;
-            seed_count += 1;
-            if seed_count == period {
-                let current = seed_sum / period as f64;
-                output[index] = current;
-                previous = Some(current);
-            } else {
-                output[index] = f64::NAN;
-            }
+            output[index] = f64::NAN;
+        }
+        index += 1;
+    }
+
+    if seed_count < period {
+        output[index..].fill(f64::NAN);
+        return Ok(());
+    }
+
+    for (slot, &value) in output[index..].iter_mut().zip(&input[index..]) {
+        if value.is_nan() {
+            *slot = f64::NAN;
+        } else {
+            previous += (value - previous) / period as f64;
+            *slot = previous;
         }
     }
 
@@ -2651,6 +2665,21 @@ mod tests {
                 assert_relative_eq!(*x, *y, epsilon = 1e-15);
             }
         }
+    }
+
+    #[test]
+    fn rma_seed_and_steady_state_paths_preserve_nan_contract() {
+        let input = [f64::NAN, 2.0, 4.0, f64::NAN, 6.0, 8.0];
+        let result = rma(&input, 2).unwrap();
+        assert!(result[0].is_nan());
+        assert!(result[1].is_nan());
+        assert_eq!(result[2], 3.0);
+        assert!(result[3].is_nan());
+        assert_eq!(result[4], 4.5);
+        assert_eq!(result[5], 6.25);
+
+        let insufficient = rma(&[1.0, f64::NAN, 2.0], 3).unwrap();
+        assert!(insufficient.iter().all(|value| value.is_nan()));
     }
 
     #[test]
