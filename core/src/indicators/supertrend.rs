@@ -203,7 +203,7 @@ fn supertrend_talib_fused(
         let true_range = (current_high - current_low)
             .max((current_high - previous_close).abs())
             .max((current_low - previous_close).abs());
-        previous_atr += (true_range - previous_atr) * inverse_period;
+        previous_atr = (true_range - previous_atr).mul_add(inverse_period, previous_atr);
         let atr_value = previous_atr;
 
         if atr_value.is_nan() {
@@ -413,7 +413,7 @@ fn supertrend_impl<Direction: From<i32> + Copy, const INCLUDE_BANDS: bool>(
                 let true_range = (high[i] - low[i])
                     .max((high[i] - previous_close).abs())
                     .max((low[i] - previous_close).abs());
-                previous_atr += (true_range - previous_atr) * inverse_period;
+                previous_atr = (true_range - previous_atr).mul_add(inverse_period, previous_atr);
             }
             apply_atr(i, previous_atr);
         }

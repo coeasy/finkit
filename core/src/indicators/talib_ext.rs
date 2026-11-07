@@ -101,7 +101,7 @@ pub fn rma_profile(input: &[f64], p: usize) -> Result<Array1<f64>> {
     out[p - 1] = value;
     let inv = 1.0 / p as f64;
     for i in p..input.len() {
-        value += (input[i] - value) * inv;
+        value = (input[i] - value).mul_add(inv, value);
         out[i] = value;
     }
     Ok(Array1::from_vec(out))
@@ -452,7 +452,7 @@ pub fn efi(close: &[f64], volume: &[f64], p: usize) -> Result<Array1<f64>> {
     let alpha = 2.0 / (p as f64 + 1.0);
     for i in start + 1..len {
         let force = (close[i] - close[i - 1]) * volume[i];
-        value += (force - value) * alpha;
+        value = (force - value).mul_add(alpha, value);
         out[i] = value;
     }
     Ok(Array1::from_vec(out))
@@ -844,7 +844,7 @@ fn kc_finite_fused(
         let true_range = (high[i] - low[i])
             .max((high[i] - close[i - 1]).abs())
             .max((low[i] - close[i - 1]).abs());
-        atr += (true_range - atr) * inverse_atr_period;
+        atr = (true_range - atr).mul_add(inverse_atr_period, atr);
         middle[i] = ema;
         upper[i] = ema + dev * atr;
         lower[i] = ema - dev * atr;
@@ -936,12 +936,66 @@ pub fn kdj(
     let mut d_value = f64::NAN;
     let mut d_valid = false;
 
-    crate::math::statistics::rolling_minmax_visit(high, low, fast, |i, highest, lowest| {
+    // The common finite-input path gets dedicated monotonic rings. The shared
+    // extrema visitor also handles NaNs and independently warmed high/low
+    // series; those checks and VecDeque bookkeeping are unnecessary here after
+    // the finite-input guard above.
+    let cap = fast + 1;
+    let mut max_queue = vec![0usize; cap];
+    let mut min_queue = vec![0usize; cap];
+    let (mut max_head, mut max_len) = (0usize, 0usize);
+    let (mut min_head, mut min_len) = (0usize, 0usize);
+    for i in 0..len {
+        let hi = unsafe { *high.get_unchecked(i) };
+        while max_len > 0 {
+            let slot = talib_ring_back(max_head, max_len, cap);
+            let back_idx = unsafe { *max_queue.get_unchecked(slot) };
+            if unsafe { *high.get_unchecked(back_idx) } <= hi {
+                max_len -= 1;
+            } else {
+                break;
+            }
+        }
+        let slot = talib_ring_tail(max_head, max_len, cap);
+        unsafe {
+            *max_queue.get_unchecked_mut(slot) = i;
+        }
+        max_len += 1;
+        if unsafe { *max_queue.get_unchecked(max_head) } + fast <= i {
+            max_head = talib_ring_inc(max_head, cap);
+            max_len -= 1;
+        }
+
+        let lo = unsafe { *low.get_unchecked(i) };
+        while min_len > 0 {
+            let slot = talib_ring_back(min_head, min_len, cap);
+            let back_idx = unsafe { *min_queue.get_unchecked(slot) };
+            if unsafe { *low.get_unchecked(back_idx) } >= lo {
+                min_len -= 1;
+            } else {
+                break;
+            }
+        }
+        let slot = talib_ring_tail(min_head, min_len, cap);
+        unsafe {
+            *min_queue.get_unchecked_mut(slot) = i;
+        }
+        min_len += 1;
+        if unsafe { *min_queue.get_unchecked(min_head) } + fast <= i {
+            min_head = talib_ring_inc(min_head, cap);
+            min_len -= 1;
+        }
+
+        if i < fast - 1 {
+            continue;
+        }
+        let highest = unsafe { *high.get_unchecked(*max_queue.get_unchecked(max_head)) };
+        let lowest = unsafe { *low.get_unchecked(*min_queue.get_unchecked(min_head)) };
         let den = highest - lowest;
         let raw = if den == 0.0 {
             0.0
         } else {
-            (close[i] - lowest) / den * 100.0
+            (unsafe { *close.get_unchecked(i) } - lowest) / den * 100.0
         };
 
         if !k_valid {
@@ -952,11 +1006,11 @@ pub fn kdj(
                 k_valid = true;
             }
         } else {
-            k_value += (raw - k_value) * inverse_slow;
+            k_value = (raw - k_value).mul_add(inverse_slow, k_value);
         }
 
         if !k_valid {
-            return;
+            continue;
         }
 
         if !d_valid {
@@ -967,7 +1021,7 @@ pub fn kdj(
                 d_valid = true;
             }
         } else {
-            d_value += (k_value - d_value) * inverse_signal;
+            d_value = (k_value - d_value).mul_add(inverse_signal, d_value);
         }
 
         if d_valid {
@@ -975,8 +1029,37 @@ pub fn kdj(
             k[i] = k_value;
             j[i] = 3.0 * k_value - 2.0 * d_value;
         }
-    });
+    }
     Ok(KdjResult { k, d, j })
+}
+
+#[inline(always)]
+fn talib_ring_inc(pos: usize, cap: usize) -> usize {
+    if pos + 1 == cap {
+        0
+    } else {
+        pos + 1
+    }
+}
+
+#[inline(always)]
+fn talib_ring_back(head: usize, len: usize, cap: usize) -> usize {
+    let index = head + len - 1;
+    if index >= cap {
+        index - cap
+    } else {
+        index
+    }
+}
+
+#[inline(always)]
+fn talib_ring_tail(head: usize, len: usize, cap: usize) -> usize {
+    let index = head + len;
+    if index >= cap {
+        index - cap
+    } else {
+        index
+    }
 }
 
 pub fn marketfi(high: &[f64], low: &[f64], volume: &[f64]) -> Result<Array1<f64>> {
@@ -1195,7 +1278,9 @@ fn qstick_finite_fused(open: &[f64], close: &[f64], period: usize) -> Option<Arr
     for index in period..len {
         let entering = close[index] - open[index];
         let leaving = close[index - period] - open[index - period];
-        if !entering.is_finite() || !leaving.is_finite() {
+        // Every outgoing body passed this check when it entered the sum or
+        // during the initial seed. Only new bodies need checking on this step.
+        if !entering.is_finite() {
             return None;
         }
         sum += entering - leaving;

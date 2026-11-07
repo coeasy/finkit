@@ -1382,6 +1382,8 @@ pub fn rvi(
     let mut ratio_count = 0usize;
     let mut nan_count = 0usize;
     let mut ratio_sum = 0.0;
+    let mut signal_window = [f64::NAN; 3];
+    let mut signal_count = 0usize;
     for i in 3..len {
         let num = wavg4(
             close[i] - open[i],
@@ -1440,14 +1442,22 @@ pub fn rvi(
             };
             rvi_values[i] = rvi_value;
             if i >= signal_start {
-                let r0 = rvi_values[i - 3];
-                let r1 = rvi_values[i - 2];
-                let r2 = rvi_values[i - 1];
+                let r0 = signal_window[0];
+                let r1 = signal_window[1];
+                let r2 = signal_window[2];
                 if !r0.is_nan() && !r1.is_nan() && !r2.is_nan() && !rvi_value.is_nan() {
                     signal_values[i] = wavg4(r0, r1, r2, rvi_value);
                 } else {
                     signal_values[i] = f64::NAN;
                 }
+            }
+            if signal_count < 3 {
+                signal_window[signal_count] = rvi_value;
+                signal_count += 1;
+            } else {
+                signal_window[0] = signal_window[1];
+                signal_window[1] = signal_window[2];
+                signal_window[2] = rvi_value;
             }
         }
     }

@@ -371,7 +371,7 @@ pub fn rma_into(input: &[f64], period: usize, output: &mut [f64]) -> Result<()> 
         if value.is_nan() {
             *slot = f64::NAN;
         } else {
-            previous += (value - previous) * inverse_period;
+            previous = (value - previous).mul_add(inverse_period, previous);
             *slot = previous;
         }
     }

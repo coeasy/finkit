@@ -96,7 +96,7 @@ pub fn atr_into(
     let inverse_period = 1.0 / period as f64;
     for index in (period + 1)..high.len() {
         let true_range = true_range_at(high, low, close, index);
-        previous_atr += (true_range - previous_atr) * inverse_period;
+        previous_atr = (true_range - previous_atr).mul_add(inverse_period, previous_atr);
         output[index] = previous_atr;
     }
     Ok(())
@@ -167,7 +167,7 @@ pub fn natr_into(
     let inverse_period = 1.0 / period as f64;
     for index in (period + 1)..high.len() {
         let true_range = true_range_at(high, low, close, index);
-        previous_atr += (true_range - previous_atr) * inverse_period;
+        previous_atr = (true_range - previous_atr).mul_add(inverse_period, previous_atr);
         let current_close = close[index];
         output[index] = if !crate::utils::is_zero(current_close) {
             previous_atr / current_close * 100.0
