@@ -128,7 +128,7 @@ jobs:
           from pathlib import Path
 
           dist = Path(os.environ["GITHUB_WORKSPACE"]) / "ffi/python-binding/dist"
-          wheels = sorted(dist.glob("finkit-*.whl"))
+          wheels = sorted(dist.glob("qx_finkit-*.whl"))
           if len(wheels) != 1:
               raise SystemExit(f"expected exactly one wheel, found: {wheels}")
           subprocess.check_call([
@@ -206,7 +206,7 @@ jobs:
           if [[ "$PYTHON_VERSION" == "3.8" ]]; then
             # TA-Lib's current Python wrapper requires Python 3.9+, so keep the
             # 3.8 job focused on proving the abi3 wheel imports and executes.
-            python -m pip install --force-reinstall --no-cache-dir dist/finkit-*.whl
+            python -m pip install --force-reinstall --no-cache-dir dist/qx_finkit-*.whl
             cd "$RUNNER_TEMP"
             python - <<'PY'
           import numpy as np
@@ -217,7 +217,7 @@ jobs:
           np.testing.assert_allclose(result[1:], [1.5, 2.5, 3.5])
           PY
           else
-            python -m pip install --force-reinstall --no-cache-dir dist/finkit-*.whl pytest TA-Lib==0.8.1
+            python -m pip install --force-reinstall --no-cache-dir dist/qx_finkit-*.whl pytest TA-Lib==0.8.1
             cd "$RUNNER_TEMP"
             python -m pytest "$GITHUB_WORKSPACE/ffi/python-binding/tests" -q
           fi
@@ -270,7 +270,7 @@ jobs:
                   f"project version {expected_version!r}"
               )
 
-          wheels = sorted(Path("dist").glob("finkit-*.whl"))
+          wheels = sorted(Path("dist").glob("qx_finkit-*.whl"))
           if len(wheels) != 4:
               raise SystemExit(f"expected 4 ABI3 wheels, found {len(wheels)}")
 
@@ -284,7 +284,7 @@ jobs:
 
           for wheel in wheels:
               name, version, _, tags = parse_wheel_filename(wheel.name)
-              if name != "finkit" or str(version) != expected_version:
+              if name != "qx-finkit" or str(version) != expected_version:
                   raise SystemExit(
                       f"unexpected wheel metadata in {wheel.name}: "
                       f"name={name!r}, version={version!r}"
@@ -309,7 +309,7 @@ jobs:
           missing = [name for name, present in required_platforms.items() if not present]
           if missing:
               raise SystemExit(f"missing platform coverage: {missing}")
-          print(f"validated {len(wheels)} ABI3 finkit {expected_version} wheels")
+          print(f"validated {len(wheels)} ABI3 qx-finkit {expected_version} wheels")
           PY
 
   release:
@@ -322,6 +322,10 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+      id-token: write
+    environment:
+      name: pypi
+      url: https://pypi.org/p/qx-finkit
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -337,12 +341,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo package -p finkit --locked --no-verify
-          cp target/package/finkit-*.crate dist/
+          cargo package -p qx-finkit --locked --no-verify
+          cp target/package/qx-finkit-*.crate dist/
           cargo build -p finkit-cli --release --locked
           cp target/release/finkit-cli dist/finkit-cli-linux-x86_64
           cp target/release/finkit-factor-study dist/finkit-factor-study-linux-x86_64
           sha256sum dist/* > dist/SHA256SUMS
+      - name: Prepare PyPI distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p pypi-dist
+          cp dist/qx_finkit-*.whl pypi-dist/
+      - name: Publish wheels to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: pypi-dist
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

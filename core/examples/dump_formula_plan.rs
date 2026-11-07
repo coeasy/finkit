@@ -5,8 +5,8 @@
 //! from the AST interpreter or rejects a formula the dispatcher cannot run.
 //!
 //! ```text
-//! cargo run -p finkit --example dump_formula_plan -- "MA(CLOSE,5)+MA(CLOSE,10)"
-//! cargo run -p finkit --example dump_formula_plan -- --pine tests/pine_corpus/rsi.pine
+//! cargo run -p qx-finkit --example dump_formula_plan -- "MA(CLOSE,5)+MA(CLOSE,10)"
+//! cargo run -p qx-finkit --example dump_formula_plan -- --pine tests/pine_corpus/rsi.pine
 //! ```
 
 use finkit::formula::pine::{map_pine_to_alphata, parse_pine};

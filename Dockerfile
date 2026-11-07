@@ -79,7 +79,7 @@ COPY . /work
 
 # Pre-build the core crate to warm the cargo cache; subsequent
 # `docker run --rm -v ./dist:/work/dist …` invocations reuse the layer.
-RUN cargo build --release -p finkit 2>&1 | tail -5 || true
+RUN cargo build --release -p qx-finkit 2>&1 | tail -5 || true
 
 # ---- entrypoint -----------------------------------------------------------
 # `./build-usage.sh` (or `.ps1`) lives at /work, exposed as the entrypoint.

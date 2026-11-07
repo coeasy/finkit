@@ -4,7 +4,7 @@ This directory contains the .NET binding for Finkit, backed by the Rust `finkit-
 
 ## Distribution status
 
-The binding source exists in the v0.3.0 repository, and the release workflow builds a NuGet package candidate; public NuGet publication remains a separate step.
+The binding source exists in the v0.3.1 repository, and the release workflow builds a NuGet package candidate; public NuGet publication remains a separate step.
 
 For the next release, the multi-language workflow adds a Linux validation gate that:
 

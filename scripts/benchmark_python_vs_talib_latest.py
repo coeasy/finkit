@@ -122,7 +122,7 @@ def measure(f_fn: Callable[[], Any], t_fn: Callable[[], Any]) -> tuple[float, fl
 
 
 def main() -> int:
-    f_version = pkg_version("finkit")
+    f_version = pkg_version("qx-finkit")
     t_version = pkg_version("TA-Lib")
     ta_core = getattr(talib, "__ta_version__", "unknown")
     if isinstance(ta_core, bytes):

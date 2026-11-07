@@ -19,7 +19,7 @@ for the tier.
 | **Active** | Rust (this repository's `core` crate), Python, Node | yes — a tier-1 language with no stored bodies fails the run |
 | **Deferred** | C, Go, Java, .NET, iOS, Android | no — reported as `status=DEFERRED`, does not fail the run |
 
-The Rust core needs no binding: it *is* the runtime, and `cargo test -p finkit`
+The Rust core needs no binding: it *is* the runtime, and `cargo test -p qx-finkit`
 is its contract. Python and Node are the first-tier bindings.
 
 A deferred binding still lives in `ffi/` and still compiles under
@@ -104,8 +104,8 @@ parity, and do not read a missing parity gate as "unsupported".
 
 | Binding | Indicator surface (gated) | Formula surface | Research surface | Platform validation | Release state |
 | --- | --- | --- | --- | --- | --- |
-| Rust `core` | is the runtime | full; `FormulaEngine` selects/reports Tree or Plan | full | `cargo test -p finkit` | v0.2.0 `.crate` |
-| Python | 78 / 78 | exported; `formula_backend` and `formula_eval(..., backend=...)` | exported | CI `python-wheels` | v0.2.0 ABI3 wheels |
+| Rust `core` | is the runtime | full; `FormulaEngine` selects/reports Tree or Plan | full | `cargo test -p qx-finkit` | v0.3.0 `.crate` |
+| Python | 78 / 78 | exported; `formula_backend` and `formula_eval(..., backend=...)` | exported | CI `python-wheels` | v0.3.0 ABI3 wheels |
 | Node | 78 / 78 | exported; `formulaBackend` and `formulaEval(..., backend?)` | exported | CI native smoke (`linux-x64`, `win32-x64-msvc`, `darwin-arm64`) | CI `.tgz` candidate (not on npm) |
 | C | 78 / 78 (extractor self-check anchor) | exported (`*_json`) | exported | CI CMake build/test/install | CI SDK candidate |
 | Go | 78 / 78 | exported | exported | CI `go test` + external-module consumer | source + CI candidate |
@@ -150,11 +150,11 @@ python3 scripts/audit_binding_parity.py --check         # CI gate
 python3 scripts/audit_binding_parity.py --update-baseline
 ```
 
-## v0.2.0 distribution contract
+## v0.3.0 distribution contract
 
-The `v0.2.0` tag and release workflow are the authoritative version contract:
+The `v0.3.0` tag and release workflow are the authoritative version contract:
 
-| Target | v0.2.0 release path | Installation path |
+| Target | v0.3.0 release path | Installation path |
 | --- | --- | --- |
 | Python | ABI3 wheels | GitHub Release wheel |
 | Rust | `.crate` asset | Release asset or git tag/source |
@@ -170,6 +170,13 @@ The `v0.2.0` tag and release workflow are the authoritative version contract:
 
 An artifact is not a public registry package until its target registry has been
 published to and a clean consumer install has passed.
+
+## v0.3.1 registry package names
+
+The release workflows publish the Rust crate and Python distribution as
+`qx-finkit`. Python imports remain `finkit`; Rust projects can preserve the
+`finkit::...` source path with `finkit = { package = "qx-finkit", version =
+"0.3.1" }`.
 
 ## Screening API across bindings
 
@@ -201,7 +208,7 @@ The current Node package manifest declares additional optional packages such as 
 
 ## Python
 
-Python remains the most complete binary-distribution path in v0.2.0. Four `cp38-abi3` wheels are built for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
+Python remains the most complete binary-distribution path in v0.3.0. Four `cp38-abi3` wheels are built for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
 
 Its indicator surface now matches the C binding exactly (78/78). The last seven
 were the classic price-action constructions — `darvas_box`, `renko`, `kagi`,
@@ -235,7 +242,7 @@ Use the release tag when a crates.io package is not independently verified:
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.2.0" }
+finkit = { package = "qx-finkit", git = "https://github.com/coeasy/finkit", tag = "v0.3.1" }
 ```
 
 Or use a local checkout:
@@ -248,9 +255,9 @@ finkit = { path = "../finkit/core" }
 Validation:
 
 ```bash
-cargo build -p finkit --release --locked
-cargo test -p finkit --locked
-cargo package -p finkit --locked --no-verify
+cargo build -p qx-finkit --release --locked
+cargo test -p qx-finkit --locked
+cargo package -p qx-finkit --locked --no-verify
 ```
 
 ## Node.js
@@ -495,8 +502,8 @@ See [../wasm/README.md](../wasm/README.md).
 
 The following claims must only appear after real publication **and** a clean consumer smoke test:
 
-- `pip install finkit` from PyPI;
-- `cargo add finkit` from crates.io;
+- `pip install qx-finkit` from PyPI;
+- `cargo add qx-finkit` from crates.io;
 - `npm install finkit` from npm;
 - Maven Central coordinates;
 - NuGet package IDs;

@@ -11,7 +11,7 @@
 //!
 //! Run with:
 //! ```bash
-//! cargo bench -p finkit --bench ten_million_bench -- --warm-up-time=1 --measurement-time=3 --sample-size=10
+//! cargo bench -p qx-finkit --bench ten_million_bench -- --warm-up-time=1 --measurement-time=3 --sample-size=10
 //! ```
 //!
 //! Output is also written to `docs/benchmark-baseline.json` for the

@@ -1,6 +1,6 @@
 //! Compare the installed OBV allocation/dispatch paths at the gate's sizes.
 //!
-//! Run with: cargo run -p finkit --release --features rayon --example obv_path_probe
+//! Run with: cargo run -p qx-finkit --release --features rayon --example obv_path_probe
 
 use std::hint::black_box;
 use std::time::Instant;

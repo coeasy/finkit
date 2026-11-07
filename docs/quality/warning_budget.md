@@ -2,7 +2,7 @@
 
 > 门禁：`python scripts/check_warning_budget.py`
 > 基线：`scripts/warning_budget_baseline.json`
-> 范围：`cargo clippy -p finkit --all-targets`
+> 范围：`cargo clippy -p qx-finkit --all-targets`
 
 ## 为什么是棘轮，不是待办清单
 

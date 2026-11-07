@@ -2,7 +2,7 @@
 //!
 //! Demonstrates building a complete ML feature matrix from raw price data.
 //!
-//! Run: cargo run --example feature_pipeline -p finkit
+//! Run: cargo run --example feature_pipeline -p qx-finkit
 
 use finkit::features::*;
 

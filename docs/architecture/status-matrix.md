@@ -82,7 +82,7 @@
 
 | 绑定 | 指标 surface | tier | 漂移检查 | parity 门禁 | 发行状态 |
 |---|---|---|---|---|---|
-| Rust `core` | 全部（即运行时本体） | active | `cargo test -p finkit` | — | v0.1.15 `.crate` |
+| Rust `core` | 全部（即运行时本体） | active | `cargo test -p qx-finkit` | — | v0.1.15 `.crate` |
 | Python | 78 / 78 | active | ✅ `sync_bindings.py` | ✅ `audit_binding_parity.py` | v0.1.15 ABI3 wheels |
 | Node | 78 / 78 | active | ✅ | ✅ | CI 候选 `.tgz`（非 npm 公开发布） |
 | C | 78 / 78 | deferred | — | ✅（extractor 自检锚点） | CI 候选 SDK |
@@ -123,10 +123,10 @@
 | Rust workspace tests + doctests | `PYO3_PYTHON=<有效 Python> cargo test --workspace --locked --no-fail-fast` | **退出码 0**；全部执行的测试与 doctest 通过，仓库标记的 ignored 项未执行 |
 | Workspace 编译 | `PYO3_PYTHON=<有效 Python> cargo check --workspace --all-targets --locked` | 通过（14 个 crate；Windows incremental lock cleanup 有权限警告，不影响退出码 0） |
 | Clippy | `PYO3_PYTHON=<有效 Python> cargo clippy --workspace --all-targets --locked` | 通过，退出码 0；pedantic 配置产生数千条既有 warning，应作为后续质量治理项 |
-| 核心 rustdoc | `RUSTDOCFLAGS=-D warnings cargo doc -p finkit --no-deps --locked` | 通过；Windows incremental lock cleanup 有权限警告，不影响退出码 0 |
-| docs.rs feature configuration | `RUSTFLAGS=-D warnings RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc -p finkit --no-deps --no-default-features --features "std formula serde tracing metrics formula-jit formula-simd indicators-all" --locked` | 通过；修复了原 `all-features` 与互斥 `std` / `no_std` 配置冲突 |
-| crates.io package 验证 | `cargo package -p finkit --locked --allow-dirty` | 通过；541 files / 8.1 MiB，包含重新编译验证 |
-| 公式执行 mode | `cargo test -p finkit --test formula_execution_mode --locked` | **14/14 通过** |
+| 核心 rustdoc | `RUSTDOCFLAGS=-D warnings cargo doc -p qx-finkit --no-deps --locked` | 通过；Windows incremental lock cleanup 有权限警告，不影响退出码 0 |
+| docs.rs feature configuration | `RUSTFLAGS=-D warnings RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc -p qx-finkit --no-deps --no-default-features --features "std formula serde tracing metrics formula-jit formula-simd indicators-all" --locked` | 通过；修复了原 `all-features` 与互斥 `std` / `no_std` 配置冲突 |
+| crates.io package 验证 | `cargo package -p qx-finkit --locked --allow-dirty` | 通过；541 files / 8.1 MiB，包含重新编译验证 |
+| 公式执行 mode | `cargo test -p qx-finkit --test formula_execution_mode --locked` | **14/14 通过** |
 | Feature matrix | `python scripts/check_feature_matrix.py` | 通过；具体受支持/known-broken 组合数以脚本当前清单为准 |
 | 依赖、绑定、文档与版本合同 | `check_dependency_direction.py`、`audit_binding_parity.py --check`、`check_binding_feature_contract.py`、`check_docs_links.py`、`check_versions.py`、`gen_ssot_docs.py --check`、`check_formula_engine_contract.py`、`check_python_stub.py`、`check_changelog.py` | 均通过 |
 | Python / Node / Factor Study CLI 消费测试 | `pytest` binding suites、`npm test`、`cargo test -p finkit-cli --test factor_study_cli --locked` | Python 全套通过；Node **16/16**；CLI **1/1** |
@@ -140,10 +140,10 @@
 
 | 核验 | 命令 | 结果 |
 |---|---|---|
-| 公式后端契约 | `cargo test -p finkit --locked --test formula_execution_mode` | **14/14 通过**（默认 Auto；13 个 tree-only 守卫；plan 可用入口填充 plan 缓存） |
-| 公式差分 | `cargo test -p finkit --locked --test formula_plan_differential` | **4/4 通过**（国内/Pine 语料 tree==plan） |
-| 字符串字面量 | `cargo test -p finkit --locked --test formula_string_literals` | **6/6 通过**（两路径 `string_table` 一致；`string_base` 偏移；4 个消费下标的函数在 Plan 下运行且与 tree 逐值一致；参数边界保留 Tree 既有兼容行为） |
-| 相邻公式面 | `cargo test -p finkit --locked --test dzh_compat_tests --test em_compat_tests --test formula_dialect_coverage --test formula_corpus --test formula_terminal_contract --test runtime_convergence` | **94/94 通过**（43+21+2+10+1+17） |
+| 公式后端契约 | `cargo test -p qx-finkit --locked --test formula_execution_mode` | **14/14 通过**（默认 Auto；13 个 tree-only 守卫；plan 可用入口填充 plan 缓存） |
+| 公式差分 | `cargo test -p qx-finkit --locked --test formula_plan_differential` | **4/4 通过**（国内/Pine 语料 tree==plan） |
+| 字符串字面量 | `cargo test -p qx-finkit --locked --test formula_string_literals` | **6/6 通过**（两路径 `string_table` 一致；`string_base` 偏移；4 个消费下标的函数在 Plan 下运行且与 tree 逐值一致；参数边界保留 Tree 既有兼容行为） |
+| 相邻公式面 | `cargo test -p qx-finkit --locked --test dzh_compat_tests --test em_compat_tests --test formula_dialect_coverage --test formula_corpus --test formula_terminal_contract --test runtime_convergence` | **94/94 通过**（43+21+2+10+1+17） |
 | 公式引擎合同 | `python scripts/check_formula_engine_contract.py` | 通过（13 项 tree-only 在 **四份**名册一致；默认 Auto；缓存容量一致） |
 | feature 组合 | `python scripts/check_feature_matrix.py` | 通过（**4** 个受支持组合构建成功；**6** 个 known-broken 仍按记录失败） |
 | 依赖方向 | `python scripts/check_dependency_direction.py` | 通过（30 条 shipped 边全部向下；1 条 dev-only 边已记录） |
@@ -161,11 +161,11 @@
 
 | 核验 | 命令 / 产物 | 结果 |
 |---|---|---|
-| Rust crate 全套测试 | `cargo test -p finkit -p finkit-factor-analysis -p finkit-cli -p finkit-visualization -p finkit-ffi-common -p finkit-ffi -p finkit-go -p finkit-dotnet -p finkit-java -p finkit-android -p finkit-ios -p finkit-wasm --locked --no-fail-fast` | 12 个 crate 通过 |
+| Rust crate 全套测试 | `cargo test -p qx-finkit -p finkit-factor-analysis -p finkit-cli -p finkit-visualization -p finkit-ffi-common -p finkit-ffi -p finkit-go -p finkit-dotnet -p finkit-java -p finkit-android -p finkit-ios -p finkit-wasm --locked --no-fail-fast` | 12 个 crate 通过 |
 | Workspace 构建 | `PYO3_PYTHON=<有效 Python> cargo check --workspace --locked` | 通过 |
-| Clippy CI 合同 | `cargo clippy -p finkit --locked`；`cargo clippy --workspace --all-targets --locked`，设 `RUSTFLAGS=-D unfulfilled_lint_expectations` | 通过；仓库 warning budget 允许既有 lint 警告，严格 `-D warnings` 不属于项目 CI 合同 |
-| Rustdoc | `RUSTDOCFLAGS="-D warnings" cargo doc -p finkit --no-deps --locked` | 通过。`check_rustdoc.sh` 的 WSL 启动器在该主机不可用，直接执行策略命令成功 |
-| crate 发布包 | `cargo package -p finkit --locked --allow-dirty` | 541 文件 / 8.1 MiB，验证成功 |
+| Clippy CI 合同 | `cargo clippy -p qx-finkit --locked`；`cargo clippy --workspace --all-targets --locked`，设 `RUSTFLAGS=-D unfulfilled_lint_expectations` | 通过；仓库 warning budget 允许既有 lint 警告，严格 `-D warnings` 不属于项目 CI 合同 |
+| Rustdoc | `RUSTDOCFLAGS="-D warnings" cargo doc -p qx-finkit --no-deps --locked` | 通过。`check_rustdoc.sh` 的 WSL 启动器在该主机不可用，直接执行策略命令成功 |
+| crate 发布包 | `cargo package -p qx-finkit --locked --allow-dirty` | 541 文件 / 8.1 MiB，验证成功 |
 | 使用接口包 | `bash scripts/build-usage-packages.sh` | Windows x64：Python、Node、Java、Go、C、.NET、WASM 七包全部 clean-consumer 验证通过；44 个 manifest 组件 |
 | 候选 bundle | `dist/finkit-0.2.0-windows-x64-usage-bundle.zip` | 26,280,558 字节；7 种语言、44 个组件；包 manifest 检查通过 |
 | C 原生 archive | `dist/native/windows-x64/finkit-0.2.0-native-windows-x64.zip` | 6,904,528 字节；SHA-256 `ebbf42746db5b4f4fbe70dbe04e64850223f34337b8be080f08bc4a603d15474` |
@@ -177,7 +177,7 @@
 
 | 核验 | 结果 |
 |---|---|
-| `cargo test -p finkit --test formula_execution_mode` | 12/12 通过 |
+| `cargo test -p qx-finkit --test formula_execution_mode` | 12/12 通过 |
 | `cargo test -p finkit-factor-analysis` | 52/52 通过 |
 | `cargo test -p finkit-cli` | 12 单元通过；`schema_cli.rs` 3 项在本机因 Windows `ERROR_PIPE_BUSY` 失败——环境限制，非代码缺陷 |
 | `python scripts/audit_binding_parity.py --check` | 通过 |

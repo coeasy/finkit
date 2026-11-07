@@ -12,7 +12,7 @@ documentation.workspace = true
 workspace = true
 
 [dependencies]
-finkit = { path = "../core", features = ["formula"] }
+finkit = { package = "qx-finkit", path = "../core", features = ["formula"] }
 finkit-factor-analysis = { path = "../factor-analysis" }
 finkit-visualization = { path = "../visualization", features = ["html"] }
 clap = { version = "4", features = ["derive"] }

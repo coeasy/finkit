@@ -8,7 +8,7 @@
 //!
 //! Run with:
 //! ```bash
-//! cargo bench -p finkit --bench zero_alloc_bench
+//! cargo bench -p qx-finkit --bench zero_alloc_bench
 //! ```
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};

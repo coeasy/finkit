@@ -665,54 +665,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3e0f1c7c3a72c66fd80abe965175f7523475c0489a87d3ff9d6e8c87d87a9d2d"
 
 [[package]]
-name = "finkit"
-version = "0.3.0"
-dependencies = [
- "ahash",
- "approx",
- "bincode",
- "criterion",
- "dhat",
- "libm",
- "lru",
- "metrics",
- "metrics-exporter-prometheus",
- "ndarray 0.16.1",
- "pest",
- "pest_derive",
- "polars",
- "proptest",
- "rayon",
- "serde",
- "serde_json",
- "ta",
- "thiserror 1.0.69",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "finkit-android"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "android_logger",
- "finkit",
  "finkit-ffi-common",
  "jni",
  "ndarray 0.16.1",
+ "qx-finkit",
 ]
 
 [[package]]
 name = "finkit-cli"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "assert_cmd",
  "clap",
  "csv",
- "finkit",
  "finkit-factor-analysis",
  "finkit-visualization",
  "ndarray 0.16.1",
+ "qx-finkit",
  "serde",
  "serde_json",
  "tempfile",
@@ -720,21 +693,21 @@ dependencies = [
 
 [[package]]
 name = "finkit-dotnet"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
- "finkit",
  "finkit-ffi-common",
  "libc",
  "ndarray 0.16.1",
+ "qx-finkit",
  "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "finkit-factor-analysis"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
- "finkit",
+ "qx-finkit",
  "rayon",
  "serde",
  "serde_json",
@@ -743,97 +716,97 @@ dependencies = [
 
 [[package]]
 name = "finkit-ffi"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
- "finkit",
  "finkit-ffi-common",
  "libc",
  "ndarray 0.16.1",
+ "qx-finkit",
  "serde_json",
 ]
 
 [[package]]
 name = "finkit-ffi-common"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
- "finkit",
  "finkit-factor-analysis",
  "ndarray 0.16.1",
+ "qx-finkit",
  "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "finkit-go"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
- "finkit",
  "finkit-ffi-common",
  "libc",
  "ndarray 0.16.1",
+ "qx-finkit",
  "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "finkit-ios"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
- "finkit",
  "finkit-ffi-common",
  "libc",
  "ndarray 0.16.1",
+ "qx-finkit",
 ]
 
 [[package]]
 name = "finkit-java"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
- "finkit",
  "finkit-ffi-common",
  "finkit-visualization",
  "jni",
  "lazy_static",
  "ndarray 0.16.1",
+ "qx-finkit",
  "serde_json",
 ]
 
 [[package]]
 name = "finkit-node"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
- "finkit",
  "finkit-ffi-common",
  "finkit-visualization",
  "napi",
  "napi-build",
  "napi-derive",
  "ndarray 0.16.1",
+ "qx-finkit",
  "serde_json",
  "tokio",
 ]
 
 [[package]]
 name = "finkit-python"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
- "finkit",
  "finkit-factor-analysis",
  "finkit-ffi-common",
  "finkit-visualization",
  "ndarray 0.16.1",
  "numpy",
  "pyo3",
+ "qx-finkit",
 ]
 
 [[package]]
 name = "finkit-visualization"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "base64",
- "finkit",
  "fontdue",
  "png",
+ "qx-finkit",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -841,14 +814,14 @@ dependencies = [
 
 [[package]]
 name = "finkit-wasm"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "console_error_panic_hook",
- "finkit",
  "finkit-ffi-common",
  "finkit-visualization",
  "getrandom 0.3.4",
  "ndarray 0.16.1",
+ "qx-finkit",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",
@@ -1930,6 +1903,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001"
 dependencies = [
  "proc-macro2",
+]
+
+[[package]]
+name = "qx-finkit"
+version = "0.3.1"
+dependencies = [
+ "ahash",
+ "approx",
+ "bincode",
+ "criterion",
+ "dhat",
+ "libm",
+ "lru",
+ "metrics",
+ "metrics-exporter-prometheus",
+ "ndarray 0.16.1",
+ "pest",
+ "pest_derive",
+ "polars",
+ "proptest",
+ "rayon",
+ "serde",
+ "serde_json",
+ "ta",
+ "thiserror 1.0.69",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

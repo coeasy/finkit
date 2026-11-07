@@ -13,7 +13,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 finkit-ffi-common = { path = "../ffi-common" }
-finkit = { path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }
+finkit = { package = "qx-finkit", path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }
 finkit-visualization = { path = "../../visualization", features = ["svg", "html"] }
 napi = { version = "2", features = ["napi4", "tokio_rt"] }
 napi-derive = "2"

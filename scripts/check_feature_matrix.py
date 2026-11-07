@@ -8,7 +8,7 @@ nothing in `cargo build` checks that claim: the default build exercises the
 default set and no other. `core/Cargo.toml` asserted that the indicator
 tree-shaking scaffold made "picking a single category still compiles", and
 `Makefile`'s `lint` target ran
-`cargo clippy -p finkit --no-default-features --features no_std -- -D warnings`
+`cargo clippy -p qx-finkit --no-default-features --features no_std -- -D warnings`
 -- but neither was in any CI workflow, so nothing ever ran them. Both had
 rotted: measured 2026-10-11, the `no_std` build was **49 errors** and every
 single-category build failed too.
@@ -99,7 +99,7 @@ ERROR_RE = re.compile(r"^error(?:\[[A-Z0-9]+\])?:", re.MULTILINE)
 
 def run_check(extra: list[str]) -> tuple[int, int, str]:
     """Return (exit_code, parsed_error_count, tail)."""
-    cmd = ["cargo", "check", "-p", "finkit", "--locked", *extra]
+    cmd = ["cargo", "check", "-p", "qx-finkit", "--locked", *extra]
     env = dict(os.environ, CARGO_INCREMENTAL="0", CARGO_TERM_COLOR="never")
     try:
         proc = subprocess.run(
@@ -130,7 +130,7 @@ def main() -> int:
     if args.list:
         print("SUPPORTED (must build):")
         for label, extra in SUPPORTED:
-            print(f"  {label:16s} cargo check -p finkit --locked {label_of(extra)}")
+            print(f"  {label:16s} cargo check -p qx-finkit --locked {label_of(extra)}")
         print("KNOWN_BROKEN (must still fail):")
         for label, extra, why in KNOWN_BROKEN:
             print(f"  {label:16s} {label_of(extra)}\n      -> {why}")

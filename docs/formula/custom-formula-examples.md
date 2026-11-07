@@ -3,15 +3,15 @@
 本文对应可直接运行的示例程序：
 
 ```bash
-cargo run --release --example custom_formula_gallery   -p finkit   # 9 个自定义公式示例
-cargo run --release --example formula_vs_talib         -p finkit   # 与 TA-Lib C 的效率对比
-cargo run --release --example formula_surface_audit    -p finkit   # 能力面审计
+cargo run --release --example custom_formula_gallery   -p qx-finkit   # 9 个自定义公式示例
+cargo run --release --example formula_vs_talib         -p qx-finkit   # 与 TA-Lib C 的效率对比
+cargo run --release --example formula_surface_audit    -p qx-finkit   # 能力面审计
 ```
 
 效率对比若需要第四列（TA-Lib C），需启用特性：
 
 ```bash
-cargo run --release --features talib-c --example formula_vs_talib -p finkit
+cargo run --release --features talib-c --example formula_vs_talib -p qx-finkit
 ```
 
 ## 1. 最小可用公式

@@ -15,7 +15,7 @@
 //! Run with the feature to get all four columns:
 //!
 //! ```text
-//! cargo run --release --features talib-c --example formula_vs_talib -p finkit
+//! cargo run --release --features talib-c --example formula_vs_talib -p qx-finkit
 //! ```
 //!
 //! # Methodology

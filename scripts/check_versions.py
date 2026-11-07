@@ -82,7 +82,7 @@ SEMVER_RE = re.compile(r"(?<![\d.])(\d+\.\d+\.\d+)(?![\d.])")
 #
 # Both versions are legal in release-facing documents. When a publish actually
 # happens, move this forward in the same commit as the release notes.
-PUBLISHED_VERSION = "0.2.0"
+PUBLISHED_VERSION = "0.3.0"
 
 # Versions that legitimately appear in release-facing documents but are neither
 # this workspace's version nor a published one (a dependency's version, say).
@@ -227,7 +227,7 @@ def read_cargo_package_versions() -> dict[str, str]:
 def read_lock_workspace_versions() -> dict[str, str]:
     text = CARGO_LOCK.read_text(encoding="utf-8")
     pattern = re.compile(
-        r'\[\[package\]\]\s*name = "(finkit(?:-[^"]+)?)"\s*'
+        r'\[\[package\]\]\s*name = "(qx-finkit|finkit(?:-[^"]+)?)"\s*'
         r'version = "([^"]+)"',
         re.MULTILINE,
     )

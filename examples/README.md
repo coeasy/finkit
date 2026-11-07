@@ -23,7 +23,7 @@ Use a wheel downloaded from the published GitHub Release, or build the Python
 binding from source as described in `docs/installation.md`:
 
 ```bash
-python -m pip install ./finkit-0.2.0-<matching-platform>.whl
+python -m pip install ./finkit-0.3.0-<matching-platform>.whl
 python examples/python_example.py
 ```
 
@@ -45,10 +45,10 @@ node examples/nodejs_example.js
 
 ```bash
 # 编译示例 (需要先构建 Java binding)
-javac -cp dist/java/windows-x64/finkit-0.2.0.jar examples/java_example/FinkitExample.java
+javac -cp dist/java/windows-x64/finkit-0.3.0.jar examples/java_example/FinkitExample.java
 
 # 运行示例
-java -cp dist/java/windows-x64/finkit-0.2.0.jar;examples/java_example FinkitExample
+java -cp dist/java/windows-x64/finkit-0.3.0.jar;examples/java_example FinkitExample
 ```
 
 ### Go

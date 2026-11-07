@@ -27,7 +27,7 @@ mkdir -p target
 
 # `--no-deps` keeps the run bounded to the crate we own; `--locked` makes the
 # dependency set reproducible.
-RUSTDOCFLAGS="-D warnings" cargo doc -p finkit --no-deps --locked 2>&1 | tee "$LOG"
+RUSTDOCFLAGS="-D warnings" cargo doc -p qx-finkit --no-deps --locked 2>&1 | tee "$LOG"
 status=${PIPESTATUS[0]}
 
 # `-D warnings` already turns every lint into an error, so a non-zero status is

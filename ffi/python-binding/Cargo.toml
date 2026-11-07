@@ -13,7 +13,7 @@ crate-type = ["cdylib"]
 workspace = true
 
 [dependencies]
-finkit = { path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }
+finkit = { package = "qx-finkit", path = "../../core", default-features = false, features = ["std", "serde", "indicators-all"] }
 finkit-factor-analysis = { path = "../../factor-analysis" }
 finkit-visualization = { path = "../../visualization", features = ["svg", "html"] }
 finkit-ffi-common = { path = "../ffi-common" }

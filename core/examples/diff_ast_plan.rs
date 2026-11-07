@@ -5,8 +5,8 @@
 //! `formula_plan_differential` down to a specific index and formula.
 //!
 //! ```text
-//! cargo run -p finkit --example diff_ast_plan
-//! cargo run -p finkit --example diff_ast_plan -- "MA(CLOSE,6)/CLOSE"
+//! cargo run -p qx-finkit --example diff_ast_plan
+//! cargo run -p qx-finkit --example diff_ast_plan -- "MA(CLOSE,6)/CLOSE"
 //! ```
 
 use finkit::formula::{

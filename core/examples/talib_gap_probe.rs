@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! TA_LIB_DIR=/p/ta-lib-build/install \
-//!   cargo run --release -p finkit --example talib_gap_probe --features talib-c
+//!   cargo run --release -p qx-finkit --example talib_gap_probe --features talib-c
 //! ```
 //!
 //! ## What this is, and what it is not

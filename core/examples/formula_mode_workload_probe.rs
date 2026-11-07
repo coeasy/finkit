@@ -32,8 +32,8 @@
 //! Run with:
 //!
 //! ```text
-//! cargo run -p finkit --release --example formula_mode_workload_probe
-//! cargo run -p finkit --release --example formula_mode_workload_probe -- --scaled
+//! cargo run -p qx-finkit --release --example formula_mode_workload_probe
+//! cargo run -p qx-finkit --release --example formula_mode_workload_probe -- --scaled
 //! ```
 
 // The synthetic-input helpers below deliberately mirror

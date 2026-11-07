@@ -1,7 +1,7 @@
 //! How much of a plan-path `eval_plan` call is *cache overhead* rather than
 //! execution, and why the `FormulaPlanCache` hands out `Arc` handles.
 //!
-//! Run: `cargo run --release -p finkit --example plan_cache_probe`
+//! Run: `cargo run --release -p qx-finkit --example plan_cache_probe`
 //!
 //! The third column is the cost of the **public** `compile_plan` entry point,
 //! which still clones by design — it returns an owned plan to its caller. The

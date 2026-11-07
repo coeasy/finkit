@@ -37,8 +37,8 @@ import numpy as np
 try:
     import finkit
 except ImportError:
-    print("[precision] finkit not installed; pip install finkit (or use the "
-          "local wheel in dist/python/<plat>/finkit-*.whl)",
+    print("[precision] finkit not installed; pip install qx-finkit (or use the "
+          "local wheel in dist/python/<plat>/qx_finkit-*.whl)",
           file=sys.stderr)
     sys.exit(2)
 

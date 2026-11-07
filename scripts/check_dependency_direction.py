@@ -11,7 +11,7 @@ either uses it (factor-analysis, visualization), wraps its C ABI
 That direction is the product contract: **a kernel may never depend on an
 adapter**. A single `use finkit_cli` (or a reverse `path =` dependency) inside
 `core` would compile fine and silently pull a presentation/FFI layer into the
-hot path, invert the build graph, and make `cargo check -p finkit` require the
+hot path, invert the build graph, and make `cargo check -p qx-finkit` require the
 whole world. `cargo` will not object, so this gate does.
 
 The layering
@@ -50,7 +50,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # Crate name -> layer. Assigning a new workspace member is a deliberate edit.
 LAYERS: dict[str, int] = {
-    "finkit": 0,
+    "qx-finkit": 0,
     "finkit-factor-analysis": 1,
     "finkit-visualization": 1,
     "finkit-ffi-common": 2,
@@ -74,7 +74,7 @@ DEV_TABLES = ("dev-dependencies",)
 # Kernel integration tests must exercise adapter behavior from the adapter
 # crate. A dev-edge from the core back to ffi-common creates a test-only layer
 # inversion and needlessly builds every shared binding contract in core tests.
-FORBIDDEN_DEV_EDGES = {("finkit", "finkit-ffi-common")}
+FORBIDDEN_DEV_EDGES = {("qx-finkit", "finkit-ffi-common")}
 
 
 def load_manifest(path: Path) -> dict:

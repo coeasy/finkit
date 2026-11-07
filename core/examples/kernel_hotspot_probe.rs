@@ -12,7 +12,7 @@
 //! `docs/talib-efficiency-deep-dive-zh.md` §4 and §6. Reproduce with:
 //!
 //! ```text
-//! cargo run --release -p finkit --example kernel_hotspot_probe
+//! cargo run --release -p qx-finkit --example kernel_hotspot_probe
 //! ```
 //!
 //! ## Why "previous" is a *port* and not a call

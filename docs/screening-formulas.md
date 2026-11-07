@@ -102,6 +102,6 @@ look-ahead exclusion, NaN handling, parameter constraints, and market-neutral
 gap/relative-strength semantics. Run the focused checks with:
 
 ```bash
-cargo test -p finkit screening --locked
+cargo test -p qx-finkit screening --locked
 python scripts/gen_ssot_docs.py --check
 ```

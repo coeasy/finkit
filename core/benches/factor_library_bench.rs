@@ -15,7 +15,7 @@
 //!
 //! Run with:
 //! ```bash
-//! cargo bench -p finkit --bench factor_library_bench
+//! cargo bench -p qx-finkit --bench factor_library_bench
 //! ```
 //!
 //! # Why the report is hand-rolled

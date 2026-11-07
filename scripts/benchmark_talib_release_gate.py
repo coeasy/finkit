@@ -174,7 +174,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "python": sys.version,
         "platform": platform.platform(),
         "numpy": np.__version__,
-        "finkit": importlib.metadata.version("finkit"),
+        "finkit": importlib.metadata.version("qx-finkit"),
         "talib_python": importlib.metadata.version("TA-Lib"),
         "talib_core": getattr(talib, "__ta_version__", b"unknown").decode(errors="replace") if isinstance(getattr(talib, "__ta_version__", b""), bytes) else str(getattr(talib, "__ta_version__", "unknown")),
     }

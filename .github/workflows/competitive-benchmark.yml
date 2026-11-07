@@ -59,7 +59,7 @@ jobs:
         with:
           version: ${{ steps.talib-version.outputs.version }}
       - name: Run paired Criterion benchmarks
-        run: cargo bench -p finkit --bench talib_c_comparison --features talib-c --locked
+        run: cargo bench -p qx-finkit --bench talib_c_comparison --features talib-c --locked
       - name: Render report and reject incomplete discovery
         run: |
           mkdir -p dist/bench

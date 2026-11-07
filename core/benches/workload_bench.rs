@@ -33,8 +33,8 @@
 //!
 //! Run with:
 //! ```bash
-//! cargo bench -p finkit --bench workload_bench
-//! cargo bench -p finkit --bench workload_bench -- workload_scanner
+//! cargo bench -p qx-finkit --bench workload_bench
+//! cargo bench -p qx-finkit --bench workload_bench -- workload_scanner
 //! ```
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};

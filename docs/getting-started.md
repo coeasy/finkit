@@ -6,16 +6,16 @@ This guide is the shortest path from a fresh machine to a verified Finkit calcul
 
 Finkit is a high-performance financial indicator, formula, factor, and streaming-computation library. It is not a broker, order-routing system, or full research platform.
 
-The workspace currently targets **v0.3.0**. The latest published GitHub Release is **v0.2.0**; use that release for downloadable assets, or build the v0.3.0 workspace from source.
+The workspace currently targets **v0.3.1**. The latest published GitHub Release is **v0.3.0**; use that release for downloadable assets, or build the v0.3.1 workspace from source.
 
-The published `v0.2.0` Release contains:
+The published `v0.3.0` Release contains:
 
 - Python ABI3 wheels for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64;
-- `finkit-0.2.0.crate`;
+- `finkit-0.3.0.crate`;
 - `finkit-cli-linux-x86_64`;
 - `SHA256SUMS`.
 
-Node.js, Java/JNI, and C/C++ are validated from source by CI but are not claimed as public registry packages. The v0.3.0 publish workflow is prepared, but publication and clean-consumer smoke tests are still release steps.
+Node.js, Java/JNI, and C/C++ are validated from source by CI but are not claimed as public registry packages. The v0.3.1 publish workflow targets qx-finkit on crates.io and PyPI; publication and clean-consumer smoke tests remain release steps.
 
 ## 2. Core data rules
 
@@ -30,14 +30,15 @@ Before using any API, keep these rules consistent across languages:
 
 ## 3. Fastest start: Python
 
-Download the wheel matching your platform from the published GitHub `v0.2.0` Release, then install it locally:
+Install the PyPI distribution `qx-finkit`. Its Python import name remains
+`finkit`:
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install ./finkit-0.2.0-<platform>.whl
+python -m pip install qx-finkit
 ```
 
-To try the unreleased v0.3.0 workspace instead, build the binding from source as described in [installation.md](installation.md).
+To try the unreleased v0.3.1 workspace instead, build the binding from source as described in [installation.md](installation.md).
 
 Verify the installation:
 
@@ -119,7 +120,7 @@ Until a registry package is independently verified, use the release tag or a loc
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.2.0" }
+finkit = { package = "qx-finkit", git = "https://github.com/coeasy/finkit", tag = "v0.3.1" }
 ```
 
 Example:
@@ -199,7 +200,7 @@ For source-build validation:
 cargo fmt --all -- --check
 cargo check --workspace --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test -p finkit --locked
+cargo test -p qx-finkit --locked
 cargo test --workspace --doc --locked
 python scripts/check_versions.py
 python scripts/gen_ssot_docs.py --check

@@ -792,7 +792,7 @@ def format_version_matrix_md(
             "instead:",
             "",
             "```bash",
-            "cargo bench -p finkit --locked",
+            "cargo bench -p qx-finkit --locked",
             "python scripts/gen_benchmark_report.py   # → docs/BENCHMARK_REPORT.md",
             "```",
             "",

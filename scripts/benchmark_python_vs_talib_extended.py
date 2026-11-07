@@ -217,7 +217,7 @@ def main() -> int:
         "python": sys.version,
         "platform": platform.platform(),
         "numpy": np.__version__,
-        "finkit": pkg_version("finkit"),
+        "finkit": pkg_version("qx-finkit"),
         "talib_python": pkg_version("TA-Lib"),
         "talib_core": getattr(talib, "__ta_version__", b"unknown").decode() if isinstance(getattr(talib, "__ta_version__", b"unknown"), bytes) else str(getattr(talib, "__ta_version__", "unknown")),
         "trials": TRIALS,

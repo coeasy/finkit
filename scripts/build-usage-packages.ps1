@@ -112,7 +112,7 @@ $Verifiers = [ordered]@{
         # Accept abi3 OR cp<XY>-cp<XY>-*.whl (maturin picks based on cargo
         # features; either is valid for a smoke test).
         $distPy = Join-Path $Dist "python\$Platform"
-        $whl = Get-ChildItem -Path $distPy -Filter "finkit-*.whl" -ErrorAction SilentlyContinue |
+        $whl = Get-ChildItem -Path $distPy -Filter "qx_finkit-*.whl" -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -match 'finkit-.*-abi3-.*\.whl|finkit-.*-cp\d+-.*\.whl' } |
             Select-Object -First 1
         if (-not $whl) { throw "no wheel to verify in $distPy" }
@@ -295,7 +295,7 @@ for lang in langs:
         })
 covered = sorted({component["language"] for component in components})
 manifest = {
-    "name": "finkit",
+    "name": "qx-finkit",
     "version": os.environ["VERSION"],
     "platform": plat,
     "languages": covered,

@@ -151,10 +151,10 @@ host-context 或 lowering 缺口都应带着书面理由登记回
 
 ```bash
 # 运行全部语料回归
-cargo test -p finkit formula_corpus -- --nocapture
+cargo test -p qx-finkit formula_corpus -- --nocapture
 
 # 仅运行 TDX 语料
-cargo test -p finkit formula_corpus_tdx
+cargo test -p qx-finkit formula_corpus_tdx
 ```
 
 固定 contract 位于
