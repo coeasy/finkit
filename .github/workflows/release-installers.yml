@@ -237,8 +237,15 @@ jobs:
         run: |
           set -euo pipefail
           cd release-installers
-          test -n "$(find . -maxdepth 1 -type f -print -quit)"
-          sha256sum * | sort -k2 > SHA256SUMS.installers
+          mapfile -d '' assets < <(
+            find . -mindepth 1 -maxdepth 1 -type f \
+              ! -name 'SHA256SUMS.installers' -printf '%f\0' | sort -z
+          )
+          if [[ ${#assets[@]} -eq 0 ]]; then
+            echo "::error::no installer files were downloaded"
+            exit 1
+          fi
+          sha256sum -- "${assets[@]}" | sort -k2 > SHA256SUMS.installers
           cat SHA256SUMS.installers
 
       - name: Upload to the Release
@@ -247,10 +254,20 @@ jobs:
           RELEASE_TAG: ${{ needs.version-contract.outputs.tag }}
         run: |
           set -euo pipefail
+          cd release-installers
+          mapfile -d '' assets < <(
+            find . -mindepth 1 -maxdepth 1 -type f \
+              ! -name 'SHA256SUMS.installers' -printf '%f\0' | sort -z
+          )
+          if [[ ${#assets[@]} -eq 0 || ! -f SHA256SUMS.installers ]]; then
+            echo "::error::installer assets or their checksum file are missing"
+            exit 1
+          fi
+          assets+=(SHA256SUMS.installers)
           gh release upload "$RELEASE_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --clobber \
-            release-installers/*
+            "${assets[@]}"
 
   # A Release whose download list silently lost a platform is indistinguishable
   # from a complete one until somebody files a bug. Say it out loud instead.
