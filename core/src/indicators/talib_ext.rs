@@ -103,10 +103,26 @@ pub fn rma_profile(input: &[f64], p: usize) -> Result<Array1<f64>> {
     let input_ptr = input.as_ptr();
     let output_ptr = out.as_mut_ptr();
     let mut index = p;
+    while input.len() - index >= 4 {
+        unsafe {
+            let sample0 = *input_ptr.add(index);
+            let sample1 = *input_ptr.add(index + 1);
+            let sample2 = *input_ptr.add(index + 2);
+            let sample3 = *input_ptr.add(index + 3);
+            value += (sample0 - value) * inv;
+            *output_ptr.add(index) = value;
+            value += (sample1 - value) * inv;
+            *output_ptr.add(index + 1) = value;
+            value += (sample2 - value) * inv;
+            *output_ptr.add(index + 2) = value;
+            value += (sample3 - value) * inv;
+            *output_ptr.add(index + 3) = value;
+        }
+        index += 4;
+    }
     while index < input.len() {
         unsafe {
-            let sample = *input_ptr.add(index);
-            value += (sample - value) * inv;
+            value += (*input_ptr.add(index) - value) * inv;
             *output_ptr.add(index) = value;
         }
         index += 1;
