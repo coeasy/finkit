@@ -36,6 +36,7 @@
     <Package
         InstallerVersion="200"
         Compressed="yes"
+        Platform="x64"
         InstallScope="perMachine"
         Description="Finkit native SDK - C/C++ technical analysis library"
         Comments="High-performance quantitative finance engine (MIT OR Apache-2.0)" />
@@ -58,7 +59,7 @@
           <!-- IMPORTANT: this single component owns the environment variable.
                It must have a KeyPath, otherwise the MSI cannot tell whether
                the component is already installed and will re-run it on repair. -->
-          <Component Id="CmpEnvironment" Guid="*">
+          <Component Id="CmpEnvironment" Guid="*" Win64="yes">
             <Environment
                 Id="EnvFinkitRoot"
                 Name="FINKIT_ROOT"
@@ -93,7 +94,7 @@
     <ComponentGroup Id="PayloadComponents">
       <!-- Layout here mirrors build_native_archive.py member-for-member.
            scripts/check_installer_contract.py enforces that. -->
-      <Component Id="CmpLicense" Directory="DIR_share_finkit" Guid="*">
+      <Component Id="CmpLicense" Directory="DIR_share_finkit" Guid="*" Win64="yes">
         <File Id="FileLicense"
               Name="LICENSE"
               Source="$(var.PayloadDir)\share\finkit\LICENSE"
@@ -103,49 +104,49 @@
       <!-- The import library is what a consumer links against; the DLL is what
            that consumer must find at run time. Both therefore live in PATH,
            not just in the SDK directories. -->
-      <Component Id="CmpRuntimeDll" Directory="DIR_bin" Guid="*">
+      <Component Id="CmpRuntimeDll" Directory="DIR_bin" Guid="*" Win64="yes">
         <File Id="FileRuntimeDll"
               Name="finkit_ffi.dll"
               Source="$(var.PayloadDir)\bin\finkit_ffi.dll"
               KeyPath="yes" />
       </Component>
 
-      <Component Id="CmpDllImportLib" Directory="DIR_lib" Guid="*">
+      <Component Id="CmpDllImportLib" Directory="DIR_lib" Guid="*" Win64="yes">
         <File Id="FileDllImportLib"
               Name="finkit_ffi.dll.lib"
               Source="$(var.PayloadDir)\lib\finkit_ffi.dll.lib"
               KeyPath="yes" />
       </Component>
 
-      <Component Id="CmpStaticLib" Directory="DIR_lib" Guid="*">
+      <Component Id="CmpStaticLib" Directory="DIR_lib" Guid="*" Win64="yes">
         <File Id="FileStaticLib"
               Name="finkit_ffi.lib"
               Source="$(var.PayloadDir)\lib\finkit_ffi.lib"
               KeyPath="yes" />
       </Component>
 
-      <Component Id="CmpMainHeader" Directory="DIR_include" Guid="*">
+      <Component Id="CmpMainHeader" Directory="DIR_include" Guid="*" Win64="yes">
         <File Id="FileMainHeader"
               Name="finkit.h"
               Source="$(var.PayloadDir)\include\finkit.h"
               KeyPath="yes" />
       </Component>
 
-      <Component Id="CmpCppHeader" Directory="DIR_include" Guid="*">
+      <Component Id="CmpCppHeader" Directory="DIR_include" Guid="*" Win64="yes">
         <File Id="FileCppHeader"
               Name="finkit.hpp"
               Source="$(var.PayloadDir)\include\finkit.hpp"
               KeyPath="yes" />
       </Component>
 
-      <Component Id="CmpResearchHeader" Directory="DIR_include" Guid="*">
+      <Component Id="CmpResearchHeader" Directory="DIR_include" Guid="*" Win64="yes">
         <File Id="FileResearchHeader"
               Name="finkit_research.h"
               Source="$(var.PayloadDir)\include\finkit_research.h"
               KeyPath="yes" />
       </Component>
 
-      <Component Id="CmpResearchCppHeader" Directory="DIR_include" Guid="*">
+      <Component Id="CmpResearchCppHeader" Directory="DIR_include" Guid="*" Win64="yes">
         <File Id="FileResearchCppHeader"
               Name="finkit_research.hpp"
               Source="$(var.PayloadDir)\include\finkit_research.hpp"

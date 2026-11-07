@@ -52,6 +52,19 @@ def wxs_members() -> list[str]:
     return sorted(members)
 
 
+def wxs_is_64bit() -> bool:
+    """Ensure the MSI and every component agree with its x64 directories."""
+    tree = ET.parse(WIX_PRODUCT)
+    package = tree.find(".//wix:Package", WIX_NS)
+    components = tree.findall(".//wix:Component", WIX_NS)
+    return (
+        package is not None
+        and package.get("Platform") == "x64"
+        and bool(components)
+        and all(component.get("Win64", "").lower() == "yes" for component in components)
+    )
+
+
 def archive_members(platform_slug: str = "windows-x64") -> list[str]:
     """Members of one platform profile in :data:`PLATFORM_PROFILES`.
 
@@ -128,6 +141,13 @@ def main() -> int:
         packed = archive_members()
     except SystemExit as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
+        return 1
+
+    if not wxs_is_64bit():
+        print(
+            f"FAIL: {WIX_PRODUCT.name} must declare an x64 package and mark every component Win64=\"yes\"",
+            file=sys.stderr,
+        )
         return 1
 
     if not installed:
