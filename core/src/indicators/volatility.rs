@@ -101,32 +101,8 @@ pub fn atr_into(
 
     let inverse_period = 1.0 / period as f64;
     let output_ptr = output.as_mut_ptr();
-    let len = high.len();
     let mut index = period + 1;
-    while len - index >= 4 {
-        let range0 = true_range_at(high, low, close, index);
-        let range1 = true_range_at(high, low, close, index + 1);
-        let range2 = true_range_at(high, low, close, index + 2);
-        let range3 = true_range_at(high, low, close, index + 3);
-        previous_atr += (range0 - previous_atr) * inverse_period;
-        unsafe {
-            *output_ptr.add(index) = previous_atr;
-        }
-        previous_atr += (range1 - previous_atr) * inverse_period;
-        unsafe {
-            *output_ptr.add(index + 1) = previous_atr;
-        }
-        previous_atr += (range2 - previous_atr) * inverse_period;
-        unsafe {
-            *output_ptr.add(index + 2) = previous_atr;
-        }
-        previous_atr += (range3 - previous_atr) * inverse_period;
-        unsafe {
-            *output_ptr.add(index + 3) = previous_atr;
-        }
-        index += 4;
-    }
-    while index < len {
+    while index < high.len() {
         let true_range = true_range_at(high, low, close, index);
         previous_atr += (true_range - previous_atr) * inverse_period;
         unsafe {
@@ -202,56 +178,8 @@ pub fn natr_into(
     let inverse_period = 1.0 / period as f64;
     let output_ptr = output.as_mut_ptr();
     let close_ptr = close.as_ptr();
-    let len = high.len();
     let mut index = period + 1;
-    while len - index >= 4 {
-        let range0 = true_range_at(high, low, close, index);
-        let range1 = true_range_at(high, low, close, index + 1);
-        let range2 = true_range_at(high, low, close, index + 2);
-        let range3 = true_range_at(high, low, close, index + 3);
-        previous_atr += (range0 - previous_atr) * inverse_period;
-        let close0 = unsafe { *close_ptr.add(index) };
-        let value0 = if !crate::utils::is_zero(close0) {
-            previous_atr / close0 * 100.0
-        } else {
-            0.0
-        };
-        unsafe {
-            *output_ptr.add(index) = value0;
-        }
-        previous_atr += (range1 - previous_atr) * inverse_period;
-        let close1 = unsafe { *close_ptr.add(index + 1) };
-        let value1 = if !crate::utils::is_zero(close1) {
-            previous_atr / close1 * 100.0
-        } else {
-            0.0
-        };
-        unsafe {
-            *output_ptr.add(index + 1) = value1;
-        }
-        previous_atr += (range2 - previous_atr) * inverse_period;
-        let close2 = unsafe { *close_ptr.add(index + 2) };
-        let value2 = if !crate::utils::is_zero(close2) {
-            previous_atr / close2 * 100.0
-        } else {
-            0.0
-        };
-        unsafe {
-            *output_ptr.add(index + 2) = value2;
-        }
-        previous_atr += (range3 - previous_atr) * inverse_period;
-        let close3 = unsafe { *close_ptr.add(index + 3) };
-        let value3 = if !crate::utils::is_zero(close3) {
-            previous_atr / close3 * 100.0
-        } else {
-            0.0
-        };
-        unsafe {
-            *output_ptr.add(index + 3) = value3;
-        }
-        index += 4;
-    }
-    while index < len {
+    while index < high.len() {
         let true_range = true_range_at(high, low, close, index);
         previous_atr += (true_range - previous_atr) * inverse_period;
         let current_close = unsafe { *close_ptr.add(index) };
