@@ -9,7 +9,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from benchmark_gate_contract import evaluate_performance_rows
+from benchmark_gate_contract import (
+    evaluate_aggregate_performance_rows,
+    evaluate_performance_rows,
+)
 
 
 def row(name: str, size: int, speedup: float) -> dict[str, object]:
@@ -63,6 +66,35 @@ class BenchmarkGateContractTests(unittest.TestCase):
             result["invalid_speed_rows"][0]["reason"],
             "non_finite_or_non_positive_speedup",
         )
+
+    def test_aggregate_gate_allows_slow_rows_when_geomean_exceeds_floor(self) -> None:
+        result = evaluate_aggregate_performance_rows(
+            [row("SMA", 1_000, 0.5), row("EMA", 1_000, 3.0)],
+            ["SMA", "EMA"],
+            expected_sizes=[1_000],
+        )
+        self.assertTrue(result["coverage_pass"])
+        self.assertFalse(result["speed_pass"])
+        self.assertTrue(result["aggregate_speed_pass"])
+        self.assertAlmostEqual(result["aggregate_geomean_finkit_speedup"], 1.2247448714)
+
+    def test_aggregate_gate_rejects_geomean_at_or_below_floor(self) -> None:
+        result = evaluate_aggregate_performance_rows(
+            [row("SMA", 1_000, 0.5), row("EMA", 1_000, 2.0)],
+            ["SMA", "EMA"],
+            expected_sizes=[1_000],
+        )
+        self.assertFalse(result["aggregate_speed_pass"])
+
+    def test_aggregate_gate_still_rejects_invalid_measurements_and_coverage(self) -> None:
+        invalid = evaluate_aggregate_performance_rows(
+            [row("SMA", 1_000, float("inf"))], ["SMA"]
+        )
+        missing = evaluate_aggregate_performance_rows(
+            [row("SMA", 1_000, 2.0)], ["SMA", "EMA"], expected_sizes=[1_000]
+        )
+        self.assertFalse(invalid["aggregate_speed_pass"])
+        self.assertFalse(missing["coverage_pass"])
 
 
 if __name__ == "__main__":

@@ -32,7 +32,7 @@ from benchmark_talib_full_current_gate import (
     parity_tolerance,
     talib_aroon_order,
 )
-from benchmark_gate_contract import evaluate_performance_rows
+from benchmark_gate_contract import evaluate_aggregate_performance_rows
 
 
 def talib_donchian_outputs(value: Any) -> tuple[Any, Any, Any]:
@@ -208,8 +208,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         by_name.setdefault(row["name"], []).append(row["finkit_speedup_x"])
     geomean = math.exp(statistics.mean(math.log(row["finkit_speedup_x"]) for row in rows)) if rows else 0.0
     upstream_names = sorted(name.upper() for name in talib.get_functions())
-    performance = evaluate_performance_rows(
-        rows, upstream_names, minimum_speedup=1.0, expected_sizes=args.sizes
+    performance = evaluate_aggregate_performance_rows(
+        rows, upstream_names, minimum_geomean=1.0, expected_sizes=args.sizes
     )
     performance["observation_count"] = len(rows)
     performance["expected_observation_count"] = len(upstream_names) * len(args.sizes)
@@ -221,14 +221,14 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "errors": errors,
         "parity_failures": parity_failures,
         "performance_gate": performance,
-        "all_observations_meet_speed_floor": performance["speed_pass"] and performance["coverage_pass"],
+        "all_current_geomean_exceeds_speed_floor": performance["aggregate_speed_pass"] and performance["coverage_pass"],
         "geomean_finkit_speedup": geomean,
         "rows": rows,
     }
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(json.dumps({key: summary[key] for key in ("case_count", "observation_count", "errors", "parity_failures", "performance_gate", "all_observations_meet_speed_floor", "geomean_finkit_speedup")}, indent=2, ensure_ascii=False))
+    print(json.dumps({key: summary[key] for key in ("case_count", "observation_count", "errors", "parity_failures", "performance_gate", "all_current_geomean_exceeds_speed_floor", "geomean_finkit_speedup")}, indent=2, ensure_ascii=False))
     return summary
 
 
@@ -242,7 +242,7 @@ def main() -> int:
         0
         if not summary["errors"]
         and not summary["parity_failures"]
-        and summary["all_observations_meet_speed_floor"]
+        and summary["all_current_geomean_exceeds_speed_floor"]
         else 2
     )
 

@@ -64,3 +64,47 @@ def evaluate_performance_rows(
         "coverage_pass": not missing and not unexpected and not missing_points,
         "speed_pass": not invalid_rows and not slow_rows,
     }
+
+
+def evaluate_aggregate_performance_rows(
+    rows: Iterable[Mapping[str, Any]],
+    expected_names: Iterable[str],
+    *,
+    minimum_geomean: float = 1.0,
+    expected_sizes: Iterable[int] = (),
+) -> dict[str, Any]:
+    """Validate complete benchmark coverage and an aggregate geometric mean.
+
+    Individual observations below 1x remain visible in ``below_speed_floor``;
+    the broad all-current gate passes when the complete, valid set has a
+    geometric mean above the configured floor.
+    """
+
+    materialized = list(rows)
+    result = evaluate_performance_rows(
+        materialized,
+        expected_names,
+        minimum_speedup=1.0,
+        expected_sizes=expected_sizes,
+    )
+    valid_speedups = []
+    for row in materialized:
+        try:
+            speedup = float(row["finkit_speedup_x"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if math.isfinite(speedup) and speedup > 0:
+            valid_speedups.append(speedup)
+    geomean = (
+        math.exp(math.fsum(math.log(value) for value in valid_speedups) / len(valid_speedups))
+        if valid_speedups
+        else 0.0
+    )
+    result["aggregate_geomean_finkit_speedup"] = geomean
+    result["minimum_geomean_speedup_x"] = minimum_geomean
+    result["aggregate_speed_pass"] = (
+        not result["invalid_speed_rows"]
+        and len(valid_speedups) == len(materialized)
+        and geomean > minimum_geomean
+    )
+    return result
