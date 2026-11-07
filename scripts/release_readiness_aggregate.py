@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Release readiness aggregator (V4 plan §22 / P0-07).
 
-"Same SHA, all required workflows green" is the only release license. Before
+"Same SHA, all required pre-release workflows green" is the only tag license. Before
 this aggregator existed, `CI`, `Python wheels`, the installed-wheel gate and
 the multilang pipelines could disagree about the *same* commit, and a tag
 could be cut from a tree whose wheel build was actually red.
@@ -39,7 +39,6 @@ REQUIRED_WORKFLOWS = [
     ("multilang-cross-platform.yml", "Multilang cross-platform"),
     ("multilang-release.yml", "Multilang release"),
     ("competitive-benchmark.yml", "Competitive benchmark"),
-    ("release-installers.yml", "Release installers"),
 ]
 
 
