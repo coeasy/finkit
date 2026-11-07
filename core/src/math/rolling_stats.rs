@@ -147,6 +147,18 @@ pub fn variance_into(input: &[f64], period: usize, output: &mut [f64]) -> Result
             constraint: "must have the same length as input".to_string(),
         });
     }
+    // Short windows over finite price inputs use the faster replacement update.
+    // The full scan preserves the exact fallback for a later NaN, infinity, or
+    // high baseline; longer windows retain the shared TA-Lib moment order used
+    // by VAR, STDDEV, and BBANDS.
+    if period <= 8
+        && input
+            .iter()
+            .all(|value| value.is_finite() && value.abs() <= 1.0e8)
+    {
+        variance_welford_finite_into(input, period, output);
+        return Ok(());
+    }
     // `TaVarianceState` anchors its shift on `input[0]`, so a leading warm-up
     // run from an upstream indicator would poison every window. Recurse on the
     // valid tail: the recursive call sees a finite `tail[0]`, so it takes the
@@ -410,6 +422,64 @@ pub fn stddev20_into(input: &[f64], output: &mut [f64]) -> Result<()> {
         unsafe { *output_ptr.add(index) = variance.sqrt() };
     }
     Ok(())
+}
+
+/// Stable O(1) rolling variance for short windows over ordinary price inputs.
+///
+/// The exact TA-Lib shifted-moment state remains the fallback for non-finite
+/// values and unusually large baselines. For the common path, replacement
+/// Welford moments use fewer per-bar operations and are re-centered every
+/// `32 * period` observations to bound accumulated rounding drift.
+fn variance_welford_finite_into(input: &[f64], period: usize, output: &mut [f64]) {
+    let inverse_period = 1.0 / period as f64;
+    let lookback = period - 1;
+    output[..lookback].fill(f64::NAN);
+
+    let mut mean = input[..period].iter().sum::<f64>() * inverse_period;
+    let mut m2 = input[..period]
+        .iter()
+        .map(|value| {
+            let delta = *value - mean;
+            delta * delta
+        })
+        .sum::<f64>();
+    output[lookback] = m2 * inverse_period;
+
+    let interval = period.saturating_mul(32).max(1);
+    let mut since_reseed = 0usize;
+    let input_ptr = input.as_ptr();
+    let output_ptr = output.as_mut_ptr();
+    let mut index = period;
+    while index < input.len() {
+        let variance;
+        if since_reseed == interval {
+            let window_start = index + 1 - period;
+            let window = unsafe { std::slice::from_raw_parts(input_ptr.add(window_start), period) };
+            mean = window.iter().sum::<f64>() * inverse_period;
+            m2 = window
+                .iter()
+                .map(|value| {
+                    let delta = *value - mean;
+                    delta * delta
+                })
+                .sum::<f64>();
+            variance = m2 * inverse_period;
+            since_reseed = 0;
+        } else {
+            let newest = unsafe { *input_ptr.add(index) };
+            let oldest = unsafe { *input_ptr.add(index - period) };
+            let delta = newest - oldest;
+            let next_mean = mean + delta * inverse_period;
+            m2 += delta * ((newest - next_mean) + (oldest - mean));
+            mean = next_mean;
+            variance = m2 * inverse_period;
+            since_reseed += 1;
+        }
+        unsafe {
+            *output_ptr.add(index) = variance;
+        }
+        index += 1;
+    }
 }
 
 /// Fixed-period VAR20 kernel using the stable rolling mean/M2 fast path.
