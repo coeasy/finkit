@@ -396,7 +396,7 @@ manifest = {
     # spellings of the same field depending on which script produced it -- and
     # nothing could check the field against the repository, because there was no
     # single expected value to check it against.
-    "name": "finkit",
+    "name": "qx-finkit",
     "version": os.environ["VERSION"],
     "platform": platform,
     "languages": covered,

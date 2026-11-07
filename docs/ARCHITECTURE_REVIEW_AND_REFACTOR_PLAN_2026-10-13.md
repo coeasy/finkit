@@ -276,7 +276,7 @@ Tree、Plan、streaming、直接 kernel、factor/composite graph 均有合理用
 Tree-vs-Plan 的性能/内存基准（`FormulaExecutionMode` 只出现在 parity 测试里）。
 
 ```
-cargo run -p finkit --release --example formula_mode_workload_probe [--scaled]
+cargo run -p qx-finkit --release --example formula_mode_workload_probe [--scaled]
 ```
 
 **覆盖与一致性（60 用例 = domestic 35 + Pine 25，两档规模）**
@@ -474,12 +474,12 @@ domestic `1.537x`（Plan 多），Pine `0.089x`（Plan 少 11.3x）；
 
 | 项目 | 状态 | 说明 |
 |---|---|---|
-| Rust workspace 测试 | 通过 | `cargo test -p finkit -p finkit-factor-analysis -p finkit-cli -p finkit-visualization -p finkit-ffi-common -p finkit-ffi -p finkit-go -p finkit-dotnet -p finkit-java -p finkit-android -p finkit-ios -p finkit-wasm --locked --no-fail-fast`，覆盖 12 个 workspace crate。 |
+| Rust workspace 测试 | 通过 | `cargo test -p qx-finkit -p finkit-factor-analysis -p finkit-cli -p finkit-visualization -p finkit-ffi-common -p finkit-ffi -p finkit-go -p finkit-dotnet -p finkit-java -p finkit-android -p finkit-ios -p finkit-wasm --locked --no-fail-fast`，覆盖 12 个 workspace crate。 |
 | 格式与补丁空白 | 通过 | `cargo fmt --all -- --check`、`git diff --check`。 |
 | Workspace 类型检查 | 通过 | `cargo check --workspace --locked`；Windows 上须显式设定 `PYO3_PYTHON` 指向有效 Python。 |
-| Clippy CI 门禁 | 通过 | `cargo clippy -p finkit --locked` 和 `cargo clippy --workspace --all-targets --locked`，加 `-D unfulfilled_lint_expectations`。项目按 warning budget 接受已知 lint；`-D warnings` 不属于 CI 合同，会因历史 lint 告警失败。 |
-| Rustdoc | 通过 | `RUSTDOCFLAGS="-D warnings" cargo doc -p finkit --no-deps --locked`。包装脚本在这台 Windows 机器尝试调用未配置的 WSL 失败；直接运行它所要求的 Cargo/rustdoc 命令通过。 |
-| Crates.io crate 包装验证 | 通过 | `cargo package -p finkit --locked --allow-dirty`；打包 541 个文件、8.1 MiB，并成功验证 crate 编译。 |
+| Clippy CI 门禁 | 通过 | `cargo clippy -p qx-finkit --locked` 和 `cargo clippy --workspace --all-targets --locked`，加 `-D unfulfilled_lint_expectations`。项目按 warning budget 接受已知 lint；`-D warnings` 不属于 CI 合同，会因历史 lint 告警失败。 |
+| Rustdoc | 通过 | `RUSTDOCFLAGS="-D warnings" cargo doc -p qx-finkit --no-deps --locked`。包装脚本在这台 Windows 机器尝试调用未配置的 WSL 失败；直接运行它所要求的 Cargo/rustdoc 命令通过。 |
+| Crates.io crate 包装验证 | 通过 | `cargo package -p qx-finkit --locked --allow-dirty`；打包 541 个文件、8.1 MiB，并成功验证 crate 编译。 |
 | 七语言安装消费 smoke | 通过 | Windows x64 上 Python、Node、Java、Go、C、.NET、WASM 均从候选产物安装/加载并执行 SMA smoke；统一构建汇总 `7 built+verified, 0 failed`。 |
 | 使用包 manifest / bundle | 通过 | `dist/manifest.json` 覆盖 7 种语言、44 个组件；`finkit-0.2.0-windows-x64-usage-bundle.zip` 为 26,280,558 字节。Go/Node/.NET 发布树仅保留可安装模块/包；`refresh_release_manifests.py --check` 通过。 |
 | Windows C 原生 archive | 通过 | `finkit-0.2.0-native-windows-x64.zip` 为 6,904,528 字节，SHA-256 `ebbf42746db5b4f4fbe70dbe04e64850223f34337b8be080f08bc4a603d15474`。 |

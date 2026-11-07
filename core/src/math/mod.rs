@@ -310,7 +310,7 @@ pub mod moving_avg {
 // `ndarray` (which arrives with `std`) and on `simd_ops::dispatch`, whose items
 // are themselves `#[cfg(feature = "std")]`. They used to be declared
 // unconditionally, which made every non-default feature combination fail to
-// build -- `cargo check -p finkit --no-default-features --features no_std` died
+// build -- `cargo check -p qx-finkit --no-default-features --features no_std` died
 // with 49 errors against a documented `no_std` contract and a `make lint`
 // target that called it. `libm_shim` stays unconditional: routing the float
 // primitives through `core`/`libm` is exactly what makes it the `no_std` home,

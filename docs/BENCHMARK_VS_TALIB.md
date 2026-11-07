@@ -30,7 +30,7 @@ The script performs these stages:
 
 1. detect or install TA-Lib C;
 2. record commit/platform/compiler/TA-Lib metadata;
-3. run `cargo bench -p finkit --bench talib_c_comparison --features talib-c --locked`;
+3. run `cargo bench -p qx-finkit --bench talib_c_comparison --features talib-c --locked`;
 4. parse Criterion results with `scripts/bench_report.py`;
 5. render a compact paired summary;
 6. optionally run the Python precision comparison.
@@ -99,10 +99,10 @@ A faster implementation with incompatible output semantics is not counted as a c
 Normal PR CI protects correctness and implementation regressions:
 
 ```bash
-cargo test -p finkit --locked
-cargo test -p finkit --test memory_regression --release --locked -- --test-threads=1
-cargo test -p finkit --test performance_regression --release --locked -- --test-threads=1
-cargo bench -p finkit --no-run --locked
+cargo test -p qx-finkit --locked
+cargo test -p qx-finkit --test memory_regression --release --locked -- --test-threads=1
+cargo test -p qx-finkit --test performance_regression --release --locked -- --test-threads=1
+cargo bench -p qx-finkit --no-run --locked
 ```
 
 The dedicated `.github/workflows/competitive-benchmark.yml` runs weekly and manually:
@@ -187,17 +187,17 @@ Not allowed:
 
 Performance superiority must remain a reproducible result, not a permanent adjective.
 
-## Finkit 0.3.0 wheel vs TA-Lib Python 0.6.8 — measured parity snapshot
+## Finkit 0.3.1 wheel vs TA-Lib Python 0.6.8 — measured parity snapshot
 
 This is a **supplementary Python-binding parity check** distinct from the
-weekly C 0.8.1 Criterion gate above. It compares the shipped Finkit **0.3.0**
+weekly C 0.8.1 Criterion gate above. It compares the shipped Finkit **0.3.1**
 Python wheel against the `talib` **0.6.8** Python binding on identical synthetic
 OHLCV (`N = 5000`, `numpy.random.default_rng(42)`, clipped positive prices).
 Each indicator is computed twice and the maximum absolute difference over the
 finite post-warm-up region is reported. Reproduce with:
 
 ```bash
-python .workbuddy-ai/round6-talib-parity.py   # needs numpy + talib 0.6.8 + finkit 0.3.0 wheel
+python .workbuddy-ai/round6-talib-parity.py   # needs numpy + talib 0.6.8 + finkit 0.3.1 wheel
 ```
 
 | Indicator | `max|diff|` | tol | parity | Finkit (ms) | TA-Lib (ms) | speedup |

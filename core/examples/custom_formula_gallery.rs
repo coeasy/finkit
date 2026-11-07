@@ -8,7 +8,7 @@
 //! Run with:
 //!
 //! ```text
-//! cargo run --release --example custom_formula_gallery -p finkit
+//! cargo run --release --example custom_formula_gallery -p qx-finkit
 //! ```
 //!
 //! The examples are ordered from the smallest useful formula to the features

@@ -8,7 +8,7 @@
 //! # Running
 //!
 //! ```text
-//! cargo test --release -p finkit --test long_run_stability -- --ignored --nocapture
+//! cargo test --release -p qx-finkit --test long_run_stability -- --ignored --nocapture
 //! ```
 //!
 //! The test is `#[ignore]`d by default so it doesn't run on every CI push.

@@ -15,7 +15,7 @@ crate-type = ["cdylib", "staticlib"]
 path = "src/lib.rs"
 
 [dependencies]
-finkit = { path = "../../core", default-features = false, features = ["std", "serde", "formula", "indicators-all"] }
+finkit = { package = "qx-finkit", path = "../../core", default-features = false, features = ["std", "serde", "formula", "indicators-all"] }
 ndarray = { workspace = true }
 libc = "0.2"
 serde = { workspace = true }

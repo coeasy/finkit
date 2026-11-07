@@ -28,7 +28,7 @@ CI 中 `Memory and performance regression` 使用 `--release --test-threads=1` �
 历史合同 `< 1000 ns/bar` 保留，但已经从普通 debug unit test 的不稳定墙钟判断迁移到：
 
 ```bash
-cargo test -p finkit --test performance_regression --release --locked -- --test-threads=1
+cargo test -p qx-finkit --test performance_regression --release --locked -- --test-threads=1
 ```
 
 通过 warm-up + 多轮中位数，在正确的 optimized build 中执行绝对吞吐预算。
@@ -94,17 +94,17 @@ Python installed-wheel 全量对照脚本 `scripts/benchmark_talib_all_current_g
 
 ```bash
 # 专用 regression gates
-cargo test -p finkit --test memory_regression --release --locked -- --test-threads=1
-cargo test -p finkit --test performance_regression --release --locked -- --test-threads=1
+cargo test -p qx-finkit --test memory_regression --release --locked -- --test-threads=1
+cargo test -p qx-finkit --test performance_regression --release --locked -- --test-threads=1
 
 # Rust ecosystem comparison
-cargo bench -p finkit --bench competitive_bench --locked
+cargo bench -p qx-finkit --bench competitive_bench --locked
 
 # TA-Lib C paired comparison（需安装 TA-Lib C）
-cargo bench -p finkit --bench talib_c_comparison --features talib-c --locked
+cargo bench -p qx-finkit --bench talib_c_comparison --features talib-c --locked
 
 # 构建全部 benchmark，防止 benchmark 源码腐化
-cargo bench -p finkit --no-run --locked
+cargo bench -p qx-finkit --no-run --locked
 ```
 
 ## 接下来真正需要优化的性能面

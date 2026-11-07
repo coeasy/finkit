@@ -1,6 +1,6 @@
 # Complete Usage Guide
 
-This guide is the practical entry point for using Finkit `v0.3.0`. It focuses on public, currently implemented behavior and distinguishes release artifacts from source-only bindings.
+This guide is the practical entry point for using Finkit `v0.3.1`. It focuses on public, currently implemented behavior and distinguishes release artifacts from source-only bindings.
 
 ## 1. Data conventions
 
@@ -25,7 +25,7 @@ open,high,low,close,volume
 
 ## 2. Python: basic indicators
 
-Install a matching wheel from the GitHub `v0.3.0` Release first; see [installation.md](installation.md).
+Install a matching wheel from the GitHub `v0.3.1` Release first; see [installation.md](installation.md).
 
 ```python
 import numpy as np
@@ -255,7 +255,7 @@ Until a crates.io entry is independently published, use the Git tag or a local p
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.3.0" }
+finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.3.1" }
 ```
 
 ### Batch indicators
@@ -305,7 +305,7 @@ If minimizing a build, disable defaults only after checking transitive indicator
 [dependencies]
 finkit = {
   git = "https://github.com/coeasy/finkit",
-  tag = "v0.3.0",
+  tag = "v0.3.1",
   default-features = false,
   features = ["std", "indicators-overlap"]
 }
@@ -577,7 +577,7 @@ Before shipping a Finkit integration:
 cargo fmt --all -- --check
 cargo check --workspace --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test -p finkit --locked
+cargo test -p qx-finkit --locked
 cargo test --workspace --doc --locked
 python scripts/check_versions.py
 python scripts/gen_ssot_docs.py --check

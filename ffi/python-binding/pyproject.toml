@@ -3,8 +3,8 @@ requires = ["maturin>=1.5,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "finkit"
-version = "0.3.0"
+name = "qx-finkit"
+version = "0.3.1"
 description = "Rust-powered quantitative finance engine for indicators, formulas, factors, streaming analytics, and research workflows"
 authors = [
     {name = "Finkit Contributors"}

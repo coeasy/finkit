@@ -7,7 +7,7 @@
 //!
 //! Run with:
 //! ```bash
-//! cargo bench -p finkit --bench watchlist_self_bench
+//! cargo bench -p qx-finkit --bench watchlist_self_bench
 //! ```
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};

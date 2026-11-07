@@ -1,6 +1,6 @@
 //! Benchmark for `ema_multi_periods` vs N×single ema (D.1 / D.7 FMA optimization).
 //!
-//! Run with: cargo bench -p finkit --bench ema_multi_periods_bench
+//! Run with: cargo bench -p qx-finkit --bench ema_multi_periods_bench
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use finkit::indicators::ema;

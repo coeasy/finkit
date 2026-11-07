@@ -1,5 +1,5 @@
 [package]
-name = "finkit"
+name = "qx-finkit"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -11,6 +11,9 @@ documentation.workspace = true
 
 [lints]
 workspace = true
+
+[lib]
+name = "finkit"
 
 [[bench]]
 name = "formula_bench"
@@ -253,9 +256,9 @@ default = ["std", "formula", "serde", "tracing", "metrics", "formula-jit", "form
 # category still compiles (it transitively enables `std` + `ndarray`)" -- and
 # that claim was never exercised, so it was never true. Measured 2026-10-11:
 #
-#   cargo check -p finkit --no-default-features --features std              40 errors
-#   cargo check -p finkit --no-default-features --features indicators-overlap 24 errors
-#   cargo check -p finkit --no-default-features --features formula          155 errors
+#   cargo check -p qx-finkit --no-default-features --features std              40 errors
+#   cargo check -p qx-finkit --no-default-features --features indicators-overlap 24 errors
+#   cargo check -p qx-finkit --no-default-features --features formula          155 errors
 #
 # The cause is that the crate is layered on more than the category graph says:
 #   * `indicators/mod.rs`'s `impl_slice_output!` adapters reach into

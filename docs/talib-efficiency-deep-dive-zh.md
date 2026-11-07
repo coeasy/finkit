@@ -58,7 +58,7 @@ C 侧的 FFI 调用点少得多。
 
 ```bash
 TA_LIB_DIR=/p/ta-lib-build/install \
-  cargo run --release -p finkit --example talib_gap_probe --features talib-c
+  cargo run --release -p qx-finkit --example talib_gap_probe --features talib-c
 ```
 
 探针的计时区是**一次 16 次调用取块均值**，不是"一次调用取 100 次最小值"。后者看起来更严格，
@@ -399,7 +399,7 @@ python scripts/bench_report.py --criterion-dir target/criterion \
 
 # 同进程 A/B（本文所有"变快/变慢"结论的来源）
 TA_LIB_DIR=/p/ta-lib-build/install \
-  cargo run --release -p finkit --example talib_gap_probe --features talib-c
+  cargo run --release -p qx-finkit --example talib_gap_probe --features talib-c
 ```
 
 `--require-pairs 6` 是一个下界断言，不是完整性证明：它只保证"至少发现了 6 对"，用来在

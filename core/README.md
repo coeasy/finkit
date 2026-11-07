@@ -2,27 +2,27 @@
 
 `core/` is the Rust implementation behind Finkit. It contains the batch and streaming indicator kernels, formula compiler/runtime, factor and market-runtime contracts, transforms, patterns, feature infrastructure, registries, and the public Rust API used by the language bindings.
 
-Current repository release line: **0.3.0**.
+Current repository release line: **0.3.1**.
 
 ## Use the Rust core
 
-Until a crates.io publication is independently verified, use the Git tag or a local checkout rather than documenting `cargo add finkit` as guaranteed availability.
+Until a crates.io publication is independently verified, use the Git tag or a local checkout rather than documenting `cargo add qx-finkit` as guaranteed availability.
 
 ### Git tag
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.3.0" }
+finkit = { package = "qx-finkit", git = "https://github.com/coeasy/finkit", tag = "v0.3.1" }
 ```
 
 ### Local path
 
 ```toml
 [dependencies]
-finkit = { path = "../finkit/core" }
+finkit = { package = "qx-finkit", path = "../finkit/core" }
 ```
 
-The v0.3.0 release workflow will attach `finkit-0.3.0.crate` to its GitHub Release.
+The v0.3.1 release workflow will attach `qx-finkit-0.3.1.crate` to its GitHub Release.
 
 ## Basic example
 
@@ -87,7 +87,7 @@ Example:
 [dependencies]
 finkit = {
   git = "https://github.com/coeasy/finkit",
-  tag = "v0.3.0",
+  tag = "v0.3.1",
   default-features = false,
   features = ["std", "indicators-overlap"]
 }
@@ -152,7 +152,7 @@ From the repository root:
 cargo fmt --all -- --check
 cargo check --workspace --locked
 cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo test -p finkit --locked
+cargo test -p qx-finkit --locked
 cargo test --workspace --doc --locked
 python scripts/check_versions.py
 python scripts/gen_ssot_docs.py --check
@@ -161,13 +161,13 @@ python scripts/gen_ssot_docs.py --check
 Build only the core package:
 
 ```bash
-cargo build -p finkit --release --locked
+cargo build -p qx-finkit --release --locked
 ```
 
 Create the source package artifact:
 
 ```bash
-cargo package -p finkit --locked --no-verify
+cargo package -p qx-finkit --locked --no-verify
 ```
 
 ## Benchmarks
@@ -177,8 +177,8 @@ The repository contains Criterion/custom benchmark suites and CI performance gat
 Examples:
 
 ```bash
-cargo bench -p finkit --no-run
-cargo bench -p finkit
+cargo bench -p qx-finkit --no-run
+cargo bench -p qx-finkit
 ```
 
 See:
@@ -193,7 +193,7 @@ Do not turn a historical benchmark snapshot into a universal performance guarant
 
 The Rust core is consumed by the repository's native bindings under `ffi/`.
 
-Current v0.3.0 distribution status is intentionally narrower than source support:
+Current v0.3.1 distribution status is intentionally narrower than source support:
 
 - Python wheels are published as GitHub Release assets;
 - Rust `.crate` and Linux x86_64 CLI artifacts are published in the GitHub Release;

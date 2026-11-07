@@ -113,7 +113,7 @@ and the compiled-plan executor. That axis is measured separately, over the real
 checked-in corpora, by:
 
 ```bash
-cargo run -p finkit --release --example formula_mode_workload_probe -- --scaled
+cargo run -p qx-finkit --release --example formula_mode_workload_probe -- --scaled
 ```
 
 Measured 2026-10-13 over 60 corpus cases (35 domestic terminal formulas + 25
@@ -628,7 +628,7 @@ After optimization: Shared data, eliminated redundant calculations
 
 ### Plan lane access (2026-10-28)
 
-Unary, binary and arithmetic Plan kernels now resolve lane pointers before their sample loops rather than repeatedly indexing a dynamically selected `Vec`; arithmetic opcode selection is also hoisted outside the loop. Input/output aliases still load the current index before writing it. `cargo check -p finkit --locked` and the crate-scoped formatter check pass. On the scaled release workload, all 60 formula cases remained numerically consistent. The 5K domestic warm Plan aggregate improved 5.2% (3,181.0 to 3,016.9 µs) and Pine improved 7.4% (1,893.5 to 1,753.3 µs); allocations did not change. Cold Plan compilation remains slower than Tree and is a separate outstanding hotspot. Probe: `dist/bench/formula-mode-workload-raw-lane-pointers-final-20261028.txt`.
+Unary, binary and arithmetic Plan kernels now resolve lane pointers before their sample loops rather than repeatedly indexing a dynamically selected `Vec`; arithmetic opcode selection is also hoisted outside the loop. Input/output aliases still load the current index before writing it. `cargo check -p qx-finkit --locked` and the crate-scoped formatter check pass. On the scaled release workload, all 60 formula cases remained numerically consistent. The 5K domestic warm Plan aggregate improved 5.2% (3,181.0 to 3,016.9 µs) and Pine improved 7.4% (1,893.5 to 1,753.3 µs); allocations did not change. Cold Plan compilation remains slower than Tree and is a separate outstanding hotspot. Probe: `dist/bench/formula-mode-workload-raw-lane-pointers-final-20261028.txt`.
 
 ### SUM/REF prefix writes (2026-10-28)
 
@@ -691,7 +691,7 @@ previous range (**0.810x/0.817x**), so this is a measured single-workload gain,
 not evidence of a broad aggregate speedup. Reports:
 `dist/bench/formula-plan-obv-chain-20261029.txt`,
 `dist/bench/formula-plan-obv-chain-repeat-20261029.txt`; shape and publication
-check: `cargo run -p finkit --example plan_obv_shape --locked`.
+check: `cargo run -p qx-finkit --example plan_obv_shape --locked`.
 
 ### AROON branchless age-increment candidate (2026-10-29, rejected)
 
@@ -830,7 +830,7 @@ the production two-column AROON path measured 1.54x/1.44x TA-Lib at 100K/1M;
 AROONOSC measured 1.84x/1.72x. This targeted result supersedes the earlier
 full-range-deque rejection only for periods 7–31; the other periods remain on
 the measured cached-age path. Report: `dist/bench/aroon-monotone-production-20261029.txt`;
-probe: `cargo run --release -p finkit --example aroon_monotone_probe --features talib-c --locked`.
+probe: `cargo run --release -p qx-finkit --example aroon_monotone_probe --features talib-c --locked`.
 
 ### VAR rolling-state hot path (2026-10-29)
 
@@ -1059,7 +1059,7 @@ consistent. Warm aggregate Plan/Tree was **1.399x/1.554x** at 250 rows and
 **0.934x/0.780x** at 5K rows (domestic/Pine). The larger-history Plan path still
 wins on aggregate, but short-history formula execution has not reached parity
 with Tree. Reproduce with
-`cargo run --release -p finkit --example formula_mode_workload_probe --locked -- --scaled`.
+`cargo run --release -p qx-finkit --example formula_mode_workload_probe --locked -- --scaled`.
 
 ### ACCBANDS bounded rolling storage (2026-10-29)
 

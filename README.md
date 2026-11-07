@@ -12,7 +12,7 @@ Use Finkit behind research notebooks, market scanners, factor platforms, analyti
 
 [中文说明](README.zh-CN.md) · [Product overview](docs/product-overview.md) · [中文产品说明](docs/product-overview-zh.md) · [Competitive strategy](docs/competitive-positioning-zh.md) · [Documentation](docs/README.md)
 
-Current published GitHub release: **v0.2.0**. The workspace targets v0.3.0; its changes remain release candidates until the same commit passes the full release gate.
+Current published GitHub release: **v0.3.0**. The workspace targets v0.3.1; package registry publication follows the same-commit release gates.
 
 ## What problem does Finkit solve?
 
@@ -93,10 +93,11 @@ That policy is intentional: **correct first, fast second.**
 
 ## Quick start: Python
 
-The authoritative v0.2.0 binary distribution is the GitHub Release. Download the wheel matching your platform and install it locally:
+Install the published PyPI distribution `qx-finkit`. Its Python import name
+remains `finkit`:
 
 ```bash
-python -m pip install ./finkit-0.2.0-<platform>.whl
+python -m pip install qx-finkit
 ```
 
 ```python
@@ -140,7 +141,7 @@ Full command reference: [docs/cli.md](docs/cli.md).
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.2.0" }
+finkit = { package = "qx-finkit", version = "0.3.1" }
 ```
 
 ```rust

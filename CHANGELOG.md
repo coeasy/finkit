@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.1] - 2026-11-07
+
+### Changed
+
+- Renamed the published Rust package and Python distribution to `qx-finkit`.
+- Added PyPI Trusted Publishing for the validated cross-platform Python wheels.
+- Kept the Python import package and Rust library name as `finkit` for source compatibility.
+
 ## [0.3.0] - 2026-11-06
 
 ### Added
@@ -300,7 +308,7 @@ build ever evaluates, and found the largest one first.
 `core/Cargo.toml` asserted that the indicator tree-shaking scaffold made
 "picking a single category still compiles (it transitively enables `std` +
 `ndarray`)", and `Makefile`'s `lint` target ran
-`cargo clippy -p finkit --no-default-features --features no_std -- -D warnings`.
+`cargo clippy -p qx-finkit --no-default-features --features no_std -- -D warnings`.
 Neither was in any workflow, so neither had ever run. Measured 2026-10-11:
 
 | Combination | Errors before |
@@ -545,7 +553,7 @@ reported:
 * `StreamingMacdExt::fast_kind` / `slow_kind` and `FormulaState::Rsi::started` are
   genuinely never read by any path and were deleted.
 
-Separately, `cargo clippy -p finkit` under an ad-hoc `-D warnings` reported a dozen
+Separately, `cargo clippy -p qx-finkit` under an ad-hoc `-D warnings` reported a dozen
 pedantic lints. That was a **tool misuse, not a defect**: the CI clippy job denies
 only `unfulfilled_lint_expectations` and pins channel 1.98. Re-run with the CI's
 exact flags and toolchain, both clippy steps exit 0. Recorded here because the
@@ -603,7 +611,7 @@ directory modules — the same blind spot, unnoticed for as long as it existed.
   split: three module-header links pointed at **private** items — `[`prelude`]` in
   `indicators/momentum/mod.rs` and `math/simd_ops/mod.rs`, and `[`ultosc_body`]` in
   `momentum/ultosc_impl.rs`. `RUSTDOCFLAGS="-D warnings"` promotes
-  `rustdoc::private_intra_doc_links` to an error, so `cargo doc -p finkit --no-deps`
+  `rustdoc::private_intra_doc_links` to an error, so `cargo doc -p qx-finkit --no-deps`
   failed with "public documentation for `momentum` links to private item". They are
   plain code spans now. A fourth one in the private `functions_legacy` module was
   fixed with them so it cannot surface if that module is ever made public.
@@ -788,11 +796,11 @@ tree stashed:
 
 | gate                                    | symptom                                                                                     | evidence                                                                                                                                                                                                                                                         |
 | --------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `cargo test -p finkit --doc`            | 241 of 254 failed, `Failed to spawn rustc.exe: Os { code: 231 }` (`ERROR_PIPE_BUSY`)        | **the same 241 on clean HEAD**; `--test-threads=2` changes nothing and the run finishes in 3.9 s, i.e. nothing was ever compiled                                                                                                                                 |
+| `cargo test -p qx-finkit --doc`            | 241 of 254 failed, `Failed to spawn rustc.exe: Os { code: 231 }` (`ERROR_PIPE_BUSY`)        | **the same 241 on clean HEAD**; `--test-threads=2` changes nothing and the run finishes in 3.9 s, i.e. nothing was ever compiled                                                                                                                                 |
 | `cargo check --workspace --all-targets` | `pyo3-ffi`'s build script: `failed to run the Python interpreter at python: (os error 231)` | `-j 1` and `PYO3_PYTHON=<real interpreter>` both fail the same way; `python` resolves through the sandbox `safe-bin` shim, which exhausts named pipes when spawning from a build script. Every change here is inside `core/` and touches no pyo3-dependent crate |
 
 Gates that did run and passed: `cargo fmt --all --check`; `RUSTFLAGS="-D unfulfilled_lint_expectations"
-cargo clippy`; all 22 `scripts/check_*.py`; and `cargo test -p finkit --release --tests` —  
+cargo clippy`; all 22 `scripts/check_*.py`; and `cargo test -p qx-finkit --release --tests`
 **62 targets, 3965 passed, 0 failed**.
 
 ### Changed - 2026-10-06 (nineteenth pass — AROON rescan unroll closes the 0.83× gap)
@@ -842,7 +850,7 @@ capability the engine does not implement, and any future reader who enables it g
 - Removed `circuit-breaker = ["std"]` and `precision-f32 = []` from `core/Cargo.toml`.
 - Removed the `precision-f32` mention from `core/README.md` and `docs/usage.md` so the published
   feature list no longer advertises a non-existent switch.
-- `cargo check -p finkit` stays green (the only output is benign Windows incremental-lock warnings,
+- `cargo check -p qx-finkit` stays green (the only output is benign Windows incremental-lock warnings,
   unrelated to the change).
 - `docs/FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md` annotations N1/N2 and the Batch 4 ① row are
   marked resolved, keeping the live baseline accurate (this is exactly the "docs must not drift"
@@ -944,7 +952,7 @@ superseded implementation*:
 
 `audit_binding_parity.py --check`, `sync_bindings.py --check --all`,
 `verify_python_bindings.py`, `binding_spec.py`, ten repository-hygiene scripts,
-`cargo fmt --all -- --check`, `cargo test -p finkit --lib --tests` (63 targets,
+`cargo fmt --all -- --check`, `cargo test -p qx-finkit --lib --tests` (63 targets,
 0 failures) and the four FFI crate test suites are all green. Node's own suite is
 14/14 and the whole Java source tree compiles under `javac -encoding UTF-8`.
 
@@ -1476,7 +1484,7 @@ conclusion was derived from *what had been edited*, not from *what was being mea
 `llvm.floor.f64` does not become an instruction on the baseline x86-64 target. It lowers to an  
 out-of-line `libm` call, one per element. `FLOOR` and `CEIL` are pure element-wise transforms, so  
 that call *is* the indicator. Measured on a 10k-bar series with the shipped kernel  
-(`cargo run --release -p finkit --example rounding_kernel_probe`):
+(`cargo run --release -p qx-finkit --example rounding_kernel_probe`):
 
 | kernel                                    | µs/call |                                             |       |
 | ----------------------------------------- | ------: | ------------------------------------------- | ----- |
@@ -1693,7 +1701,7 @@ Documentation only: no runtime behaviour, no API surface, no measurable cost.
   `docs/BENCHMARK_REPORT.md` table should be read as a *screening* artifact, not a verdict.
 - **Gate matrix**: green, for the first time in three passes. `cargo fmt --check`;  
   `RUSTFLAGS="-D warnings" cargo check --workspace --all-targets --locked`; both clippy  
-  invocations under `RUSTFLAGS="-D unfulfilled_lint_expectations"`; `cargo test -p finkit --tests --no-fail-fast` (**62 targets, 3965 passed, 0 failed, 3 ignored**); the rustdoc policy  
+  invocations under `RUSTFLAGS="-D unfulfilled_lint_expectations"`; `cargo test -p qx-finkit --tests --no-fail-fast` (**62 targets, 3965 passed, 0 failed, 3 ignored**); the rustdoc policy
   gate (§7); and 21 `scripts/check_*.py` housekeeping gates. The rustdoc gate is the one that was  
   red before this pass, and §7 is the only place in this changelog where a fix was made to code  
   the pass did not otherwise need to touch.
@@ -1707,7 +1715,7 @@ path?** It did not. Four defects, three of them silent, all found by running one
 formula through every public entry point instead of profiling one.
 
 `core/examples/backend_divergence_probe.rs` is the probe; every number below is
-reproducible with `cargo run -p finkit --example backend_divergence_probe`.
+reproducible with `cargo run -p qx-finkit --example backend_divergence_probe`.
 
 #### 1. Five execution entry points compiled with the wrong pass set
 
@@ -1885,7 +1893,7 @@ window), the cache hit alone cost this much inside `compile_plan`:
 | `(CLOSE-MA(CLOSE,20))/STD(CLOSE,20)*100` | 3.02 | 33.8% |
 | `MA5:=MA(CLOSE,5); MA20:=MA(CLOSE,20); OUT: MA5-MA20;` | 4.29 | 47.5% |
 
-End-to-end, `cargo run --release -p finkit --example plan_cache_probe`, minimum
+End-to-end, `cargo run --release -p qx-finkit --example plan_cache_probe`, minimum
 of 5 rounds, baseline and fixed measured minutes apart on the same machine
 (µs per call, 250 bars):
 
@@ -2168,7 +2176,7 @@ CI coverage holes closed:
   inlined payload out of the rendered HTML and asserts the adapter, the import,
   `schema_version`, the candle count and the indicator line actually survive
   rendering; that seam was previously untested end to end.
-- `cargo test -p finkit --features rayon --lib -- batch::` — four parallel-batch
+- `cargo test -p qx-finkit --features rayon --lib -- batch::` — four parallel-batch
   tests (order preservation, error propagation, serial/parallel equivalence) were
   compiled out on every run.
 
@@ -2397,7 +2405,7 @@ recorded in V4 plan §35.
   took to derive it, and the environment failures that are not regressions;
   stale `target/t_round9*.log` scratch logs removed.
 
-**Verification (2026-10-04, rustc 1.98.1):** `cargo test -p finkit --lib`
+**Verification (2026-10-04, rustc 1.98.1):** `cargo test -p qx-finkit --lib`
 3036 passed / 0 failed · `extrema_cached_path` 10/10 · `formula_differential_tests`
 52/52 · all integration targets green · `cargo fmt --all --check` clean ·
 `clippy` introduces no new lint in the changed range (the 15 hits there are all
@@ -3333,7 +3341,7 @@ publishable state.
   registry entry.
 
 - Three contract tests had gone red in crates the release gate never ran.
-  `cargo test -p finkit` was the only test command used to certify the workspace
+  `cargo test -p qx-finkit` was the only test command used to certify the workspace
   locally, and it does not build `finkit-ffi-common` or `finkit-ffi`, even
   though `.github/workflows/ci.yml` does. Two regressions had accumulated behind
   that blind spot:
@@ -3400,7 +3408,7 @@ publishable state.
   dying inside `candle`/`heat` with a tool error. The working release artifact is
   the Python ABI3 wheel, which is what `python-wheels.yml` actually ships.
 - `docs/installation.md` §14 told readers to certify a change with
-  `cargo test -p finkit --locked` — the same command that left the three
+  `cargo test -p qx-finkit --locked` — the same command that left the three
   contract tests in `finkit-ffi-common` / `finkit-ffi` unrun (see above) — and
   listed three of the ten gate scripts. It now gives the full CI-aligned
   per-crate test command, warns about `--no-fail-fast`, and separates the

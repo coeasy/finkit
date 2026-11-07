@@ -22,7 +22,7 @@ workspace = true
 # `src/artifacts.rs` round-trips. `cargo test -p finkit-factor-analysis`
 # builds this crate *alone*, so a set that is merely "correct once the
 # workspace is unified" fails CI.
-finkit = { path = "../core", default-features = false, features = ["std", "serde", "formula", "indicators-all"] }
+finkit = { package = "qx-finkit", path = "../core", default-features = false, features = ["std", "serde", "formula", "indicators-all"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 thiserror.workspace = true

@@ -724,7 +724,7 @@ grep -n "struct ExecSandboxConfig" -A 10 core/src/formula/sandbox.rs   # 默认 
 
 # 第七部分 实施状态（2026-10-07 落地轮）
 
-本节记录 V5 各批次的落地进度。核验：`cargo test -p finkit --tests` 65/65 target 全绿（含 `golden_talib_tests` 对拍），内务门禁与新增门禁全绿。
+本节记录 V5 各批次的落地进度。核验：`cargo test -p qx-finkit --tests` 65/65 target 全绿（含 `golden_talib_tests` 对拍），内务门禁与新增门禁全绿。
 
 ## 已落地
 
@@ -757,7 +757,7 @@ grep -n "struct ExecSandboxConfig" -A 10 core/src/formula/sandbox.rs   # 默认 
 见 [docs/quality/warning_budget.md](../docs/quality/warning_budget.md)。要点：
 
 - 形式是**棘轮**而非待办清单：提交每个 lint 的当前条数，门禁在任一 lint **上升**时失败。
-- 基线 **14647 条 / 125 个 lint**（`cargo clippy -p finkit --all-targets`）。
+- 基线 **14647 条 / 125 个 lint**（`cargo clippy -p qx-finkit --all-targets`）。
 - 两个非显然的实现决定（都踩过坑）：必须 `--message-format=json`（`short` 不带 lint 代码，总数基线不构成棘轮）；必须过滤"无 span 的工具链噪声"（本机沙箱的增量编译锁文件清理告警单独贡献 110 条假警告，会让预算结论随文件系统漂移）。
 - 前三类 lint 合计约 7000 条（占近一半）**不该直接修**：`cast_precision_loss` 在以 `f64` 为契约的金融库里修掉等于把 `f32` 引入数值路径。这类应以 crate 级 `allow` 显式豁免并写明理由。
 
@@ -825,8 +825,8 @@ grep -n "struct ExecSandboxConfig" -A 10 core/src/formula/sandbox.rs   # 默认 
 | `ffi/python-binding/src/lib.rs` | 6954 | `ffi/python-binding/src/*.rs` | 24 | 不变 |
 
 三个 core 模块的模块路径（`crate::formula::functions_legacy` 等）与公开符号逐个不变，因此
-对上游是**零感知**的纯移动。验收：`cargo check -p finkit --all-targets` 零 error 零
-rustc warning；`cargo test -p finkit --tests` **65/65 target 全绿**；全部既有门禁保持绿，
+对上游是**零感知**的纯移动。验收：`cargo check -p qx-finkit --all-targets` 零 error 零
+rustc warning；`cargo test -p qx-finkit --tests` **65/65 target 全绿**；全部既有门禁保持绿，
 且没有靠放宽门禁过关（见下"门禁增量"）。
 
 ## 教训 1：块切分必须无损，否则文档会被静默吞掉

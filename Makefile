@@ -112,7 +112,7 @@ preflight:
 # stale `#[expect(...)]` into a failure.
 lint:
 	cargo fmt --all -- --check
-	RUSTFLAGS="-D unfulfilled_lint_expectations" cargo clippy -p finkit --locked
+	RUSTFLAGS="-D unfulfilled_lint_expectations" cargo clippy -p qx-finkit --locked
 	RUSTFLAGS="-D unfulfilled_lint_expectations" cargo clippy --workspace --all-targets --locked
 
 # ---- housekeeping ---------------------------------------------------------

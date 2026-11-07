@@ -1,10 +1,10 @@
 # Finkit Python Binding
 
-This directory contains the Python package and PyO3 native extension for Finkit `v0.2.0`.
+This directory contains the Python package and PyO3 native extension for Finkit. The `0.3.1` PyPI distribution name is `qx-finkit`; the Python import name remains `finkit`.
 
 ## Current release status
 
-The GitHub `v0.2.0` Release contains verified CPython ABI3 wheels for:
+The GitHub `v0.3.0` Release contains verified CPython ABI3 wheels for:
 
 - Linux x86_64;
 - Windows x86_64;
@@ -15,10 +15,10 @@ The wheels use `cp38-abi3` and are validated for GIL-enabled CPython 3.8-3.14 on
 
 Install a matching wheel from:
 
-`https://github.com/coeasy/finkit/releases/tag/v0.2.0`
+`https://github.com/coeasy/finkit/releases/tag/v0.3.0`
 
 ```bash
-python -m pip install ./finkit-0.2.0-<matching-platform>.whl
+python -m pip install ./finkit-0.3.0-<matching-platform>.whl
 ```
 
 Do not assume a PyPI package is available unless the exact registry entry has been independently published and verified.
@@ -28,7 +28,7 @@ Do not assume a PyPI package is available unless the exact registry entry has be
 ```bash
 git clone https://github.com/coeasy/finkit.git
 cd finkit
-git checkout v0.2.0
+git checkout v0.3.0
 
 python3 -m venv .venv
 source .venv/bin/activate  # PowerShell: .\.venv\Scripts\Activate.ps1

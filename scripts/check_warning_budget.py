@@ -7,7 +7,7 @@ what actually works is a ratchet — a committed count per lint, and a gate that
 **fails when the number goes up**. Fixing a lint lowers the count and lowers the
 baseline in the same commit; nothing is allowed to regress.
 
-Scope is `cargo clippy -p finkit --all-targets`: the core crate, where the
+Scope is `cargo clippy -p qx-finkit --all-targets`: the core crate, where the
 warnings are. The FFI/wasm crates are covered by their own builds, and pulling
 them in here would make the gate hostage to toolchains this machine does not
 have (the python binding's pyo3 build step, for one).

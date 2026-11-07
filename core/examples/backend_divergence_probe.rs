@@ -7,7 +7,7 @@
 //! *execution* entry points still call the former, so the same source can
 //! behave differently depending on which method the caller picked.
 //!
-//! Run with: `cargo run -p finkit --example backend_divergence_probe`
+//! Run with: `cargo run -p qx-finkit --example backend_divergence_probe`
 
 use finkit::formula::compiler::FormulaCompiler;
 use finkit::formula::{FormulaContext, FormulaEngine, FormulaExecutionMode};

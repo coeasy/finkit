@@ -169,7 +169,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "platform": platform.platform(),
         "cpu": platform.processor(),
         "numpy": np.__version__,
-        "finkit": importlib.metadata.version("finkit"),
+        "finkit": importlib.metadata.version("qx-finkit"),
         "finkit_module": str(Path(finkit.__file__).resolve()),
         "finkit_source_git_sha": git_sha,
         "rustc": rustc_version,

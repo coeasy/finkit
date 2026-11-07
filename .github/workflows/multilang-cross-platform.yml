@@ -82,7 +82,7 @@ jobs:
           toolchain: "1.98"
           targets: aarch64-unknown-linux-gnu
       - name: Check AArch64 core without compiler warnings
-        run: cargo check -p finkit --target aarch64-unknown-linux-gnu --locked
+        run: cargo check -p qx-finkit --target aarch64-unknown-linux-gnu --locked
 
   node-windows-x64:
     needs: version-contract

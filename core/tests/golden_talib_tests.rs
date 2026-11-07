@@ -1551,7 +1551,7 @@ fn compare_series(
 
 fn reproduce_cmd(indicator: &str) -> String {
     format!(
-        "cargo test -p finkit --test golden_talib_tests golden_talib_{} -- --nocapture",
+        "cargo test -p qx-finkit --test golden_talib_tests golden_talib_{} -- --nocapture",
         indicator.to_lowercase()
     )
 }

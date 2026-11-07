@@ -1,6 +1,6 @@
 # Development Guide
 
-This guide describes the development and validation workflow for the Finkit Rust core, formula/runtime layers, generated metadata, native bindings, release packaging, and documentation. The current workspace targets v0.3.0; its candidate artifacts and multi-language validation targets are deliberately described separately from the published v0.2.0 assets.
+This guide describes the development and validation workflow for the Finkit Rust core, formula/runtime layers, generated metadata, native bindings, release packaging, and documentation. The current workspace targets v0.3.1; its candidate artifacts and multi-language validation targets are deliberately described separately from the published v0.3.0 assets.
 
 ## 1. Repository layout
 
@@ -76,11 +76,11 @@ cargo check --workspace --locked
 RUSTFLAGS="-D unfulfilled_lint_expectations" cargo clippy --workspace --all-targets --locked
 # The supported feature subsets (and the recorded-broken ones) are pinned by
 # `make check-feature-matrix`, which is minutes long; see its own section below.
-cargo test -p finkit --locked
+cargo test -p qx-finkit --locked
 cargo test --workspace --doc --locked
 # The CI package set, plus the binding crates CI only compiles. `--no-fail-fast`
 # matters: without it the first failing binary hides every later one.
-cargo test -p finkit -p finkit-factor-analysis -p finkit-cli \
+cargo test -p qx-finkit -p finkit-factor-analysis -p finkit-cli \
   -p finkit-visualization -p finkit-ffi-common -p finkit-ffi \
   --locked --no-fail-fast
 cargo test -p finkit-go -p finkit-dotnet -p finkit-java \
@@ -208,9 +208,9 @@ Some binding wrappers are also generated from registry metadata. Regenerate them
 Core build/test:
 
 ```bash
-cargo build -p finkit --release --locked
-cargo test -p finkit --locked
-cargo bench -p finkit --no-run
+cargo build -p qx-finkit --release --locked
+cargo test -p qx-finkit --locked
+cargo bench -p qx-finkit --no-run
 ```
 
 Rolling calculations must preserve documented alignment, leading warm-up `NaN` behavior, parameter validation, and related OHLCV length invariants.
@@ -236,10 +236,10 @@ subsets compile. Only four subsets are supported and verified:
 
 | Subset | Command |
 | --- | --- |
-| default | `cargo check -p finkit --locked` |
-| bare | `cargo check -p finkit --no-default-features --locked` |
-| `no_std` | `cargo check -p finkit --no-default-features --features no_std --locked` |
-| `tracing` only | `cargo check -p finkit --no-default-features --features tracing --locked` |
+| default | `cargo check -p qx-finkit --locked` |
+| bare | `cargo check -p qx-finkit --no-default-features --locked` |
+| `no_std` | `cargo check -p qx-finkit --no-default-features --features no_std --locked` |
+| `tracing` only | `cargo check -p qx-finkit --no-default-features --features tracing --locked` |
 
 `scripts/check_feature_matrix.py` (CI `regression-gates`, `make
 check-feature-matrix`) builds those four and asserts that the recorded-broken
@@ -491,4 +491,4 @@ For a release:
 7. publish external registries only through an explicit release/trusted-publishing mechanism;
 8. test a clean consumer install from each registry before adding that command to user docs.
 
-For the published v0.2.0 release, the verified base assets are the Python ABI3 wheels, Rust `.crate`, Linux x86_64 CLI, and `SHA256SUMS`. The v0.2.0 workspace produces release candidates; Go/.NET/Android/iOS/WASM candidates only become published support after their target gates and release distribution are proven.
+For the published v0.3.0 release, the verified base assets are the Python ABI3 wheels, Rust `.crate`, Linux x86_64 CLI, and `SHA256SUMS`. The v0.3.0 workspace produces release candidates; Go/.NET/Android/iOS/WASM candidates only become published support after their target gates and release distribution are proven.

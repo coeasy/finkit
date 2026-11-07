@@ -163,24 +163,24 @@ allowlist 型条目要双向断言（stale + undeclared），否则清理后的�
 
 ```bash
 # 运行所有测试
-cargo test -p finkit
+cargo test -p qx-finkit
 
 # 运行特定类别测试
-cargo test -p finkit --test builder_tests
-cargo test -p finkit --test repaint_tests
-cargo test -p finkit --test property_tests
+cargo test -p qx-finkit --test builder_tests
+cargo test -p qx-finkit --test repaint_tests
+cargo test -p qx-finkit --test property_tests
 
 # 运行 golden 测试
-cargo test -p finkit --test golden_tests
+cargo test -p qx-finkit --test golden_tests
 
 # 运行兼容性测试
-cargo test -p finkit --test dzh_compat_tests
-cargo test -p finkit --test ths_compat_tests
+cargo test -p qx-finkit --test dzh_compat_tests
+cargo test -p qx-finkit --test ths_compat_tests
 
 # 量「另一条执行路径还差多远」时必须 --no-fail-fast
 # （cargo test 默认在第一个失败 target 上就停，会把单个 target 的红数
 #   误当成全量缺口）
-cargo test -p finkit --no-fail-fast
+cargo test -p qx-finkit --no-fail-fast
 ```
 
 ## 测试覆盖统计

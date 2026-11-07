@@ -1,18 +1,8 @@
 name: Publish
 
-# Tag-triggered release pipeline for the Rust crate.
-#
-# Scope: this workflow publishes **crates.io only**. PyPI is deliberately not
-# wired up yet. The distribution name `finkit` is held on PyPI by an empty
-# placeholder package, and `docs/language-bindings.md` forbids advertising a
-# registry path before it has actually been published to *and* a clean consumer
-# install has passed. Pre-claiming `pip install finkit` here would make that
-# document untrue, so the `pypi` job below stays commented out until the
-# distribution name is decided (see docs/release-checklist.md, "PyPI:
-# deliberately deferred").
-#
-# The Python wheels for a release are produced by `python-wheels.yml`, which
-# also triggers on `v*` tags and attaches the wheels to the GitHub Release.
+# Tag-triggered release pipeline for the qx-finkit Rust crate.
+# Python wheels are published from the validated multi-platform wheel set in
+# `python-wheels.yml` using PyPI Trusted Publishing.
 
 on:
   push:
@@ -89,30 +79,12 @@ jobs:
         # `[package.metadata.docs.rs]` feature allowlist.
         env:
           RUSTDOCFLAGS: "--cfg docsrs -D warnings"
-        run: cargo doc -p finkit --no-deps --no-default-features --features "std formula serde tracing metrics formula-jit formula-simd indicators-all" --locked
+        run: cargo doc -p qx-finkit --no-deps --no-default-features --features "std formula serde tracing metrics formula-jit formula-simd indicators-all" --locked
       - name: Dry run
         # Packages, verifies the packaged crate compiles, and validates the
         # publish-specific metadata that `cargo package` does not check.
-        run: cargo publish -p finkit --locked --dry-run
+        run: cargo publish -p qx-finkit --locked --dry-run
       - name: Publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish -p finkit --locked
-
-  # pypi:
-  #   name: Publish to PyPI
-  #   needs: verify-tag
-  #   runs-on: ubuntu-22.04
-  #   timeout-minutes: 60
-  #   permissions:
-  #     id-token: write        # Trusted Publishing; no long-lived token
-  #   steps:
-  #     - uses: actions/checkout@v7
-  #     - uses: actions/setup-python@v6
-  #       with:
-  #         python-version: "3.12"
-  #     - uses: dtolnay/rust-toolchain@stable
-  #     - uses: Swatinem/rust-cache@v2
-  #     - run: pip install maturin
-  #     # `--skip-existing` keeps a re-run of the same tag idempotent.
-  #     - run: maturin publish --manifest-path ffi/python-binding/Cargo.toml --skip-existing
+        run: cargo publish -p qx-finkit --locked

@@ -10,7 +10,7 @@
 //! not an approximation). `math::simd_ops::simd_floor` / `simd_ceil` are that
 //! kernel behind a runtime dispatch.
 //!
-//! Run with: `cargo run --release -p finkit --example rounding_kernel_probe`
+//! Run with: `cargo run --release -p qx-finkit --example rounding_kernel_probe`
 //!
 //! Reference point for the same 10k-bar series from `benches/talib_c_comparison`
 //! (TA-Lib C `TA_FLOOR` / `TA_CEIL`, which also call `floor()`/`ceil()`):

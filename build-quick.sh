@@ -218,7 +218,7 @@ for lang in langs:
             "sha256": hashlib.sha256(f.read_bytes()).hexdigest(),
         })
 manifest = {
-    "name": "finkit",
+    "name": "qx-finkit",
     "version": "${VERSION}",
     "platform": "${PLATFORM}",
     "quick_build": True,
