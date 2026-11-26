@@ -11,22 +11,20 @@ factors". Measurement says that target rests on two premises that the source doe
 not support, and both are recorded here so the number is auditable rather than
 asserted:
 
-1. **The corpus is 71 formulas, not 101.** Kakushadze's paper numbers its alphas
-   1..101 but defines only 71 of them; the other 30 numbers are reserved and
-   carry no formula at all. `tests/golden/worldquant101/formulas_v1.json` records
-   the reserved list explicitly.
+1. **The checked-in transcription contains 71 formulas.** Thirty numbers in
+   1..101 are absent from this corpus. They are catalog gaps, not evidence that
+   the paper left those numbers undefined. The current tables are partial.
 
-2. **The corpus is cross-sectional, and finkit's engine is single-instrument.**
+2. **The single-series subset excludes cross-sectional formulas.**
    `rank(x)` in these alphas means "rank x across the universe on that date", not
    a rolling rank over time; `scale` and `indneutralize` are likewise
-   universe-level. Across the 71 formulas `rank` appears 129 times and is the
-   sole blocker for 50 of them. Those alphas are not missing a *kernel* — they
-   are missing a *data axis*. finkit's kernels take `&[f64]`, one instrument at a
-   time, so no amount of operator work makes them computable.
+   universe-level. Across the 71 formulas `rank` appears 129 times. Finkit now
+   has a two-axis panel executor, but those expressions are not yet translated
+   and registered in the built-in library.
 
    Note the trap: finkit *does* have `RANK_PCT`, but it is a rolling rank. Using
    it for `rank` would silently produce a different factor, which is why the
-   classification below refuses rather than substitutes.
+   classification below keeps the single-series subset separate.
 
 So the deliverable is what the criterion's second half asks for — every alpha is
 either computed or annotated with the reason it is not — and the count falls out
@@ -35,10 +33,11 @@ for the plan and the report that supersedes the 80 target.
 
 # The classification
 
-Each of the 71 formulas is placed in exactly one bucket:
+Each formula present in the 71-entry transcription is placed in exactly one bucket:
 
-* `EXPRESSIONS`  — computable single-instrument; translated to finkit.
-* `UNAVAILABLE`  — annotated with the cross-sectional operators that block it.
+* `EXPRESSIONS`  — translated into the single-series library.
+* `UNAVAILABLE`  — not exposed in the single-series library; required panel
+  operators are listed for each entry.
 
 The split is derived mechanically from the formula text, and the gate asserts
 that every recorded blocker really does appear in the formula it is attached to,
@@ -309,12 +308,18 @@ def self_test() -> int:
         if not expression.strip():
             failures.append(f"{name} translated to an empty expression")
 
-    # The reserved list is part of the finding, so it is asserted, not implied.
-    reserved = set(
-        json.loads(FORMULAS.read_text(encoding="utf-8"))["reference"]["reserved_numbers"]
+    # These are gaps in this checked-in transcription, not a finding about
+    # which formulas the paper did or did not publish.
+    gaps = set(
+        json.loads(FORMULAS.read_text(encoding="utf-8"))["reference"]["untranscribed_numbers"]
     )
-    if len(reserved) != 30:
-        failures.append(f"reserved numbers: got {len(reserved)}, want 30")
+    defined_numbers = {
+        int(name.removeprefix("Alpha")) for name in formulas
+    }
+    if len(gaps) != 30:
+        failures.append(f"untranscribed numbers: got {len(gaps)}, want 30")
+    if gaps & defined_numbers or gaps | defined_numbers != set(range(1, 102)):
+        failures.append("the transcription and its gaps do not partition 1..101")
 
     if failures:
         for failure in failures:
@@ -322,7 +327,7 @@ def self_test() -> int:
         return 1
     print(
         f"self-test passed: {len(formulas)} formulas, {len(computable)} computable, "
-        f"{len(unavailable)} blocked, 30 numbers reserved by the paper"
+        f"{len(unavailable)} panel-only, 30 numbers absent from the transcription"
     )
     return 0
 

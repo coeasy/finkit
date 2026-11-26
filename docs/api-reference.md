@@ -835,6 +835,20 @@ lib.evaluate("Alpha101", ...) # one factor
 lib.evaluate_all(...)         # {name: ndarray}
 ```
 
+For aligned panel input, `evaluate_panel(name, timestamps, symbols, fields)`
+accepts a dictionary of C-contiguous NumPy matrices, each shaped
+`(time, symbols)`, and returns a matrix with the same axes. The Rust
+`FactorPanel::evaluate` and Python `evaluate_panel_formula` entry points also
+accept a custom expression. In that panel context, `RANK(x)` is cross-sectional
+for each date, while `TS_RANK(x,n)` is a rolling rank down each symbol column.
+The current WorldQuant catalog still contains only its checked-in partial
+transcription; the panel engine alone does not fill missing catalog entries.
+
+The language-neutral `factor.panel.v1` contract accepts either `factor` plus
+`library`, or an `expression`. Inputs and outputs are row-major in
+`(time, symbols)` order; JSON `null` represents `NaN` or other non-finite values.
+The Rust entry point is `finkit_ffi_common::evaluate_factor_panel_json`.
+
 ### Formula templates and registry
 
 The built-in template catalog is searchable and versioned as plain dicts:

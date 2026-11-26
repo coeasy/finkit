@@ -561,6 +561,46 @@ values = lib.evaluate("Alpha101", ...)   # one factor
 all_values = lib.evaluate_all(...)       # {name: ndarray}
 ```
 
+The panel entry point takes one two-dimensional array per input field. Arrays
+must be C-contiguous and have shape `(time, symbols)`; `timestamps` and
+`symbols` define the axis order returned by the result:
+
+```python
+import numpy as np
+import finkit as ta
+
+dates = np.arange(100, dtype=np.int64)
+symbols = ["AAA", "BBB"]
+open_panel = np.ones((100, 2), dtype=np.float64)
+volume_panel = np.ones((100, 2), dtype=np.float64)
+lib = ta.factor_library("worldquant101")
+values = lib.evaluate_panel(
+    "Alpha6",
+    dates,
+    symbols,
+    {
+        "open": np.ascontiguousarray(open_panel, dtype=np.float64),
+        "volume": np.ascontiguousarray(volume_panel, dtype=np.float64),
+    },
+)  # shape (time, symbols)
+```
+
+For custom calculations, `ta.evaluate_panel_formula(expression, timestamps,
+symbols, fields)` uses the same matrix contract without requiring a built-in
+factor name. In a panel expression, `RANK(x)` or `CS_RANK(x)` ranks across
+symbols on each date; `TS_RANK(x, n)` ranks within each symbol's rolling
+window. Rolling functions such as `MA` and `REF` run down symbol columns.
+`INDNEUTRALIZE(x, group)` uses numeric group codes and computes means within
+each group on each date. The shipped WorldQuant library remains a partial
+catalog until its missing source entries and redistribution status are
+resolved; panel support does not imply full library coverage.
+
+If `RETURNS` is not supplied, it is derived from each symbol's close-to-close
+price ratio. If `ADV{d}` is not supplied, it is the full-window mean of
+`DOLLAR_VOLUME` (or `AMOUNT`); when neither is present, the engine derives
+dollar volume from `CLOSE * VOLUME`. Supply adjusted prices and volume when that
+is the intended market-data convention.
+
 `FactorLibrary` is the built-in catalog. To register your own formulas, use
 `FormulaRegistry` (`register` / `unregister` / `compile` / `names`).
 

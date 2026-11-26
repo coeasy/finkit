@@ -40,6 +40,7 @@ use std::sync::Arc;
 use ndarray::Array1;
 
 use crate::factor_graph::{FactorGraph, FactorGraphError, FactorGraphPlan};
+use crate::factors::panel::{FactorPanel, FactorPanelResult};
 use crate::factors::{
     FactorDefinition, FactorDirection, FactorError, FactorInputs, FactorKind, FactorRegistry,
     FactorResult,
@@ -327,6 +328,45 @@ impl FactorLibrary {
         factor
             .evaluate(ctx)
             .map_err(|error| FactorError::Compute(format!("{}: {error}", factor.name())))
+    }
+
+    /// Evaluate one library factor over a `time × symbols` panel.
+    ///
+    /// Ordinary rolling operators execute down each symbol column; explicit
+    /// cross-sectional operators execute across each timestamp. The panel
+    /// evaluator parses the stored expression and preserves its result axes.
+    pub fn evaluate_panel(
+        &self,
+        name: &str,
+        panel: &FactorPanel<'_>,
+    ) -> FactorResult<FactorPanelResult> {
+        let factor = self
+            .factors
+            .get(name)
+            .ok_or_else(|| FactorError::UnknownFactor(name.to_string()))?;
+        panel
+            .evaluate(factor.expression())
+            .map_err(|error| match error {
+                FactorError::Compute(message) => {
+                    FactorError::Compute(format!("{}: {message}", factor.name()))
+                }
+                other => other,
+            })
+    }
+
+    /// Evaluate all factors whose input fields are present in the supplied
+    /// panel. The returned keys are deterministic and missing-field errors are
+    /// retained as errors instead of silently being converted to NaN output.
+    pub fn evaluate_all_panel(
+        &self,
+        panel: &FactorPanel<'_>,
+    ) -> FactorResult<BTreeMap<String, FactorPanelResult>> {
+        let mut output = BTreeMap::new();
+        for name in self.factors.keys() {
+            let values = self.evaluate_panel(name, panel)?;
+            output.insert(name.clone(), values);
+        }
+        Ok(output)
     }
 
     /// A [`FactorRegistry`] holding every factor in this library.

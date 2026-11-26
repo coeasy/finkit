@@ -2,6 +2,7 @@
 
 mod csv_io;
 mod feature_command;
+mod panel_command;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use csv_io::{close_series, ohlcv_series};
@@ -268,6 +269,27 @@ enum Commands {
         output: Option<String>,
         #[arg(short, long, value_enum, default_value_t = OutputFormat::Csv)]
         format: OutputFormat,
+    },
+    /// Evaluate a factor or formula over a time-by-symbol CSV panel.
+    ///
+    /// Usage: finkit-cli factor-panel --input panel.csv --factor Alpha6
+    ///        finkit-cli factor-panel --input panel.csv --expr "MA(CS_RANK(CLOSE), 5)"
+    FactorPanel {
+        /// CSV with timestamp,symbol and numeric market fields.
+        #[arg(short, long)]
+        input: PathBuf,
+        /// Built-in library name used with --factor.
+        #[arg(long, default_value = "worldquant101")]
+        library: String,
+        /// One factor name from the selected library.
+        #[arg(long, conflicts_with = "expression")]
+        factor: Option<String>,
+        /// Formula expression to evaluate directly.
+        #[arg(long = "expr", conflicts_with = "factor")]
+        expression: Option<String>,
+        /// Write long-form CSV output to this path; stdout is used otherwise.
+        #[arg(short, long)]
+        output: Option<String>,
     },
     /// Parameter sweep over an indicator
     ///
@@ -944,6 +966,24 @@ fn main() {
             format,
         } => {
             feature_command::run_features(&pack, &input, period, output, format);
+        }
+        Commands::FactorPanel {
+            input,
+            library,
+            factor,
+            expression,
+            output,
+        } => {
+            if let Err(error) = panel_command::run(
+                &input,
+                &library,
+                factor.as_deref(),
+                expression.as_deref(),
+                output.as_deref(),
+            ) {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
         }
         Commands::Sweep {
             indicator,

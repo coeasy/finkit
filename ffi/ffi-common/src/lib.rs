@@ -19,6 +19,7 @@ pub mod error;
 pub mod execute;
 pub mod factor;
 pub mod factor_catalog;
+pub mod factor_panel;
 pub mod factor_stream;
 pub mod formula;
 pub mod formula_stream;
@@ -45,6 +46,7 @@ pub use factor::{
     FACTOR_CROSS_SECTIONAL_CONTRACT_SCHEMA_VERSION,
 };
 pub use factor_catalog::{factor_catalog, factor_catalog_json, FACTOR_CATALOG_SCHEMA_VERSION};
+pub use factor_panel::{evaluate_factor_panel_json, FACTOR_PANEL_CONTRACT_SCHEMA_VERSION};
 pub use factor_stream::{evaluate_factor_stream_json, FACTOR_STREAM_CONTRACT_SCHEMA_VERSION};
 pub use formula::{
     evaluate_formula_cross_sectional_json, evaluate_formula_json, evaluate_formula_panel_json,

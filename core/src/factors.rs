@@ -11,6 +11,7 @@
 //! [`builtin::factor_library`](crate::factors::builtin::factor_library).
 
 pub mod builtin;
+pub mod panel;
 
 use crate::data_contract::CrossSectionView;
 use crate::runtime::MarketFrame;
@@ -889,9 +890,12 @@ pub fn neutralize(values: &[f64], exposure: &[f64]) -> FactorResult<Vec<f64>> {
 ///
 /// The competitive analysis set this criterion at "9 -> >= 240", from the
 /// arithmetic `158 + ~85 + 9`. Both of its middle terms are larger than the
-/// sources support: `WorldQuant`'s paper numbers 101 alphas but defines only 71
-/// (30 numbers are reserved), and 54 of those 71 are blocked on a
-/// cross-sectional *data axis* rather than a missing operator. `184` is the
+/// sources support: the checked-in `WorldQuant` transcription has 71 entries,
+/// with 30 numbers missing from that corpus; those are not paper-reserved
+/// numbers. Fifty-four transcribed entries are not registered in this
+/// single-series library because they require cross-sectional semantics. The
+/// generic panel evaluator now provides those axes, but the formulas remain
+/// outside the built-in registry. `184` is the
 /// measured sum, not a target that was rounded to; see
 /// [`crate::factors::builtin::worldquant101`] for the per-alpha classification.
 ///

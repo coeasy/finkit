@@ -145,9 +145,10 @@ def test_worldquant101_exposes_the_computable_subset():
     library = finkit.factor_library("worldquant101")
 
     assert len(library) == WORLDQUANT101_FACTORS
-    # The published corpus numbers 101 alphas but defines 71; the 54 that need a
-    # cross-section of instruments are annotated in the Rust module rather than
-    # approximated here, so the exposed count is the computable subset.
+    # This repository has a 71-entry transcription: 17 translated formulas and
+    # 54 entries marked as needing cross-sectional operators. Thirty numbers
+    # are absent from the transcription; they are not claimed to be undefined
+    # by the paper.
     #
     # `Alpha101` is computable — it is `(close - open) / ((high - low) + 0.001)`,
     # entirely single-instrument — so the absent example has to be one that
@@ -156,6 +157,78 @@ def test_worldquant101_exposes_the_computable_subset():
     assert "Alpha6" in library
     assert "Alpha101" in library
     assert "Alpha99" not in library
+
+
+def test_panel_evaluation_preserves_time_and_symbol_axes():
+    library = finkit.factor_library("worldquant101")
+    time = np.arange(40, dtype=np.float64)
+    open_panel = np.column_stack(
+        [100.0 + time + np.sin(time / 2), 80.0 + time * 0.7 + np.cos(time / 3)]
+    )
+    volume_panel = np.column_stack(
+        [1000.0 + time * 3 + np.cos(time), 2000.0 + time * 4 + np.sin(time / 2)]
+    )
+    timestamps = np.arange(40, dtype=np.int64)
+    symbols = ["AAA", "BBB"]
+
+    panel_values = library.evaluate_panel(
+        "Alpha6",
+        timestamps,
+        symbols,
+        {
+            "open": np.ascontiguousarray(open_panel),
+            "volume": np.ascontiguousarray(volume_panel),
+        },
+    )
+
+    assert panel_values.dtype == np.float64
+    assert panel_values.shape == (40, 2)
+    np.testing.assert_allclose(
+        panel_values[:, 0],
+        library.evaluate(
+            "Alpha6",
+            open=np.ascontiguousarray(open_panel[:, 0]),
+            volume=np.ascontiguousarray(volume_panel[:, 0]),
+        ),
+        equal_nan=True,
+    )
+    np.testing.assert_allclose(
+        panel_values[:, 1],
+        library.evaluate(
+            "Alpha6",
+            open=np.ascontiguousarray(open_panel[:, 1]),
+            volume=np.ascontiguousarray(volume_panel[:, 1]),
+        ),
+        equal_nan=True,
+    )
+
+
+def test_panel_evaluation_rejects_mismatched_axis_shape():
+    library = finkit.factor_library("worldquant101")
+    with pytest.raises(ValueError, match="shape"):
+        library.evaluate_panel(
+            "Alpha6",
+            np.array([1, 2], dtype=np.int64),
+            ["AAA", "BBB"],
+            {"open": np.ones((2, 1), dtype=np.float64)},
+        )
+
+
+def test_panel_formula_composes_cross_section_and_rolling_operations():
+    close = np.array(
+        [[1.0, 10.0, 100.0], [2.0, 20.0, 200.0], [3.0, 30.0, 300.0]],
+        dtype=np.float64,
+    )
+    values = finkit.evaluate_panel_formula(
+        "MA(CS_RANK(CLOSE), 2)",
+        np.array([1, 2, 3], dtype=np.int64),
+        ["AAA", "BBB", "CCC"],
+        {"close": np.ascontiguousarray(close)},
+    )
+
+    assert values.shape == (3, 3)
+    assert np.isnan(values[0]).all()
+    np.testing.assert_allclose(values[1:], [[0.0, 0.5, 1.0], [0.0, 0.5, 1.0]])
 
 
 def test_unknown_library_names_are_rejected():

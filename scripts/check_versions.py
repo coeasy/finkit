@@ -397,7 +397,7 @@ def fix_versions(canonical: str) -> None:
 
     lock = CARGO_LOCK.read_text(encoding="utf-8")
     lock = re.sub(
-        r'(\[\[package\]\]\s*name = "finkit(?:-[^"]+)?"\s*'
+        r'(\[\[package\]\]\s*name = "(?:qx-finkit|finkit(?:-[^"]+)?)"\s*'
         r'version = ")[^"]+(")',
         rf"\g<1>{canonical}\g<2>",
         lock,

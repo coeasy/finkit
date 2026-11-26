@@ -1504,12 +1504,31 @@ class FactorLibrary:
         """Evaluate every factor in the library, returning ``{name: ndarray}``."""
         ...
 
+    def evaluate_panel(
+        self,
+        name: str,
+        timestamps: List[int],
+        symbols: List[str],
+        fields: Dict[str, NDArray[np.floating]],
+    ) -> NDArray[np.floating]:
+        """Evaluate one factor over aligned ``(time, symbols)`` field matrices."""
+        ...
+
 def factor_library(name: str) -> FactorLibrary:
     """Load a built-in factor library by name.
 
     ``name`` is required and must be ``alpha158`` (158 factors) or
     ``worldquant101`` (17 factors); anything else raises ``ValueError``.
     """
+    ...
+
+def evaluate_panel_formula(
+    expression: str,
+    timestamps: List[int],
+    symbols: List[str],
+    fields: Dict[str, NDArray[np.floating]],
+) -> NDArray[np.floating]:
+    """Evaluate a formula on aligned ``(time, symbols)`` float matrices."""
     ...
 
 # ============================================================================

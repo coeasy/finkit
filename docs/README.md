@@ -18,6 +18,7 @@ Choose the path that matches your goal:
 | Install and calculate something | [Getting started](getting-started.md) |
 | Verify install/release assets | [Installation](installation.md) |
 | Prepare or audit a release | [Release checklist](release-checklist.md) |
+| Track the v0.4.0 panel API release | [v0.4.0 release checklist](release-checklist-0.4.0.md) |
 | Learn the end-to-end APIs | [Complete usage guide](usage.md) |
 | Use Python | [Python guide](python.md) |
 | Use the CLI | [CLI guide](cli.md) |
@@ -27,7 +28,7 @@ Choose the path that matches your goal:
 | Diagnose failures | [Troubleshooting](troubleshooting.md) |
 | 查看当前架构与重构总纲 | [架构、开发细节与分层重构总纲 V5](FINKIT_ARCHITECTURE_AND_REFACTOR_PLAN_V5.md) |
 | 查看历史全链路审查记录（2026-10-13） | [架构审查与发布整改](ARCHITECTURE_REVIEW_AND_REFACTOR_PLAN_2026-10-13.md) |
-| 查看因子库盘点、实施计划与授权边界 | [Alpha158 / Alpha360 / WorldQuant101 完整计划](FACTOR_LIBRARIES_COMPLETION_PLAN_2026-11-26.md) |
+| 查看因子库计划、实施进度与授权边界 | [Alpha158 / Alpha360 / WorldQuant101 完整计划](FACTOR_LIBRARIES_COMPLETION_PLAN_2026-11-26.md) |
 | 查看当前项目功能、架构与重构建议 | [项目功能、架构与重构审查（2026-10-23）](PROJECT_FUNCTIONALITY_ARCHITECTURE_REVIEW_2026-10-23.md) |
 | 查看项目架构、开发细节问题与分阶段优化方案（2026-10-26） | [架构与重构方案（2026-10-26）](PROJECT_ARCHITECTURE_DETAILED_REVIEW_AND_REFACTOR_PLAN_2026-10-26.md) |
 | 查看 TA-Lib 全量兼容、五种公式系统与逐项性能重构路线 | [TA-Lib parity 与公式方言重构方案](TA_LIB_PARITY_AND_FORMULA_DIALECT_REFACTOR_PLAN_2026-10-23.md) |

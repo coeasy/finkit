@@ -29,7 +29,9 @@
 use ::finkit::factors::builtin::{factor_library, FactorLibrary, LIBRARY_NAMES};
 use ::finkit::formula::FormulaContext;
 use ndarray::Array1;
-use numpy::{PyArray1, PyReadonlyArray1};
+use numpy::{
+    PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods,
+};
 use pyo3::exceptions::{PyKeyError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -142,6 +144,56 @@ impl PyFactorLibrary {
         }
         Ok(context)
     }
+}
+
+/// Evaluate an arbitrary formula over a `time × symbols` panel.
+#[pyfunction(name = "evaluate_panel_formula")]
+#[pyo3(signature = (expression, timestamps, symbols, fields))]
+fn evaluate_panel_formula_py<'py>(
+    py: Python<'py>,
+    expression: &str,
+    timestamps: Vec<i64>,
+    symbols: Vec<String>,
+    fields: &Bound<'py, PyDict>,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let symbol_refs: Vec<&str> = symbols.iter().map(String::as_str).collect();
+    let mut field_names = Vec::with_capacity(fields.len());
+    let mut field_values = Vec::with_capacity(fields.len());
+    for (key, value) in fields.iter() {
+        let field_name = key
+            .extract::<String>()
+            .map_err(|_| PyValueError::new_err("panel field names must be strings"))?;
+        let array = value.extract::<PyReadonlyArray2<'py, f64>>().map_err(|_| {
+            PyValueError::new_err(format!(
+                "panel field `{field_name}` must be a two-dimensional float NumPy array"
+            ))
+        })?;
+        if array.shape() != [timestamps.len(), symbols.len()] {
+            return Err(PyValueError::new_err(format!(
+                "panel field `{field_name}` has shape {:?}; expected ({}, {})",
+                array.shape(),
+                timestamps.len(),
+                symbols.len()
+            )));
+        }
+        field_names.push(field_name);
+        field_values.push(array.as_slice()?.to_vec());
+    }
+    let field_refs: Vec<(&str, &[f64])> = field_names
+        .iter()
+        .zip(&field_values)
+        .map(|(name, values)| (name.as_str(), values.as_slice()))
+        .collect();
+    let panel = ::finkit::factors::panel::FactorPanel::new(&timestamps, &symbol_refs, &field_refs)
+        .map_err(to_py_error)?;
+    let result = panel.evaluate(expression).map_err(to_py_error)?;
+    let output = PyArray2::zeros(py, [result.rows(), result.cols()], false);
+    let mut writable = output.readwrite();
+    let values = writable.as_slice_mut().map_err(|error| {
+        PyValueError::new_err(format!("could not access panel output array: {error}"))
+    })?;
+    values.copy_from_slice(&result.values);
+    Ok(output)
 }
 
 #[pymethods]
@@ -317,6 +369,67 @@ impl PyFactorLibrary {
         }
         Ok(output)
     }
+
+    /// Evaluate one factor across an aligned `(time, symbols)` input panel.
+    ///
+    /// `fields` maps each input name to a C-contiguous NumPy matrix. The result
+    /// keeps the same axis order. Use explicit `CS_RANK`/`CS_SCALE` operations
+    /// for cross-sectional transforms in custom formulas; rolling functions
+    /// continue to run down each symbol column.
+    #[pyo3(signature = (name, timestamps, symbols, fields))]
+    fn evaluate_panel<'py>(
+        &self,
+        py: Python<'py>,
+        name: &str,
+        timestamps: Vec<i64>,
+        symbols: Vec<String>,
+        fields: &Bound<'py, PyDict>,
+    ) -> PyResult<Bound<'py, PyArray2<f64>>> {
+        self.factor(name)?;
+        let symbol_refs: Vec<&str> = symbols.iter().map(String::as_str).collect();
+        let mut field_names = Vec::with_capacity(fields.len());
+        let mut field_values = Vec::with_capacity(fields.len());
+        for (key, value) in fields.iter() {
+            let field_name = key
+                .extract::<String>()
+                .map_err(|_| PyValueError::new_err("panel field names must be strings"))?;
+            let array = value.extract::<PyReadonlyArray2<'py, f64>>().map_err(|_| {
+                PyValueError::new_err(format!(
+                    "panel field `{field_name}` must be a two-dimensional float NumPy array"
+                ))
+            })?;
+            if array.shape() != [timestamps.len(), symbols.len()] {
+                return Err(PyValueError::new_err(format!(
+                    "panel field `{field_name}` has shape {:?}; expected ({}, {})",
+                    array.shape(),
+                    timestamps.len(),
+                    symbols.len()
+                )));
+            }
+            field_names.push(field_name);
+            field_values.push(array.as_slice()?.to_vec());
+        }
+        let field_refs: Vec<(&str, &[f64])> = field_names
+            .iter()
+            .zip(&field_values)
+            .map(|(name, values)| (name.as_str(), values.as_slice()))
+            .collect();
+        let panel =
+            ::finkit::factors::panel::FactorPanel::new(&timestamps, &symbol_refs, &field_refs)
+                .map_err(to_py_error)?;
+        let result = self
+            .library
+            .evaluate_panel(name, &panel)
+            .map_err(to_py_error)?;
+
+        let output = PyArray2::zeros(py, [result.rows(), result.cols()], false);
+        let mut writable = output.readwrite();
+        let values = writable.as_slice_mut().map_err(|error| {
+            PyValueError::new_err(format!("could not access panel output array: {error}"))
+        })?;
+        values.copy_from_slice(&result.values);
+        Ok(output)
+    }
 }
 
 /// The factor-library entry point: `finkit.factor_library("alpha158")`.
@@ -359,5 +472,6 @@ pub fn register_factor_library(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(available_factor_libraries, m)?)?;
     m.add_function(wrap_pyfunction!(factor_registry_names, m)?)?;
     m.add_function(wrap_pyfunction!(factor_library_series_names, m)?)?;
+    m.add_function(wrap_pyfunction!(evaluate_panel_formula_py, m)?)?;
     Ok(())
 }
