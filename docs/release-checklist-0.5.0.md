@@ -20,14 +20,21 @@ built-in WorldQuant catalog.
 - [x] `cargo check -p qx-finkit --features formula`.
 - [x] `cargo check -p finkit-cli`.
 - [x] `cargo check --manifest-path ffi/python-binding/Cargo.toml --features formula`.
-- [ ] Required same-commit release CI and readiness aggregation.
-- [ ] Tag-driven release artifact workflows.
-- [ ] Verify published crates.io, PyPI, GitHub Release assets, and checksums.
+- [x] Required same-commit release CI and readiness aggregation on
+      `4a5dd6397cdb1b98229efdfb29e5f5d5840493c4`; all seven required workflows
+      passed.
+- [x] Tag-driven release artifact workflows passed: crates.io publish, Python
+      wheels, multi-language builds, cross-platform contract, and installers.
+- [x] Verify published crates.io, PyPI, GitHub Release assets, and checksums.
 
 ## Publication status
 
 - Workspace version: `0.5.0`.
 - Previous published version: `0.4.0`.
-- GitHub tag, crates.io, PyPI, and release assets: pending.
-- Move `PUBLISHED_VERSION` to `0.5.0` and update current-release prose only
-  after independently verifying publication.
+- GitHub tag and Release: [`v0.5.0`](https://github.com/coeasy/finkit/releases/tag/v0.5.0),
+  commit `4a5dd6397cdb1b98229efdfb29e5f5d5840493c4`, 28 assets.
+- `qx-finkit 0.5.0` verified on crates.io and PyPI; PyPI has four ABI3 wheels
+  (Linux x86_64, Windows x86_64, macOS x86_64, macOS arm64).
+- `SHA256SUMS`, `SHA256SUMS.multilang`, and `SHA256SUMS.installers` verified:
+  all 25 listed assets match their SHA-256 digests.
+- `PUBLISHED_VERSION` and current-version documentation updated to `0.5.0`.

@@ -6,9 +6,9 @@ This guide is the shortest path from a fresh machine to a verified Finkit calcul
 
 Finkit is a high-performance financial indicator, formula, factor, and streaming-computation library. It is not a broker, order-routing system, or full research platform.
 
-The latest published GitHub Release is **v0.4.0**. Use it for downloadable assets, or install the Rust crate and Python package from their registries.
+The latest published GitHub Release is **v0.5.0**. Use it for downloadable assets, or install the Rust crate and Python package from their registries.
 
-The published `v0.4.0` Release contains:
+The published `v0.5.0` Release contains:
 
 - Python ABI3 wheels for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64;
 - the Rust crate and Python wheels;
@@ -16,7 +16,7 @@ The published `v0.4.0` Release contains:
 - Linux, macOS, and Windows installers;
 - checksum files for the release assets.
 
-The Rust crate and Python package `qx-finkit==0.4.0` are published on crates.io and PyPI. Other registry publication status is separate from the presence of source or a GitHub Release asset.
+The Rust crate and Python package `qx-finkit==0.5.0` are published on crates.io and PyPI. Other registry publication status is separate from the presence of source or a GitHub Release asset.
 
 ## 2. Core data rules
 
@@ -36,10 +36,10 @@ Install the PyPI distribution `qx-finkit`. Its Python import name remains
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install qx-finkit==0.4.0
+python -m pip install qx-finkit==0.5.0
 ```
 
-To build v0.4.0 from source, follow [installation.md](installation.md).
+To build v0.5.0 from source, follow [installation.md](installation.md).
 
 ### Alpha158 and Alpha360
 
@@ -146,7 +146,7 @@ The published crate can be used directly:
 
 ```toml
 [dependencies]
-finkit = { package = "qx-finkit", version = "0.4.0" }
+finkit = { package = "qx-finkit", version = "0.5.0" }
 ```
 
 Example:
@@ -168,7 +168,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## 6. CLI
 
-Linux x86_64 can use the release CLI binary; Linux, macOS, and Windows also have v0.4.0 native installers. Any supported host can build the CLI from source:
+Linux x86_64 can use the release CLI binary; Linux, macOS, and Windows also have v0.5.0 native installers. Any supported host can build the CLI from source:
 
 ```bash
 cargo build -p finkit-cli --release --locked
