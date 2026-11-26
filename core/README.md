@@ -32,6 +32,7 @@ The core can evaluate temporal and cross-sectional operations on aligned
 ```rust
 use finkit::factors::panel::FactorPanel;
 
+fn main() -> Result<(), Box<dyn std::error::Error>> {
 let timestamps = [1_i64, 2, 3];
 let symbols = ["AAA", "BBB"];
 let close = [1.0, 10.0, 2.0, 20.0, 3.0, 30.0]; // row-major: time × symbols
@@ -39,6 +40,8 @@ let fields = [("CLOSE", close.as_slice())];
 let panel = FactorPanel::new(&timestamps, &symbols, &fields)?;
 let values = panel.evaluate("MA(CS_RANK(CLOSE), 2)")?;
 assert_eq!((values.rows(), values.cols()), (3, 2));
+Ok(())
+}
 ```
 
 Rolling operators run down each symbol column. `CS_RANK`, `CS_ZSCORE`,
