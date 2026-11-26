@@ -22,7 +22,29 @@ finkit = { package = "qx-finkit", git = "https://github.com/coeasy/finkit", tag 
 finkit = { package = "qx-finkit", path = "../finkit/core" }
 ```
 
-The v0.4.0 release workflow will attach `qx-finkit-0.3.1.crate` to its GitHub Release.
+The v0.4.0 release workflow will attach `qx-finkit-0.4.0.crate` to its GitHub Release.
+
+## Factor panels
+
+The core can evaluate temporal and cross-sectional operations on aligned
+`time × symbols` inputs with `factors::panel::FactorPanel`:
+
+```rust
+use finkit::factors::panel::FactorPanel;
+
+let timestamps = [1_i64, 2, 3];
+let symbols = ["AAA", "BBB"];
+let close = [1.0, 10.0, 2.0, 20.0, 3.0, 30.0]; // row-major: time × symbols
+let fields = [("CLOSE", close.as_slice())];
+let panel = FactorPanel::new(&timestamps, &symbols, &fields)?;
+let values = panel.evaluate("MA(CS_RANK(CLOSE), 2)")?;
+assert_eq!((values.rows(), values.cols()), (3, 2));
+```
+
+Rolling operators run down each symbol column. `CS_RANK`, `CS_ZSCORE`,
+`CS_SCALE`, and group neutralization run across the symbols for each timestamp.
+See [the Python guide](../docs/python.md) and [the CLI guide](../docs/cli.md)
+for other direct-call examples.
 
 ## Basic example
 
