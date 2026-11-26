@@ -20,6 +20,7 @@ Choose the path that matches your goal:
 | Prepare or audit a release | [Release checklist](release-checklist.md) |
 | Track the v0.4.0 panel API release | [v0.4.0 release checklist](release-checklist-0.4.0.md) |
 | Track the v0.5.0 user-supplied factor library release | [v0.5.0 release checklist](release-checklist-0.5.0.md) |
+| Track the v0.6.0 paper-style panel operator release | [v0.6.0 release checklist](release-checklist-0.6.0.md) |
 | Review Alpha158 / Alpha360 / WorldQuant implementation status | [Factor libraries completion plan](FACTOR_LIBRARIES_COMPLETION_PLAN_2026-11-26.md) |
 | Learn the end-to-end APIs | [Complete usage guide](usage.md) |
 | Use Python | [Python guide](python.md) |

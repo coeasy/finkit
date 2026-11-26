@@ -843,6 +843,10 @@ accept a custom expression. In that panel context, `RANK(x)` is cross-sectional
 for each date, while `TS_RANK(x,n)` is a rolling rank down each symbol column.
 The current WorldQuant catalog still contains only its checked-in partial
 transcription; the panel engine alone does not fill missing catalog entries.
+For caller-supplied panel expressions, `condition ? yes : no` and paper-style `SIGNEDPOWER`, `MIN`,
+`MAX`, and `STDDEV` spellings are supported. A scalar window in `MIN` / `MAX`
+selects a rolling time-series reducer; a panel-valued second argument remains
+element-wise. Dotted input names such as `IndClass.subindustry` are valid.
 
 The language-neutral `factor.panel.v1` contract accepts either `factor` plus
 `library`, or an `expression`. Inputs and outputs are row-major in

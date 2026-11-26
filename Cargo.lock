@@ -666,7 +666,7 @@ checksum = "3e0f1c7c3a72c66fd80abe965175f7523475c0489a87d3ff9d6e8c87d87a9d2d"
 
 [[package]]
 name = "finkit-android"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "android_logger",
  "finkit-ffi-common",
@@ -677,7 +677,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-cli"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "assert_cmd",
  "clap",
@@ -693,7 +693,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-dotnet"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "finkit-ffi-common",
  "libc",
@@ -705,7 +705,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-factor-analysis"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "qx-finkit",
  "rayon",
@@ -716,7 +716,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-ffi"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "finkit-ffi-common",
  "libc",
@@ -727,7 +727,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-ffi-common"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "finkit-factor-analysis",
  "ndarray 0.16.1",
@@ -738,7 +738,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-go"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "finkit-ffi-common",
  "libc",
@@ -750,7 +750,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-ios"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "finkit-ffi-common",
  "libc",
@@ -760,7 +760,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-java"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "finkit-ffi-common",
  "finkit-visualization",
@@ -773,7 +773,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-node"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "finkit-ffi-common",
  "finkit-visualization",
@@ -788,7 +788,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-python"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "finkit-factor-analysis",
  "finkit-ffi-common",
@@ -801,7 +801,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-visualization"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "base64",
  "fontdue",
@@ -814,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "finkit-wasm"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "console_error_panic_hook",
  "finkit-ffi-common",
@@ -1907,7 +1907,7 @@ dependencies = [
 
 [[package]]
 name = "qx-finkit"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ahash",
  "approx",

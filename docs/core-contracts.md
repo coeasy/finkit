@@ -1,6 +1,6 @@
 # Core Contracts
 
-This page documents the stable v0.5.0 Rust contracts around the indicator,
+This page documents the stable v0.6.0 Rust contracts around the indicator,
 formula, factor, and runtime engines. They are intentionally data-source
 agnostic and do not turn Finkit into a data or trading platform.
 

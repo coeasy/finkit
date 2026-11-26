@@ -149,6 +149,12 @@ For example:
 
 Each CLI invocation evaluates one manifest entry. Caller-supplied expressions
 are evaluated under the caller's data convention and licensing responsibility.
+The formula parser accepts `condition ? yes : no` and the panel dialect accepts
+paper-style `SIGNEDPOWER`, `MIN`, `MAX`, and
+`STDDEV` names; scalar-window `MIN` / `MAX` perform rolling extrema, while a
+panel-valued second argument keeps element-wise behavior. Dotted group fields
+such as `IndClass.subindustry` are accepted; text category labels are encoded
+when the final column-name component is `sector`, `industry`, or `subindustry`.
 
 `RETURNS` is derived from close when omitted. `ADV{d}` uses `dollar_volume` or
 `amount` when supplied; otherwise it derives dollar volume from `close * volume`
