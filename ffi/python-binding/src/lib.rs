@@ -60,6 +60,8 @@ use pyo3::prelude::*;
 
 mod compat_api;
 
+mod alpha360;
+
 mod factor_library;
 
 mod features;
@@ -1386,6 +1388,9 @@ fn finkit(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // Shipped factor libraries (M0-3): `finkit.factor_library("alpha158")`.
     factor_library::register_factor_library(m)?;
+
+    // Built-in engineered feature sets, distinct from formula factor libraries.
+    alpha360::register_alpha360(m)?;
 
     // Streaming Indicators
     streaming::register_streaming_classes(m)?;

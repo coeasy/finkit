@@ -1,6 +1,7 @@
 #![allow(missing_docs)]
 
 mod csv_io;
+mod feature_command;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use csv_io::{close_series, ohlcv_series};
@@ -254,9 +255,9 @@ enum Commands {
     },
     /// Feature engineering pipeline (alpha factors, cross features, etc.)
     ///
-    /// Usage: finkit-cli features alpha_pack --input data.csv
+    /// Usage: finkit-cli features alpha360 --input ohlcv.csv
     Features {
-        /// Feature pack name: alpha_pack (default pack of alpha factors)
+        /// Feature pack name: alpha158, alpha360, or alpha_pack
         pack: String,
         #[arg(short, long)]
         input: PathBuf,
@@ -369,7 +370,7 @@ fn output_single(name: &str, data: &[f64], format: &OutputFormat, output: &Optio
             let items: Vec<String> = data
                 .iter()
                 .map(|v| {
-                    if v.is_nan() {
+                    if !v.is_finite() {
                         "null".to_string()
                     } else {
                         format!("{v}")
@@ -424,7 +425,7 @@ fn output_multi(
                 let items: Vec<String> = columns[i]
                     .iter()
                     .map(|v| {
-                        if v.is_nan() {
+                        if !v.is_finite() {
                             "null".to_string()
                         } else {
                             format!("{v}")
@@ -942,7 +943,7 @@ fn main() {
             output,
             format,
         } => {
-            run_features(&pack, &input, period, output, format);
+            feature_command::run_features(&pack, &input, period, output, format);
         }
         Commands::Sweep {
             indicator,
@@ -1191,120 +1192,6 @@ fn run_transform(
         }
     };
     output_single(transform, &result, &format, &output);
-}
-
-fn run_features(
-    pack: &str,
-    input: &PathBuf,
-    period: usize,
-    output: Option<String>,
-    format: OutputFormat,
-) {
-    use finkit::math::moving_avg;
-    let ohlcv = ohlcv_series(Some(input));
-    let close = &ohlcv.close;
-    let high = &ohlcv.high;
-    let low = &ohlcv.low;
-    let volume = &ohlcv.volume;
-    match pack {
-        "alpha_pack" => {
-            // Build a default alpha factor pack: sma, ema, rsi, macd_hist, atr, obv, returns, zscore
-            let sma = moving_avg::sma(close, period)
-                .expect("sma")
-                .as_slice()
-                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")
-                .to_vec();
-            let ema = moving_avg::ema(close, period)
-                .expect("ema")
-                .as_slice()
-                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")
-                .to_vec();
-            let rsi = indicators::rsi(close, period)
-                .expect("rsi")
-                .as_slice()
-                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")
-                .to_vec();
-            let macd = indicators::macd(close, 12, 26, 9).expect("macd");
-            let atr_v = indicators::atr(high, low, close, period)
-                .expect("atr")
-                .as_slice()
-                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")
-                .to_vec();
-            let obv_v = indicators::obv(close, volume)
-                .expect("obv")
-                .as_slice()
-                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")
-                .to_vec();
-            let returns: Vec<f64> = LogReturn.transform(close);
-            let zscore: Vec<f64> = ZScore.transform(close);
-            // Align all columns to the same length (the minimum, so log_return fits)
-            let len = sma
-                .len()
-                .min(ema.len())
-                .min(rsi.len())
-                .min(macd.macd.len())
-                .min(macd.signal.len())
-                .min(macd.hist.len())
-                .min(atr_v.len())
-                .min(obv_v.len())
-                .min(returns.len() + 1)
-                .min(zscore.len());
-            let sma = &sma[..len];
-            let ema = &ema[..len];
-            let rsi = &rsi[..len];
-            let macd_line = &macd
-                .macd
-                .as_slice()
-                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")[..len];
-            let macd_sig = &macd
-                .signal
-                .as_slice()
-                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")[..len];
-            let macd_hist = &macd
-                .hist
-                .as_slice()
-                .expect("unexpected None/Err in CLI handler (see cli/src/main.rs)")[..len];
-            let atr_v = &atr_v[..len];
-            let obv_v = &obv_v[..len];
-            // log_return is shorter by 1; prepend a NaN so length matches.
-            let mut returns_aligned: Vec<f64> = Vec::with_capacity(len);
-            returns_aligned.push(f64::NAN);
-            returns_aligned.extend_from_slice(&returns[..returns.len().min(len.saturating_sub(1))]);
-            while returns_aligned.len() < len {
-                returns_aligned.push(f64::NAN);
-            }
-            let zscore = &zscore[..len];
-            let names = [
-                "sma",
-                "ema",
-                "rsi",
-                "macd",
-                "macd_signal",
-                "macd_hist",
-                "atr",
-                "obv",
-                "log_return",
-                "zscore",
-            ];
-            let cols: Vec<&[f64]> = vec![
-                sma,
-                ema,
-                rsi,
-                macd_line,
-                macd_sig,
-                macd_hist,
-                atr_v,
-                obv_v,
-                &returns_aligned,
-                zscore,
-            ];
-            output_multi(&names, &cols, &format, &output);
-        }
-        other => {
-            eprintln!("Unknown feature pack: {other}. Available: alpha_pack");
-            std::process::exit(1);
-        }
-    }
 }
 
 fn run_sweep(

@@ -2,6 +2,46 @@
 
 The `features` module provides a comprehensive toolkit for transforming raw financial data and technical indicators into feature matrices suitable for machine learning models and quantitative strategy development.
 
+## Qlib Alpha158 and Alpha360
+
+Alpha158 and Alpha360 are available as built-in feature sets and return a
+time-by-feature matrix in the source library's column order. Alpha158 keeps
+Qlib's 158 declared expressions. Alpha360 is a 360-column raw price/volume
+feature set with the following fixed column order: `CLOSE59..CLOSE0`, `OPEN59..OPEN0`,
+`HIGH59..HIGH0`, `LOW59..LOW0`, `VWAP59..VWAP0`, and
+`VOLUME59..VOLUME0`. Alpha360 price fields are divided by the current close;
+volume is divided by current volume plus `1e-12`. Lags before the start of the input are
+`NaN`, matching Qlib's `Ref` warm-up behavior. The feature set needs aligned
+`open`, `high`, `low`, `close`, `vwap`, and `volume` series.
+
+```python
+import finkit as ta
+
+alpha158 = ta.feature_set("alpha158")
+matrix158 = alpha158.evaluate(
+    open=open_, high=high, low=low, close=close,
+    vwap=vwap, volume=volume,
+)  # shape: (time, 158), in Qlib Alpha158 order
+
+alpha360 = ta.feature_set("alpha360")
+matrix360 = alpha360.evaluate(
+    open=open_, high=high, low=low, close=close,
+    vwap=vwap, volume=volume,
+)  # shape: (time, 360), float64
+names = alpha360.names()          # stable Qlib column order
+```
+
+The Rust entry points are `finkit::features::alpha158_features` and
+`finkit::features::alpha360`. Each returns a `FeatureMatrix` with time rows and
+feature columns. `finkit.features.feature_set`
+remains the existing multi-indicator helper and is separate from the root
+`finkit.feature_set("alpha360")` library lookup.
+
+The implementation follows the current
+[Qlib Alpha360 loader definition](https://github.com/microsoft/qlib/blob/main/qlib/contrib/data/loader.py).
+Alpha360 is a historical price/volume feature set; future-return labels are not
+included in its output.
+
 ## Quick Start
 
 ```rust

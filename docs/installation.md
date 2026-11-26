@@ -1,22 +1,22 @@
 # Installation Guide
 
-This guide covers the v0.3.1 registry release and the legacy v0.3.0 GitHub assets.
+This guide covers the v0.3.1 registry release and the legacy v0.3.1 GitHub assets.
 
 ## 1. Choose an installation path
 
-| Target | Recommended path today | Published v0.3.0 status | Next-release validation |
+| Target | Recommended path today | Published v0.3.1 status | Next-release validation |
 | --- | --- | --- | --- |
-| Python | Install a wheel from the GitHub `v0.3.0` Release | Verified Release wheels | existing wheel matrix retained |
+| Python | Install a wheel from the GitHub `v0.3.1` Release | Verified Release wheels | existing wheel matrix retained |
 | Rust library | Git tag/local path, or unpack the `.crate` asset | Verified Release artifact | crate packaging gate |
 | CLI | Download Linux x86_64 binary or build from source | Verified Release binary | Linux CLI packaging gate |
 | Node.js | Build from `ffi/node-binding` | CI build/test/npm-pack path | native/root package-candidate gate |
 | Java/JNI | Build JNI + Maven JAR | CI package/Javadoc/loader smoke | JAR package-candidate gate |
 | C/C++ | Build/install from `ffi/c-binding` | CI CMake build/test/install | SDK package-candidate gate |
-| Go/CGO | Build from `ffi/go-binding` | source only in v0.3.0 | Linux `go test` + external module gate |
-| .NET | Build from `ffi/dotnet-binding` | source only in v0.3.0 | Linux tests + NuGet candidate inspection |
-| Android | Build Rust JNI + AAR | source only in v0.3.0 | four-ABI AAR gate |
-| iOS | Build XCFramework from source | source only in v0.3.0 | device/simulator XCFramework gate |
-| WASM | Build `finkit-wasm` for wasm32 | source only in v0.3.0 | real wasm32 target gate |
+| Go/CGO | Build from `ffi/go-binding` | source only in v0.3.1 | Linux `go test` + external module gate |
+| .NET | Build from `ffi/dotnet-binding` | source only in v0.3.1 | Linux tests + NuGet candidate inspection |
+| Android | Build Rust JNI + AAR | source only in v0.3.1 | four-ABI AAR gate |
+| iOS | Build XCFramework from source | source only in v0.3.1 | device/simulator XCFramework gate |
+| WASM | Build `finkit-wasm` for wasm32 | source only in v0.3.1 | real wasm32 target gate |
 
 The current Rust and Python registry package name is `qx-finkit`:
 
@@ -31,13 +31,13 @@ finkit = { package = "qx-finkit", version = "0.3.1" }
 
 This Cargo dependency alias keeps existing Rust source imports as `finkit::...`.
 
-The published `v0.3.0` GitHub Release is:
+The published `v0.3.1` GitHub Release is:
 
-`https://github.com/coeasy/finkit/releases/tag/v0.3.0`
+`https://github.com/coeasy/finkit/releases/tag/v0.3.1`
 
-Its assets are four Python ABI3 wheels, `finkit-0.3.0.crate`, `finkit-cli-linux-x86_64`, and `SHA256SUMS`.
+Its assets are four Python ABI3 wheels, `finkit-0.3.1.crate`, `finkit-cli-linux-x86_64`, and `SHA256SUMS`.
 
-A next-release CI artifact is not automatically a v0.3.0 asset, a final future Release asset, or a public registry package.
+A next-release CI artifact is not automatically a v0.3.1 asset, a final future Release asset, or a public registry package.
 
 ## 2. Common source-build prerequisites
 
@@ -55,10 +55,10 @@ git clone https://github.com/coeasy/finkit.git
 cd finkit
 ```
 
-To reproduce the published v0.3.0 source contract:
+To reproduce the published v0.3.1 source contract:
 
 ```bash
-git checkout v0.3.0
+git checkout v0.3.1
 ```
 
 For next-release multi-language work, use the current development branch/main once the changes are merged.
@@ -72,24 +72,24 @@ cargo test -p qx-finkit --locked
 
 ## 3. Python
 
-### Supported v0.3.0 wheel matrix
+### Supported v0.3.1 wheel matrix
 
-The `v0.3.0` Release uses CPython stable ABI (`cp38-abi3`). One wheel per platform is reused by supported GIL-enabled CPython versions.
+The `v0.3.1` Release uses CPython stable ABI (`cp38-abi3`). One wheel per platform is reused by supported GIL-enabled CPython versions.
 
 | Platform | Release wheel family | CI compatibility |
 | --- | --- | --- |
-| Linux x86_64 | `finkit-0.3.0-cp38-abi3-manylinux_2_17_x86_64...whl` | CPython 3.8-3.14 |
-| Windows x86_64 | `finkit-0.3.0-cp38-abi3-win_amd64.whl` | build/install smoke verified |
-| macOS x86_64 | `finkit-0.3.0-cp38-abi3-macosx_*_x86_64.whl` | build/install smoke verified |
-| macOS arm64 | `finkit-0.3.0-cp38-abi3-macosx_*_arm64.whl` | build/install smoke verified |
+| Linux x86_64 | `finkit-0.3.1-cp38-abi3-manylinux_2_17_x86_64...whl` | CPython 3.8-3.14 |
+| Windows x86_64 | `finkit-0.3.1-cp38-abi3-win_amd64.whl` | build/install smoke verified |
+| macOS x86_64 | `finkit-0.3.1-cp38-abi3-macosx_*_x86_64.whl` | build/install smoke verified |
+| macOS arm64 | `finkit-0.3.1-cp38-abi3-macosx_*_arm64.whl` | build/install smoke verified |
 
-Not part of the v0.3.0 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
+Not part of the v0.3.1 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
 
 ### Install a Release wheel
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install ./finkit-0.3.0-<matching-platform>.whl
+python -m pip install ./finkit-0.3.1-<matching-platform>.whl
 ```
 
 Verify:
@@ -139,7 +139,7 @@ See [python.md](python.md) for `CompiledFormula`, NumPy contracts, pandas integr
 
 ## 4. Rust library
 
-The published Cargo package is named `qx-finkit`; examples alias it as `finkit` to preserve the Rust import path. The repository produces `finkit-0.3.0.crate` as the legacy v0.3.0 Release asset, but that does not imply crates.io publication.
+The published Cargo package is named `qx-finkit`; examples alias it as `finkit` to preserve the Rust import path. The repository produces `finkit-0.3.1.crate` as the legacy v0.3.1 Release asset, but that does not imply crates.io publication.
 
 Git tag dependency:
 
@@ -196,11 +196,11 @@ python scripts/check_feature_matrix.py --list   # labels only
 
 ## 5. CLI
 
-Download the v0.3.0 Linux x86_64 binary:
+Download the v0.3.1 Linux x86_64 binary:
 
 ```bash
 curl -L -o finkit-cli \
-  https://github.com/coeasy/finkit/releases/download/v0.3.0/finkit-cli-linux-x86_64
+  https://github.com/coeasy/finkit/releases/download/v0.3.1/finkit-cli-linux-x86_64
 chmod +x finkit-cli
 ./finkit-cli --help
 ```
@@ -245,7 +245,7 @@ mvn -B -f ffi/java-binding/pom.xml -DskipTests package
 
 The Java loader supports an explicit `finkit.native.path`, packaged `/natives/<os>-<arch>/...` resources, and `System.loadLibrary("finkit_java")` fallback.
 
-Do not assume `com.finkit:finkit:0.3.0` is downloadable from Maven Central until publication is independently verified.
+Do not assume `com.finkit:finkit:0.3.1` is downloadable from Maven Central until publication is independently verified.
 
 ## 8. C/C++ SDK
 

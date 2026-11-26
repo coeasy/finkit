@@ -6,12 +6,12 @@ This guide is the shortest path from a fresh machine to a verified Finkit calcul
 
 Finkit is a high-performance financial indicator, formula, factor, and streaming-computation library. It is not a broker, order-routing system, or full research platform.
 
-The workspace currently targets **v0.3.1**. The latest published GitHub Release is **v0.3.0**; use that release for downloadable assets, or build the v0.3.1 workspace from source.
+The workspace currently targets **v0.3.1**. The latest published GitHub Release is **v0.3.1**; use that release for downloadable assets, or build the v0.3.1 workspace from source.
 
-The published `v0.3.0` Release contains:
+The published `v0.3.1` Release contains:
 
 - Python ABI3 wheels for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64;
-- `finkit-0.3.0.crate`;
+- `finkit-0.3.1.crate`;
 - `finkit-cli-linux-x86_64`;
 - `SHA256SUMS`.
 

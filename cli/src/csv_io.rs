@@ -7,7 +7,7 @@
 //! - [`read_ohlcv_input`] — read from `Option<Path>`: file or stdin.
 //!
 //! Header columns are matched case-insensitively by the standard names
-//! `open`, `high`, `low`, `close`, and `volume` (or `vol`). Missing
+//! `open`, `high`, `low`, `close`, `volume` (or `vol`), and `vwap`. Missing
 //! optional columns are filled with `f64::NAN` (volume defaults to `0.0`).
 
 use std::fs::File;
@@ -22,6 +22,18 @@ pub struct OhlcvData {
     pub low: Vec<f64>,
     pub close: Vec<f64>,
     pub volume: Vec<f64>,
+    /// VWAP column, if supplied by the input CSV; otherwise populated with NaN.
+    pub vwap: Vec<f64>,
+    /// Whether the source CSV contained an `open` column.
+    pub has_open: bool,
+    /// Whether the source CSV contained a `high` column.
+    pub has_high: bool,
+    /// Whether the source CSV contained a `low` column.
+    pub has_low: bool,
+    /// Whether the source CSV contained a `volume` or `vol` column.
+    pub has_volume: bool,
+    /// Whether the source CSV contained a VWAP column.
+    pub has_vwap: bool,
 }
 
 /// Read OHLCV data from a CSV file path.
@@ -70,12 +82,18 @@ fn parse_ohlcv_reader<R: Read>(reader: R) -> io::Result<OhlcvData> {
     let low_idx = find_col(&["low"]);
     let close_idx = find_col(&["close"]);
     let volume_idx = find_col(&["volume", "vol"]);
+    let vwap_idx = find_col(&["vwap"]);
 
     let close_idx = close_idx.ok_or_else(|| {
         io::Error::new(io::ErrorKind::InvalidData, "CSV must have a 'close' column")
     })?;
 
     let mut data = OhlcvData::default();
+    data.has_open = open_idx.is_some();
+    data.has_high = high_idx.is_some();
+    data.has_low = low_idx.is_some();
+    data.has_volume = volume_idx.is_some();
+    data.has_vwap = vwap_idx.is_some();
 
     for result in rdr.records() {
         let record = result?;
@@ -91,6 +109,7 @@ fn parse_ohlcv_reader<R: Read>(reader: R) -> io::Result<OhlcvData> {
         data.high.push(high_idx.map_or(f64::NAN, parse));
         data.low.push(low_idx.map_or(f64::NAN, parse));
         data.volume.push(volume_idx.map_or(0.0, parse));
+        data.vwap.push(vwap_idx.map_or(f64::NAN, parse));
     }
 
     Ok(data)
@@ -221,6 +240,16 @@ mod tests {
         assert_eq!(data.high, vec![105.0, 106.0]);
         assert_eq!(data.low, vec![99.0, 100.0]);
         assert_eq!(data.volume, vec![10000.0, 11000.0]);
+        assert!(!data.has_vwap);
+    }
+
+    #[test]
+    fn test_parse_ohlcv_reader_reads_vwap_case_insensitively() {
+        let csv = "OPEN,HIGH,LOW,CLOSE,VOLUME,VWAP\n10,12,9,11,100,10.5\n";
+        let data = parse_ohlcv_reader(csv.as_bytes()).unwrap();
+
+        assert_eq!(data.vwap, vec![10.5]);
+        assert!(data.has_open && data.has_high && data.has_low && data.has_volume && data.has_vwap);
     }
 
     #[test]

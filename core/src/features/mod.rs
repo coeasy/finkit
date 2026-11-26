@@ -22,6 +22,8 @@
 //! assert!(matrix.cols() > 0);
 //! ```
 
+mod alpha158;
+mod alpha360;
 mod combinations;
 pub mod complexity;
 mod cross_features;
@@ -53,6 +55,8 @@ mod timeseries;
 mod types;
 pub mod wavelet;
 
+pub use alpha158::alpha158_features;
+pub use alpha360::{alpha360, alpha360_names, Alpha360Error, ALPHA360_GROUPS, ALPHA360_WINDOW};
 pub use combinations::*;
 pub use complexity::*;
 pub use cross_features::*;

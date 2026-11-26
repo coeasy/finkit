@@ -1415,6 +1415,44 @@ def formula_list_categories() -> List[Dict[str, Any]]:
     ...
 
 # ============================================================================
+# Built-in feature sets
+# ============================================================================
+
+class FeatureSet:
+    """One named Qlib feature set (Alpha158 or Alpha360)."""
+
+    @property
+    def name(self) -> str: ...
+
+    def __len__(self) -> int:
+        """Number of output feature columns."""
+        ...
+
+    def names(self) -> List[str]:
+        """Feature names in stable output order."""
+        ...
+
+    def evaluate(
+        self,
+        open: Array1D,
+        high: Array1D,
+        low: Array1D,
+        close: Array1D,
+        vwap: Array1D,
+        volume: Array1D,
+    ) -> NDArray[np.floating]:
+        """Return a `(time, features)` matrix for aligned OHLCV/VWAP arrays."""
+        ...
+
+def feature_set(name: str) -> FeatureSet:
+    """Load a built-in feature set by name (``alpha158`` or ``alpha360``)."""
+    ...
+
+def available_feature_sets() -> List[str]:
+    """Names accepted by :func:`feature_set`."""
+    ...
+
+# ============================================================================
 # Factor library
 # ============================================================================
 

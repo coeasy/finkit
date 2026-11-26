@@ -6,14 +6,14 @@ stable-ABI wheels (`cp38-abi3`) validated across GIL-enabled CPython 3.8-3.14.
 
 ## Release status
 
-`v0.3.0` is published on GitHub Releases. The verified wheel families are:
+`v0.3.1` is published on GitHub Releases. The verified wheel families are:
 
 - Linux x86_64 — manylinux 2.17 / manylinux2014;
 - Windows x86_64 — `win_amd64`;
 - macOS x86_64;
 - macOS arm64.
 
-Not in the v0.3.0 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
+Not in the v0.3.1 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
 
 The v0.3.1 Python distribution is published on PyPI as `qx-finkit`; its import
 name remains `finkit`.
@@ -48,7 +48,7 @@ PY
 ```bash
 git clone https://github.com/coeasy/finkit.git
 cd finkit
-git checkout v0.3.0
+git checkout v0.3.1
 
 python3 -m venv .venv
 source .venv/bin/activate  # PowerShell: .\.venv\Scripts\Activate.ps1
@@ -490,6 +490,30 @@ alpha158 = ta.factor_library("alpha158")        # 158 factors
 wq101    = ta.factor_library("worldquant101")   # 17 factors
 ```
 
+The Qlib Alpha158 and Alpha360 input feature sets have a separate entry point
+because they return two-dimensional matrices rather than formula alpha signals:
+
+```python
+alpha158 = ta.feature_set("alpha158")
+matrix158 = alpha158.evaluate(
+    open=open_, high=high, low=low, close=close,
+    vwap=vwap, volume=volume,
+)  # NumPy float64, shape (time, 158), Qlib order
+
+alpha360 = ta.feature_set("alpha360")
+matrix360 = alpha360.evaluate(
+    open=open_, high=high, low=low, close=close,
+    vwap=vwap, volume=volume,
+)  # NumPy float64, shape (time, 360)
+alpha360.names()  # CLOSE59..CLOSE0, OPEN59..OPEN0, ..., VOLUME0
+```
+
+All six arrays must have the same length. Alpha360 values before a lag has
+enough history are `NaN`; its price columns divide the historical field by the
+current close, and its volume columns divide historical volume by current
+volume plus `1e-12`. Use `ta.available_feature_sets()` to discover supported
+names.
+
 The available names are `alpha158` and `worldquant101`; any other value raises
 `unknown factor library \`<name>\`; available: ["alpha158", "worldquant101"]`.
 
@@ -570,7 +594,7 @@ Install the generated wheel from a clean directory and run tests against the ins
 
 The Python Wheels workflow:
 
-1. builds the four v0.3.0 platform wheels;
+1. builds the four v0.3.1 platform wheels;
 2. installs/tests each platform wheel outside the source tree;
 3. reuses the Linux ABI3 wheel across CPython 3.8-3.14 compatibility jobs;
 4. validates package version, wheel metadata, and platform coverage;

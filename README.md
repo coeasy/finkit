@@ -12,7 +12,7 @@ Use Finkit behind research notebooks, market scanners, factor platforms, analyti
 
 [中文说明](README.zh-CN.md) · [Product overview](docs/product-overview.md) · [中文产品说明](docs/product-overview-zh.md) · [Competitive strategy](docs/competitive-positioning-zh.md) · [Documentation](docs/README.md)
 
-Current published GitHub release: **v0.3.0**. The workspace targets v0.3.1; package registry publication follows the same-commit release gates.
+Current published GitHub release: **v0.3.1**. The workspace targets v0.3.2; the Rust crate and Python distribution are available as `qx-finkit` from their package registries.
 
 ## What problem does Finkit solve?
 

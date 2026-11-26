@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.3.2] - 2026-11-26
+
+### Added
+
+- Added ordered, time-by-feature matrix access for Qlib Alpha158 and Alpha360
+  in Rust and Python, plus `alpha158` / `alpha360` CLI feature packs.
+- Added the 360-column Alpha360 definition with Qlib's six field groups,
+  60-observation order, price/volume normalization and NaN warm-up behavior.
+
+### Changed
+
+- The CLI feature CSV contract now reads an optional VWAP field and validates
+  the required Alpha158/Alpha360 input columns explicitly.
+
+### Scope
+
+- The existing WorldQuant101 computable subset is unchanged. The full paper
+  formula corpus is not included in this release pending redistribution rights
+  confirmation.
+
 ## [0.3.1] - 2026-11-07
 
 ### Changed

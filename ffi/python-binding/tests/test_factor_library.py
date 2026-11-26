@@ -47,6 +47,88 @@ def test_available_libraries_are_advertised():
     assert finkit.available_factor_libraries() == ["alpha158", "worldquant101"]
 
 
+def test_alpha360_feature_set_has_stable_qlib_shape_and_column_order():
+    feature_set = finkit.feature_set("alpha360")
+    close = np.arange(1.0, 63.0) * 10.0
+    market = {
+        "open": close + 1.0,
+        "high": close + 2.0,
+        "low": close - 2.0,
+        "close": close,
+        "vwap": close + 0.5,
+        "volume": np.arange(1.0, 63.0) * 100.0,
+    }
+
+    values = feature_set.evaluate(**market)
+
+    assert finkit.available_feature_sets() == ["alpha158", "alpha360"]
+    assert feature_set.name == "alpha360"
+    assert len(feature_set) == 360
+    assert len(feature_set.names()) == 360
+    assert feature_set.names()[:3] == ["CLOSE59", "CLOSE58", "CLOSE57"]
+    assert feature_set.names()[59:62] == ["CLOSE0", "OPEN59", "OPEN58"]
+    assert feature_set.names()[-1] == "VOLUME0"
+    assert values.shape == (len(close), 360)
+    assert np.isnan(values[:59, 0]).all()
+    assert values[59, 0] == pytest.approx(close[0] / close[59])
+    assert values[61, 59] == 1.0
+    assert values[61, 60] == pytest.approx(market["open"][2] / close[61])
+    assert values[61, -1] == pytest.approx(1.0)
+
+
+def test_alpha158_feature_set_returns_q_lib_ordered_matrix():
+    feature_set = finkit.feature_set("alpha158")
+    close = np.arange(1.0, 129.0)
+    market = {
+        "open": close - 0.5,
+        "high": close + 1.0,
+        "low": close - 1.0,
+        "close": close,
+        "vwap": close,
+        "volume": close * 100.0,
+    }
+
+    values = feature_set.evaluate(**market)
+
+    assert len(feature_set) == 158
+    assert len(feature_set.names()) == 158
+    assert feature_set.names()[:4] == ["KMID", "KLEN", "KMID2", "KUP"]
+    assert values.shape == (len(close), 158)
+    assert values[100, feature_set.names().index("OPEN0")] == pytest.approx(
+        market["open"][100] / close[100]
+    )
+
+
+def test_alpha360_rejects_unknown_sets_and_misaligned_inputs():
+    with pytest.raises(ValueError, match="alpha360"):
+        finkit.feature_set("not-a-feature-set")
+
+    features = finkit.feature_set("alpha360")
+    aligned = np.arange(3.0)
+    with pytest.raises(ValueError, match="open"):
+        features.evaluate(
+            open=aligned[:2],
+            high=aligned,
+            low=aligned,
+            close=aligned,
+            vwap=aligned,
+            volume=aligned,
+        )
+
+
+def test_alpha360_empty_input_preserves_matrix_width():
+    empty = np.array([], dtype=np.float64)
+    matrix = finkit.feature_set("alpha360").evaluate(
+        open=empty,
+        high=empty,
+        low=empty,
+        close=empty,
+        vwap=empty,
+        volume=empty,
+    )
+    assert matrix.shape == (0, 360)
+
+
 def test_one_line_lookup_returns_the_library():
     library = finkit.factor_library("alpha158")
 

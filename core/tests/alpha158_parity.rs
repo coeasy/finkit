@@ -151,6 +151,46 @@ fn every_factor_builds_and_evaluates() {
 }
 
 #[test]
+fn ordered_feature_matrix_matches_each_precompiled_library_column() {
+    let contract = contract();
+    let library = factor_library("alpha158").expect("the alpha158 library builds");
+    let ctx = context(&contract.market);
+    let matrix = finkit::features::alpha158_features(
+        &contract.market["open"],
+        &contract.market["high"],
+        &contract.market["low"],
+        &contract.market["close"],
+        &contract.market["vwap"],
+        &contract.market["volume"],
+    )
+    .expect("the ordered Alpha158 matrix builds");
+
+    assert_eq!(matrix.rows(), contract.bars);
+    assert_eq!(
+        matrix.cols(),
+        finkit::factors::builtin::alpha158::FACTOR_COUNT
+    );
+    for (column, (name, _)) in finkit::factors::builtin::alpha158::EXPRESSIONS
+        .iter()
+        .enumerate()
+    {
+        assert_eq!(matrix.column_names()[column], *name, "column {column}");
+        let expected = library.evaluate(name, &ctx).expect("factor evaluates");
+        let actual = matrix.column(column);
+        for (row, (actual, expected)) in actual.iter().zip(expected).enumerate() {
+            if expected.is_nan() {
+                assert!(
+                    actual.is_nan(),
+                    "{name} row {row}: expected NaN, got {actual}"
+                );
+            } else {
+                assert_eq!(actual.to_bits(), expected.to_bits(), "{name} row {row}");
+            }
+        }
+    }
+}
+
+#[test]
 fn agrees_with_the_qlib_reference_to_1e_8() {
     let contract = contract();
     let library = factor_library("alpha158").expect("the alpha158 library builds");

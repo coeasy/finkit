@@ -4,7 +4,7 @@ The CLI package is `finkit-cli`. The command-line application name exposed by Cl
 
 ## Build or install
 
-Linux x86_64 can download the published `v0.3.0` Release binary. The current v0.3.1 workspace and all other hosts can build from source:
+Linux x86_64 can download the published `v0.3.1` Release binary. The current v0.3.1 workspace and all other hosts can build from source:
 
 ```bash
 cargo build -p finkit-cli --release --locked
@@ -98,8 +98,17 @@ Do not reorder bars or combine multiple instruments in one stateful stream unles
 ## Feature packs
 
 ```bash
+./target/release/finkit-cli features alpha158 --input ohlcv-vwap.csv --format csv
+./target/release/finkit-cli features alpha360 --input ohlcv-vwap.csv --format csv
 ./target/release/finkit-cli features alpha_pack --input ohlcv.csv --period 14 --format csv
 ```
+
+`alpha158` and `alpha360` require CSV columns `open,high,low,close,vwap,volume`
+(headers are case-insensitive) and write 158 or 360 columns in Qlib order.
+Each Alpha360 lagged column has `NaN` until its history is available (lag 59
+starts with 59 NaN rows) in CSV output or `null` in JSON output. A missing
+required column is an input error; the CLI does not silently synthesize a
+substitute.
 
 ## Parameter sweep
 

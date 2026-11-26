@@ -1,12 +1,12 @@
-# qx-finkit v0.3.1 Release Checklist
+# qx-finkit v0.3.2 Release Checklist
 
 This checklist is the release boundary for the current workspace version. It
-keeps the published v0.3.0 assets separate from v0.3.1 candidates and covers
-the first registry publication under the `qx-finkit` name.
+keeps the published v0.3.1 assets and registry packages separate from v0.3.2
+candidates.
 
 ## Before creating the tag
 
-- [ ] Confirm the intended release commit contains the v0.3.1 workspace version.
+- [ ] Confirm the intended release commit contains the v0.3.2 workspace version.
 - [ ] Run the version/docs contracts:
       `python scripts/check_versions.py`,
       `python scripts/check_changelog.py CHANGELOG.md`,
@@ -120,14 +120,14 @@ the first registry publication under the `qx-finkit` name.
       skipped rather than failed, and reports a manifest whose name/version
       disagree with `Cargo.toml` as a stale product identity rather than as one
       "artifact missing" line per entry.
-- [ ] Verify the tag will be exactly `v0.3.1`; `publish.yml` rejects a mismatch.
+- [ ] Verify the tag will be exactly `v0.3.2`; `publish.yml` rejects a mismatch.
 - [ ] Confirm the GitHub Actions secret `CARGO_REGISTRY_TOKEN` is available to
       the repository and has permission to publish `qx-finkit`.
 - [ ] Confirm the PyPI pending publisher is configured for owner `coeasy`,
       repository `finkit`, workflow `python-wheels.yml`, and environment `pypi`.
-- [ ] Confirm the release notes cover the 31 TA-Lib functions, dialect coverage
-      contract, Alpha158/WorldQuant101 libraries, Pine mapping repair, explicit
-      Tree/Plan selection in active bindings, and both CLI binaries.
+- [ ] Confirm the release notes cover ordered Alpha158 and Alpha360 feature
+      matrices, direct Python/Rust/CLI use, and state that the WorldQuant101
+      formula corpus is unchanged pending redistribution-rights confirmation.
 - [ ] Validate the docs.rs feature allowlist. `std` and `no_std` are mutually
       exclusive, so `--all-features` cannot represent the supported public API;
       metadata and the publish workflow must use the same explicit default
@@ -135,7 +135,7 @@ the first registry publication under the `qx-finkit` name.
 
 ## Tag and crates.io publication
 
-1. Create and push the `v0.3.1` tag from the intended release commit.
+1. Create and push the `v0.3.2` tag from the intended release commit.
 2. Let the tag workflows run their version/changelog checks, docs.rs build,
    `cargo publish --dry-run` gate, wheel validation, and PyPI Trusted Publishing.
 3. The registry package names are `qx-finkit` on crates.io and PyPI. The Rust
@@ -146,20 +146,20 @@ the first registry publication under the `qx-finkit` name.
 
 ## After publication
 
-- [ ] Open the crates.io page and confirm version `0.3.1` is visible.
-- [ ] Open the PyPI page and confirm version `0.3.1` is visible.
+- [ ] Open the crates.io page and confirm version `0.3.2` is visible.
+- [ ] Open the PyPI page and confirm version `0.3.2` is visible.
 - [ ] Run a clean consumer smoke test in a temporary project using
-      `finkit = { package = "qx-finkit", version = "0.3.1" }` and a minimal
+      `finkit = { package = "qx-finkit", version = "0.3.2" }` and a minimal
       indicator call.
-- [ ] Run a clean consumer smoke test with `pip install qx-finkit==0.3.1`, then
+- [ ] Run a clean consumer smoke test with `pip install qx-finkit==0.3.2`, then
       verify that `import finkit` succeeds.
-- [ ] Confirm docs.rs generated documentation for `qx-finkit 0.3.1`.
+- [ ] Confirm docs.rs generated documentation for `qx-finkit 0.3.2`.
 - [ ] Confirm the GitHub Release contains the four Python ABI3 wheels, the Rust
       crate asset, the Linux x86_64 main CLI and `finkit-factor-study` CLI, and
       `SHA256SUMS`.
 - [ ] Verify each downloaded asset against `SHA256SUMS`.
 - [ ] After both registry smoke tests pass, update `PUBLISHED_VERSION` in
-      `scripts/check_versions.py` to `0.3.1` and make the install commands the
+      `scripts/check_versions.py` to `0.3.2` and make the install commands the
       default in user documentation.
 - [ ] Do not add `npm install finkit`, Maven Central,
       NuGet, public `go get`, or Android/iOS registry coordinates until their
@@ -169,10 +169,9 @@ the first registry publication under the `qx-finkit` name.
 
 ## Current status
 
-- Workspace target: `0.3.1`.
-- Latest public GitHub release: `v0.3.0`.
-- crates.io: `qx-finkit` awaits its first registry publication in this release.
-- crates.io workflow: implemented in `.github/workflows/publish.yml`, pending a
-  real tag run with repository credentials.
-- PyPI: Trusted Publishing is configured in the account; the tag workflow will
-  publish validated `qx-finkit` wheels.
+- Workspace target: `0.3.2`.
+- Latest public GitHub release: `v0.3.1`.
+- crates.io: `qx-finkit 0.3.1` is published.
+- PyPI: `qx-finkit 0.3.1` is published with four validated ABI3 wheels.
+- `0.3.2` is the candidate workspace version; release automation must pass on
+  the candidate tag before the registries are considered updated.
