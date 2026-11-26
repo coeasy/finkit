@@ -82,6 +82,7 @@ panel expression path. It retains the caller-owned factor libraries and
 Qlib-compatible Alpha158 / Alpha360 APIs shipped earlier. The full WorldQuant
 101 formula corpus is not included because redistribution rights have not been
 confirmed.
+
 ## Ongoing architecture work
 
 The active next-release work expands the reusable runtime and factor-research stack. The key architectural changes include:
