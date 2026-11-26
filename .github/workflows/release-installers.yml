@@ -291,13 +291,13 @@ jobs:
         run: |
           set -euo pipefail
           echo "::error::release $TAG did not receive its full installer set"
-          echo "$RESULTS" | python -c 'import json,sys; [print(f"{k}: {v[\"result\"]}") for k,v in json.load(sys.stdin).items()]'
+          echo "$RESULTS" | python -c 'import json,sys; [print(k + ": " + v.get("result", "unknown")) for k,v in json.load(sys.stdin).items()]'
 
           body="The automated installer build for \`$TAG\` did not complete, so the GitHub Release is missing installers.
 
           Job results:
           \`\`\`
-          $(echo "$RESULTS" | python -c 'import json,sys; [print(f"{k}: {v[\"result\"]}") for k,v in json.load(sys.stdin).items()]')
+          $(echo "$RESULTS" | python -c 'import json,sys; [print(k + ": " + v.get("result", "unknown")) for k,v in json.load(sys.stdin).items()]')
           \`\`\`
 
           Re-run the \`Release installers\` workflow once the cause is fixed; it uploads with \`--clobber\`, so a re-run repairs the Release in place."
