@@ -12,7 +12,7 @@ Use Finkit behind research notebooks, market scanners, factor platforms, analyti
 
 [中文说明](README.zh-CN.md) · [Product overview](docs/product-overview.md) · [中文产品说明](docs/product-overview-zh.md) · [Competitive strategy](docs/competitive-positioning-zh.md) · [Documentation](docs/README.md)
 
-Current published GitHub release: **v0.3.1**. The workspace targets v0.3.2; the Rust crate and Python distribution are available as `qx-finkit` from their package registries.
+Current published GitHub release: **v0.3.2**. The Rust crate and Python distribution are available as `qx-finkit` from their package registries.
 
 ## What problem does Finkit solve?
 
@@ -97,7 +97,7 @@ Install the published PyPI distribution `qx-finkit`. Its Python import name
 remains `finkit`:
 
 ```bash
-python -m pip install qx-finkit
+python -m pip install qx-finkit==0.3.2
 ```
 
 ```python
@@ -112,6 +112,30 @@ macd, signal, hist = ta.macd(close, 12, 26, 9)
 
 print(sma20[-1], rsi14[-1], macd[-1])
 ```
+
+The Qlib-compatible Alpha158 and Alpha360 feature matrices are available from
+the same package:
+
+```python
+import numpy as np
+import finkit as ta
+
+close = np.arange(1.0, 101.0, dtype=np.float64)
+open_ = close - 0.25
+high = close + 1.0
+low = close - 1.0
+vwap = close
+volume = np.arange(1.0, close.size + 1.0, dtype=np.float64) * 1000.0
+
+features = ta.feature_set("alpha360").evaluate(
+    open=open_, high=high, low=low, close=close, vwap=vwap, volume=volume,
+)
+assert features.shape == (len(close), 360)
+```
+
+The v0.3.2 release does not include the complete WorldQuant 101 formula corpus;
+redistribution rights have not been confirmed. See the
+[factor library implementation plan](docs/FACTOR_LIBRARIES_COMPLETION_PLAN_2026-11-26.md).
 
 ## Quick start: CLI
 
@@ -141,7 +165,7 @@ Full command reference: [docs/cli.md](docs/cli.md).
 
 ```toml
 [dependencies]
-finkit = { package = "qx-finkit", version = "0.3.1" }
+finkit = { package = "qx-finkit", version = "0.3.2" }
 ```
 
 ```rust

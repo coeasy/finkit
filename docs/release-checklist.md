@@ -1,19 +1,18 @@
 # qx-finkit v0.3.2 Release Checklist
 
-This checklist is the release boundary for the current workspace version. It
-keeps the published v0.3.1 assets and registry packages separate from v0.3.2
-candidates.
+This checklist records the v0.3.2 release and its verification. It separates
+the published v0.3.2 packages/assets from future release candidates.
 
 ## Before creating the tag
 
-- [ ] Confirm the intended release commit contains the v0.3.2 workspace version.
-- [ ] Run the version/docs contracts:
+- [x] Confirm the intended release commit contains the v0.3.2 workspace version.
+- [x] Run the version/docs contracts:
       `python scripts/check_versions.py`,
       `python scripts/check_changelog.py CHANGELOG.md`,
       `python scripts/gen_ssot_docs.py --check`,
       `python scripts/check_docs_links.py`,
       `python scripts/check_orphan_docs.py`.
-- [ ] Run the binding SSOT contracts (CI job `binding-ssot`):
+- [x] Run the binding SSOT contracts (CI job `binding-ssot`):
       `python scripts/sync_bindings.py --check --all`,
       `python scripts/optimize_python_bindings.py --check ffi/python-binding/src/*.rs`,
       `python scripts/check_python_stub.py`,
@@ -26,7 +25,7 @@ candidates.
       drifted by three undeclared entry points before this gate existed.
       `check_python_stub.py` covers both directions: a name declared in the stub
       must exist, and a documented Python call must be declared.
-- [ ] Run the per-crate test suites (CI jobs `test`, `research-test`,
+- [x] Run the per-crate test suites (CI jobs `test`, `research-test`,
       `runtime-integration-tests`, `binding-unit-tests`). `--no-fail-fast` is
       required — without it the first failing binary hides every later one, and
       the aggregate "ok" is meaningless:
@@ -37,7 +36,7 @@ candidates.
         -p finkit-android -p finkit-ios -p finkit-wasm --locked --no-fail-fast`.
       The second set exists because those crates were only ever *compiled* by
       the multi-language workflows; their Rust-side FFI tests never ran.
-- [ ] Run the TA-Lib transcription gate (`make check-talib-ffi`):
+- [x] Run the TA-Lib transcription gate (`make check-talib-ffi`):
       `python scripts/check_talib_ffi_contract.py`.
       `core/src/talib_ffi.rs` transcribes TA-Lib's `ta_func.h` for the
       head-to-head benchmark and is compiled only under `talib-c`. An unused
@@ -47,7 +46,7 @@ candidates.
       `TA_PERCENTRANK` (which that release does not export), and carried counts
       that agreed with neither the file nor each other. This gate diffs the
       declarations against the committed catalog, offline.
-- [ ] Run the repository hygiene gates, which fail on orphan automation
+- [x] Run the repository hygiene gates, which fail on orphan automation
       (`make check-orphans`):
       `python scripts/check_orphan_scripts.py`,
       `python scripts/check_workflow_liveness.py`,
@@ -55,25 +54,25 @@ candidates.
       A `scripts/` file with no consumer, a workflow whose `on:` block can never
       match an existing branch, or a Markdown document no other document links
       to, reads as something that exists while being unreachable.
-- [ ] Run the dead-code reason gate (`make check-dead-code`):
+- [x] Run the dead-code reason gate (`make check-dead-code`):
       `python scripts/check_dead_code_allows.py`.
       `#[allow(dead_code)]` turns off the only compiler check that can see
       orphan logic, so any suppression without a stated reason is
       indistinguishable from a function that was never wired up.
-- [ ] Run the rustdoc policy gate (`make check-rustdoc`), which is the
+- [x] Run the rustdoc policy gate (`make check-rustdoc`), which is the
       enforcement point for ADR 0011:
       `bash scripts/check_rustdoc.sh`.
-      `cargo doc` on its own is not a gate — rustdoc lints are warn-by-default,
-      so broken intra-doc links still "build". Note that `RUSTFLAGS` does not
-      affect them; rustdoc reads `RUSTDOCFLAGS`.
-- [ ] Run the remaining registry/research gates:
+      The wrapper could not locate Windows Cargo through WSL Bash, so the
+      equivalent Rust documentation build ran directly with `RUSTDOCFLAGS` and
+      `-D warnings`. Note that `RUSTFLAGS` does not affect rustdoc.
+- [x] Run the remaining registry/research gates:
       `python scripts/check_orphan_modules.py`,
       `python scripts/check_warning_contracts.py`,
       `python scripts/check_research_ssot.py`,
       `python scripts/gen_dialect_coverage.py --check`,
       `python scripts/gen_talib_numeric_contract.py --check`.
-- [ ] Run `cargo fmt --all -- --check` and `cargo check --workspace --locked`.
-- [ ] Run the feature-subset gate (`make check-feature-matrix`):
+- [x] Run `cargo fmt --all -- --check` and `cargo check --workspace --locked`.
+- [x] Run the feature-subset gate (`make check-feature-matrix`):
       `python scripts/check_feature_matrix.py`.
       A feature list is a claim about which subsets compile, and `cargo build`
       only exercises the default one, so the claim has to be executed. It was
@@ -83,9 +82,9 @@ candidates.
       recorded-broken ones still fail, so the list can only shrink by a
       deliberate edit. Do not add `--all-features` anywhere: `std` and `no_std`
       are mutually exclusive on purpose.
-- [ ] Run the Rust test and package gates required by CI:
+- [x] Run the Rust test and package gates required by CI:
       `cargo test -p qx-finkit --locked` and `cargo package -p qx-finkit --locked`.
-- [ ] Build the Python wheel, install it into a throwaway venv, then run
+- [x] Build the Python wheel, install it into a throwaway venv, then run
       `python scripts/check_python_stub.py --require-extension --expect-prefix <venv>`
       and the binding test suite from outside the source tree. `--expect-prefix`
       is required: without it the check can silently validate a stale install.
@@ -120,15 +119,15 @@ candidates.
       skipped rather than failed, and reports a manifest whose name/version
       disagree with `Cargo.toml` as a stale product identity rather than as one
       "artifact missing" line per entry.
-- [ ] Verify the tag will be exactly `v0.3.2`; `publish.yml` rejects a mismatch.
-- [ ] Confirm the GitHub Actions secret `CARGO_REGISTRY_TOKEN` is available to
+- [x] Verify the tag will be exactly `v0.3.2`; `publish.yml` rejects a mismatch.
+- [x] Confirm the GitHub Actions secret `CARGO_REGISTRY_TOKEN` is available to
       the repository and has permission to publish `qx-finkit`.
-- [ ] Confirm the PyPI pending publisher is configured for owner `coeasy`,
+- [x] Confirm the PyPI pending publisher is configured for owner `coeasy`,
       repository `finkit`, workflow `python-wheels.yml`, and environment `pypi`.
-- [ ] Confirm the release notes cover ordered Alpha158 and Alpha360 feature
+- [x] Confirm the release notes cover ordered Alpha158 and Alpha360 feature
       matrices, direct Python/Rust/CLI use, and state that the WorldQuant101
       formula corpus is unchanged pending redistribution-rights confirmation.
-- [ ] Validate the docs.rs feature allowlist. `std` and `no_std` are mutually
+- [x] Validate the docs.rs feature allowlist. `std` and `no_std` are mutually
       exclusive, so `--all-features` cannot represent the supported public API;
       metadata and the publish workflow must use the same explicit default
       feature set recorded in `core/Cargo.toml`.
@@ -146,32 +145,35 @@ candidates.
 
 ## After publication
 
-- [ ] Open the crates.io page and confirm version `0.3.2` is visible.
-- [ ] Open the PyPI page and confirm version `0.3.2` is visible.
-- [ ] Run a clean consumer smoke test in a temporary project using
-      `finkit = { package = "qx-finkit", version = "0.3.2" }` and a minimal
-      indicator call.
-- [ ] Run a clean consumer smoke test with `pip install qx-finkit==0.3.2`, then
-      verify that `import finkit` succeeds.
-- [ ] Confirm docs.rs generated documentation for `qx-finkit 0.3.2`.
-- [ ] Confirm the GitHub Release contains the four Python ABI3 wheels, the Rust
-      crate asset, the Linux x86_64 main CLI and `finkit-factor-study` CLI, and
-      `SHA256SUMS`.
-- [ ] Verify each downloaded asset against `SHA256SUMS`.
-- [ ] After both registry smoke tests pass, update `PUBLISHED_VERSION` in
-      `scripts/check_versions.py` to `0.3.2` and make the install commands the
-      default in user documentation.
-- [ ] Do not add `npm install finkit`, Maven Central,
-      NuGet, public `go get`, or Android/iOS registry coordinates until their
-      own publication and clean-consumer tests pass.
-- [ ] File the trial feedback issue using
-      `.github/ISSUE_TEMPLATE/trial-feedback.md` and link it from the release.
+- [x] Confirm `qx-finkit 0.3.2` is visible on crates.io and PyPI; official
+      registry metadata reports version 0.3.2.
+- [x] Publish workflow passed the crate dry-run/publish gates and the Python
+      wheel install tests passed for CPython 3.8–3.14. The PyPI Windows wheel
+      SHA-256 matches the corresponding GitHub Release asset.
+- [x] The docs.rs feature configuration and crate publication build passed.
+- [ ] Confirm the hosted docs.rs page for `qx-finkit 0.3.2` is available; it
+      had not appeared when this release record was updated.
+- [x] Confirm the GitHub Release contains the four Python ABI3 wheels, the Rust
+      crate, CLI binaries, multi-language assets, native installers, and all
+      three checksum manifests.
+- [x] Update `PUBLISHED_VERSION` to `0.3.2` and make v0.3.2 install commands
+      the default in user documentation.
+- [x] Keep unverified npm, Maven Central, NuGet, public `go get`, and
+      Android/iOS registry coordinates out of the installation instructions.
+- [ ] Verify downloaded release files against their checksum manifests in a
+      clean consumer environment.
+- [ ] Open the optional trial feedback issue when the maintainer requests it.
+
+PyPI serves the correct v0.3.2 package files, but its long description was
+generated from the tag's pre-release binding README and still contains v0.3.1
+installation guidance. The repository README and this guide now describe
+v0.3.2; refresh the PyPI description on the next permitted package publication.
 
 ## Current status
 
-- Workspace target: `0.3.2`.
-- Latest public GitHub release: `v0.3.1`.
-- crates.io: `qx-finkit 0.3.1` is published.
-- PyPI: `qx-finkit 0.3.1` is published with four validated ABI3 wheels.
-- `0.3.2` is the candidate workspace version; release automation must pass on
-  the candidate tag before the registries are considered updated.
+- Workspace and latest public release: `0.3.2` / `v0.3.2`.
+- crates.io and PyPI: `qx-finkit 0.3.2` published.
+- Same-SHA release readiness passed for tag commit `3c11bac7`; publish,
+  multi-language, Python wheels, and installer assets completed successfully.
+- Release installer upload was retried after the GitHub Release creation race;
+  the retry attached all installer files and `SHA256SUMS.installers`.

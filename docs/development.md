@@ -1,6 +1,6 @@
 # Development Guide
 
-This guide describes the development and validation workflow for the Finkit Rust core, formula/runtime layers, generated metadata, native bindings, release packaging, and documentation. The current workspace targets v0.3.1; its candidate artifacts and multi-language validation targets are deliberately described separately from the published v0.3.1 assets.
+This guide describes the development and validation workflow for the Finkit Rust core, formula/runtime layers, generated metadata, native bindings, release packaging, and documentation. The current published baseline is v0.3.2; newer work is tracked separately from its published release assets.
 
 ## 1. Repository layout
 
@@ -491,4 +491,4 @@ For a release:
 7. publish external registries only through an explicit release/trusted-publishing mechanism;
 8. test a clean consumer install from each registry before adding that command to user docs.
 
-For the published v0.3.1 release, the verified base assets are the Python ABI3 wheels, Rust `.crate`, Linux x86_64 CLI, and `SHA256SUMS`. The v0.3.1 workspace produces release candidates; Go/.NET/Android/iOS/WASM candidates only become published support after their target gates and release distribution are proven.
+The v0.3.1 release historically shipped the Python ABI3 wheels, Rust `.crate`, Linux x86_64 CLI, and `SHA256SUMS`. The v0.3.2 release adds the validated Go, .NET, Android, iOS, WASM, Java, C/C++, and native installer assets. These GitHub assets do not imply publication to each language's package registry.

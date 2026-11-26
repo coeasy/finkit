@@ -2,7 +2,7 @@
 
 This directory is the canonical documentation set for Finkit.
 
-Finkit is a Rust-powered quantitative finance engine for technical analysis, reusable formulas, factor graphs, streaming computation, feature engineering, and research workflows. As of 2026-11-26, the latest public GitHub Release is **v0.3.1**; this repository targets **v0.3.2**. A candidate tag or passing local test is not itself proof that every package is available. See the [release page](https://github.com/coeasy/finkit/releases) for the current public release record.
+Finkit is a Rust-powered quantitative finance engine for technical analysis, reusable formulas, factor graphs, streaming computation, feature engineering, and research workflows. The latest public GitHub Release is **v0.3.2**. See the [release page](https://github.com/coeasy/finkit/releases/tag/v0.3.2) for downloadable assets and package details.
 
 ## Start here
 
@@ -69,25 +69,27 @@ Two properties are contracts rather than aspirations:
 
 Path agreement alone is not evidence of correctness: two paths that are wrong in the same way still agree. Numerical gates therefore pair agreement with **absolute-property assertions** (exact finite-value counts, identities, non-degeneracy) and **duplicate-implementation cross-checks**. Details in [formula-runtime-contract.md](formula-runtime-contract.md) §3.1–§3.2.
 
-## Published v0.3.1 contract
+## Published v0.3.2 contract
 
-The GitHub `v0.3.1` Release is the authoritative distribution contract for the current published version.
+The GitHub `v0.3.2` Release is the authoritative distribution contract for the current published version. It adds the Qlib-compatible Alpha158 matrix API and the Alpha360 feature set for Rust, Python, and CLI users. The full WorldQuant 101 formula corpus is not included because redistribution rights have not been confirmed.
 
 Its release assets include:
 
 - four Python `cp38-abi3` wheels for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64;
-- `qx-finkit-0.3.1.crate`;
+- `qx-finkit-0.3.2.crate`;
 - `finkit-cli-linux-x86_64`;
-- `SHA256SUMS`.
+- Android, iOS, Java, .NET, Go, C/C++, and WASM artifacts;
+- Linux, macOS, and Windows installers;
+- `SHA256SUMS`, `SHA256SUMS.installers`, and `SHA256SUMS.multilang`.
 
-Public package registries are a separate contract. Do not assume PyPI, crates.io, npm, Maven Central, NuGet, a public Go module, Android Maven coordinates, or Swift package coordinates are available unless that exact package/version has been published and smoke-tested.
+The `qx-finkit` 0.3.2 package is published on PyPI and crates.io. Do not infer that npm, Maven Central, NuGet, a public Go module, Android Maven coordinates, or Swift package coordinates are available without checking that exact package/version.
 
-The v0.3.1 release publishes the Rust crate and Python distribution as
-`qx-finkit`. Install it with `python -m pip install qx-finkit`; Rust projects
-can declare `finkit = { package = "qx-finkit", version = "0.3.1" }` to retain
+The v0.3.2 release publishes the Rust crate and Python distribution as
+`qx-finkit`. Install it with `python -m pip install qx-finkit==0.3.2`; Rust projects
+can declare `finkit = { package = "qx-finkit", version = "0.3.2" }` to retain
 the `finkit::...` import path.
 
-## Next-release architecture
+## Ongoing architecture work
 
 The active next-release work expands the reusable runtime and factor-research stack. The key architectural changes include:
 
@@ -99,7 +101,7 @@ The active next-release work expands the reusable runtime and factor-research st
 - retained materializations for caller-owned range/into updates;
 - reuse-first Factor Research integration built on canonical returns/statistics/regression/rank/risk/calendar infrastructure.
 
-These capabilities are next-release development facts and are not retroactively claimed as published v0.3.1 assets.
+These capabilities remain in development and are not claimed as published v0.3.2 assets.
 
 ## Multi-language validation model
 
@@ -292,4 +294,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last product/documentation review: 2026-11-07. Workspace target: v0.3.1 candidate. Latest published distribution baseline: v0.3.1._
+_Last product/documentation review: 2026-11-26. Workspace and latest published distribution: v0.3.2._

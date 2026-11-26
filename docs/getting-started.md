@@ -6,16 +6,17 @@ This guide is the shortest path from a fresh machine to a verified Finkit calcul
 
 Finkit is a high-performance financial indicator, formula, factor, and streaming-computation library. It is not a broker, order-routing system, or full research platform.
 
-The workspace currently targets **v0.3.1**. The latest published GitHub Release is **v0.3.1**; use that release for downloadable assets, or build the v0.3.1 workspace from source.
+The latest published GitHub Release is **v0.3.2**. Use it for downloadable assets, or install the Rust crate and Python package from their registries.
 
-The published `v0.3.1` Release contains:
+The published `v0.3.2` Release contains:
 
 - Python ABI3 wheels for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64;
-- `finkit-0.3.1.crate`;
-- `finkit-cli-linux-x86_64`;
-- `SHA256SUMS`.
+- the Rust crate and Python wheels;
+- Rust/CLI, Android, iOS, Java, .NET, Go, C/C++, and WASM artifacts;
+- Linux, macOS, and Windows installers;
+- checksum files for the release assets.
 
-Node.js, Java/JNI, and C/C++ are validated from source by CI but are not claimed as public registry packages. The v0.3.1 publish workflow targets qx-finkit on crates.io and PyPI; publication and clean-consumer smoke tests remain release steps.
+The Rust crate and Python package `qx-finkit==0.3.2` are published on crates.io and PyPI. Other registry publication status is separate from the presence of source or a GitHub Release asset.
 
 ## 2. Core data rules
 
@@ -35,10 +36,35 @@ Install the PyPI distribution `qx-finkit`. Its Python import name remains
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install qx-finkit
+python -m pip install qx-finkit==0.3.2
 ```
 
-To try the unreleased v0.3.1 workspace instead, build the binding from source as described in [installation.md](installation.md).
+To build v0.3.2 from source, follow [installation.md](installation.md).
+
+### Alpha158 and Alpha360
+
+Both feature sets return rows in time order and columns in the Qlib-defined order:
+
+```python
+import numpy as np
+import finkit as ta
+
+close = np.arange(1.0, 101.0, dtype=np.float64)
+open_ = close - 0.2
+high = close + 1.0
+low = close - 1.0
+vwap = close
+volume = np.full(close.size, 1_000_000.0, dtype=np.float64)
+
+alpha158 = ta.feature_set("alpha158").evaluate(
+    open=open_, high=high, low=low, close=close, vwap=vwap, volume=volume,
+)
+alpha360 = ta.feature_set("alpha360").evaluate(
+    open=open_, high=high, low=low, close=close, vwap=vwap, volume=volume,
+)
+assert alpha158.shape == (len(close), 158)
+assert alpha360.shape == (len(close), 360)
+```
 
 Verify the installation:
 
@@ -116,11 +142,11 @@ Next: [formula guide](formula.md), [formula runtime](formula-runtime.md), and [r
 
 ## 5. Rust
 
-Until a registry package is independently verified, use the release tag or a local path:
+The published crate can be used directly:
 
 ```toml
 [dependencies]
-finkit = { package = "qx-finkit", git = "https://github.com/coeasy/finkit", tag = "v0.3.1" }
+finkit = { package = "qx-finkit", version = "0.3.2" }
 ```
 
 Example:
@@ -142,7 +168,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## 6. CLI
 
-Linux x86_64 can use the release binary directly. Other platforms can build the CLI from source:
+Linux x86_64 can use the release CLI binary; Linux, macOS, and Windows also have v0.3.2 native installers. Any supported host can build the CLI from source:
 
 ```bash
 cargo build -p finkit-cli --release --locked

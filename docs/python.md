@@ -1,21 +1,21 @@
 # Python Guide
 
-Finkit Python uses PyO3 + maturin. Version `0.3.1` is distributed on PyPI as
+Finkit Python uses PyO3 + maturin. Version `0.3.2` is distributed on PyPI as
 `qx-finkit` and imports as `finkit`; it ships platform-specific CPython
 stable-ABI wheels (`cp38-abi3`) validated across GIL-enabled CPython 3.8-3.14.
 
 ## Release status
 
-`v0.3.1` is published on GitHub Releases. The verified wheel families are:
+`v0.3.2` is published on GitHub Releases. The verified wheel families are:
 
 - Linux x86_64 — manylinux 2.17 / manylinux2014;
 - Windows x86_64 — `win_amd64`;
 - macOS x86_64;
 - macOS arm64.
 
-Not in the v0.3.1 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
+Not in the v0.3.2 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
 
-The v0.3.1 Python distribution is published on PyPI as `qx-finkit`; its import
+The v0.3.2 Python distribution is published on PyPI as `qx-finkit`; its import
 name remains `finkit`.
 
 ## Install a Release wheel
@@ -24,7 +24,7 @@ Install from PyPI:
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install qx-finkit
+python -m pip install qx-finkit==0.3.2
 ```
 
 Verify outside the source tree:
@@ -43,12 +43,40 @@ print("Finkit OK", rsi[-1])
 PY
 ```
 
+## Qlib feature sets
+
+The Python binding exposes Alpha158 and Alpha360 as time-by-feature NumPy
+matrices. Alpha158 preserves Qlib's 158-column feature order; Alpha360 returns
+the six 60-lag price/volume groups in Qlib order.
+
+```python
+import numpy as np
+import finkit as ta
+
+close = np.arange(1.0, 101.0, dtype=np.float64)
+open_ = close - 0.2
+high = close + 1.0
+low = close - 1.0
+vwap = close
+volume = np.full(close.size, 1_000_000.0, dtype=np.float64)
+
+features = ta.feature_set("alpha360").evaluate(
+    open=open_, high=high, low=low, close=close, vwap=vwap, volume=volume,
+)
+assert features.shape == (len(close), 360)
+```
+
+Use `ta.feature_set("alpha158")` for the 158-column matrix or
+`ta.factor_library("alpha158")` to access the existing named factor library.
+The full WorldQuant 101 formula corpus is not included in v0.3.2 because
+redistribution rights have not been confirmed.
+
 ## Build from source
 
 ```bash
 git clone https://github.com/coeasy/finkit.git
 cd finkit
-git checkout v0.3.1
+git checkout v0.3.2
 
 python3 -m venv .venv
 source .venv/bin/activate  # PowerShell: .\.venv\Scripts\Activate.ps1
@@ -594,7 +622,7 @@ Install the generated wheel from a clean directory and run tests against the ins
 
 The Python Wheels workflow:
 
-1. builds the four v0.3.1 platform wheels;
+1. builds the four v0.3.2 platform wheels;
 2. installs/tests each platform wheel outside the source tree;
 3. reuses the Linux ABI3 wheel across CPython 3.8-3.14 compatibility jobs;
 4. validates package version, wheel metadata, and platform coverage;

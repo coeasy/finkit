@@ -104,15 +104,15 @@ parity, and do not read a missing parity gate as "unsupported".
 
 | Binding | Indicator surface (gated) | Formula surface | Research surface | Platform validation | Release state |
 | --- | --- | --- | --- | --- | --- |
-| Rust `core` | is the runtime | full; `FormulaEngine` selects/reports Tree or Plan | full | `cargo test -p qx-finkit` | v0.3.1 `.crate` |
-| Python | 78 / 78 | exported; `formula_backend` and `formula_eval(..., backend=...)` | exported | CI `python-wheels` | v0.3.1 ABI3 wheels |
-| Node | 78 / 78 | exported; `formulaBackend` and `formulaEval(..., backend?)` | exported | CI native smoke (`linux-x64`, `win32-x64-msvc`, `darwin-arm64`) | CI `.tgz` candidate (not on npm) |
-| C | 78 / 78 (extractor self-check anchor) | exported (`*_json`) | exported | CI CMake build/test/install | CI SDK candidate |
-| Go | 78 / 78 | exported | exported | CI `go test` + external-module consumer | source + CI candidate |
-| Java | 78 / 78 | exported | exported | CI JNI build + JVM smoke | CI JAR candidate |
-| .NET | 78 / 78 | exported | exported | CI 3 RIDs (`linux-x64`, `win-x64`, `osx-arm64`) | CI NuGet candidate |
-| iOS | 15 / 78 | not exported | exported | CI XCFramework build | CI candidate (not SPM/CocoaPods) |
-| Android | 15 / 78 | not exported | exported | CI 4-ABI AAR assembly | CI AAR candidate |
+| Rust `core` | is the runtime | full; `FormulaEngine` selects/reports Tree or Plan | full | `cargo test -p qx-finkit` | v0.3.2 `.crate` + crates.io |
+| Python | 78 / 78 | exported; `formula_backend` and `formula_eval(..., backend=...)` | exported | CI `python-wheels` | v0.3.2 ABI3 wheels + PyPI |
+| Node | 78 / 78 | exported; `formulaBackend` and `formulaEval(..., backend?)` | exported | CI native smoke (`linux-x64`, `win32-x64-msvc`, `darwin-arm64`) | GitHub Release archive (not on npm) |
+| C | 78 / 78 (extractor self-check anchor) | exported (`*_json`) | exported | CI CMake build/test/install | GitHub Release SDK asset |
+| Go | 78 / 78 | exported | exported | CI `go test` + external-module consumer | GitHub Release archive |
+| Java | 78 / 78 | exported | exported | CI JNI build + JVM smoke | GitHub Release JAR |
+| .NET | 78 / 78 | exported | exported | CI 3 RIDs (`linux-x64`, `win-x64`, `osx-arm64`) | GitHub Release asset (not NuGet) |
+| iOS | 15 / 78 | not exported | exported | CI XCFramework build | GitHub Release asset (not SPM/CocoaPods) |
+| Android | 15 / 78 | not exported | exported | CI 4-ABI AAR assembly | GitHub Release AAR |
 
 The **Formula / Research** columns are deliberately *not* back-filled by the
 78-indicator parity gate (`audit_binding_parity.py` only scrapes the indicator
@@ -150,33 +150,33 @@ python3 scripts/audit_binding_parity.py --check         # CI gate
 python3 scripts/audit_binding_parity.py --update-baseline
 ```
 
-## v0.3.1 distribution contract
+## v0.3.2 distribution contract
 
-The `v0.3.1` tag and release workflow are the authoritative version contract:
+The `v0.3.2` tag and release workflow are the authoritative version contract:
 
-| Target | v0.3.1 release path | Installation path |
+| Target | v0.3.2 release path | Installation path |
 | --- | --- | --- |
-| Python | ABI3 wheels | GitHub Release wheel |
-| Rust | `.crate` asset | Release asset or git tag/source |
-| CLI | Linux x86_64 binary | GitHub Release or source build |
-| Node.js | platform `.tgz` candidates | CI artifact / source |
-| Java/JNI | versioned JAR | CI artifact / source |
-| C/C++ | versioned SDK archive | CI artifact / source |
-| Go | versioned module archive | CI artifact / source |
-| .NET | versioned NuGet package | CI artifact / source |
-| Android | versioned AAR | CI artifact / source |
-| iOS | versioned XCFramework | CI artifact / source |
-| WASM | web/node/bundler bundles | CI artifact / source |
+| Python | ABI3 wheels | PyPI or GitHub Release wheel |
+| Rust | `.crate` asset and crates.io package | crates.io version 0.3.2 |
+| CLI | Linux x86_64 binary and native installers | GitHub Release or source build |
+| Node.js | platform archive | GitHub Release asset / source; not npm |
+| Java/JNI | versioned JAR | GitHub Release asset / source |
+| C/C++ | versioned SDK archive | GitHub Release asset / source |
+| Go | versioned module archive | GitHub Release asset / source; not public `go get` |
+| .NET | versioned package | GitHub Release asset / source; not NuGet |
+| Android | versioned AAR | GitHub Release asset / source |
+| iOS | versioned XCFramework | GitHub Release asset / source |
+| WASM | WASM module | GitHub Release asset / source |
 
 An artifact is not a public registry package until its target registry has been
 published to and a clean consumer install has passed.
 
-## v0.3.1 registry package names
+## v0.3.2 registry package names
 
 The release workflows publish the Rust crate and Python distribution as
 `qx-finkit`. Python imports remain `finkit`; Rust projects can preserve the
 `finkit::...` source path with `finkit = { package = "qx-finkit", version =
-"0.3.1" }`.
+"0.3.2" }`.
 
 ## Screening API across bindings
 
@@ -186,29 +186,29 @@ names without introducing language-specific indicator semantics. See
 [screening-formulas.md](screening-formulas.md) for signatures, aliases, warm-up
 rules, and A-share/HK/US/crypto usage notes.
 
-## Next-release multi-language target
+## v0.3.2 multi-language release assets
 
-The next-release validation layer is split across `Multilang release` and `Multilang cross-platform`.
+The v0.3.2 validation layer is split across `Multilang release` and `Multilang cross-platform`; both tag workflows completed successfully.
 
-| Target | CI-validated target | Candidate artifact |
+| Target | CI-validated target | Published GitHub Release asset |
 | --- | --- | --- |
-| Node.js | Linux x86_64 GNU, Windows x64 MSVC, macOS arm64; native runtime tests and platform package inspection | platform `.tgz` packages |
-| Java/JNI | Linux Rust JNI build, JAR resource check, runtime SMA smoke | JAR |
-| C/C++ | Linux CMake build/test/install | SDK `.tar.gz` |
-| Go/CGO | Linux Rust native build, `go test`, external-module example and packaged consumer smoke | Go module source + `libfinkit_go.so` |
-| .NET | Linux x64, Windows x64 and macOS arm64; .NET 8 tests plus NuGet RID inspection | `.nupkg` candidates |
-| WASM | real `wasm32-unknown-unknown` build | raw `.wasm` module |
-| Android | four NDK ABI builds + Gradle AAR assembly + archive inspection | `.aar` candidate |
-| iOS | arm64 device + arm64/x86_64 simulator build + XCFramework packaging | `.xcframework.zip` candidate |
-| Rust/CLI | crate packaging + Linux CLI release build | `.crate` + CLI |
+| Node.js | Linux x86_64 GNU, Windows x64 MSVC, macOS arm64; native runtime tests and platform package inspection | platform `.tgz` assets |
+| Java/JNI | Linux Rust JNI build, JAR resource check, runtime SMA smoke | JAR asset |
+| C/C++ | Linux CMake build/test/install | SDK `.tar.gz` asset |
+| Go/CGO | Linux Rust native build, `go test`, external-module example and packaged consumer smoke | module source + `libfinkit_go.so` archive |
+| .NET | Linux x64, Windows x64 and macOS arm64; .NET 8 tests plus NuGet RID inspection | `.nupkg` GitHub Release asset |
+| WASM | real `wasm32-unknown-unknown` build | raw `.wasm` asset |
+| Android | four NDK ABI builds + Gradle AAR assembly + archive inspection | `.aar` asset |
+| iOS | arm64 device + arm64/x86_64 simulator build + XCFramework packaging | `.xcframework.zip` asset |
+| Rust/CLI | crate packaging + Linux CLI release build | `.crate` + CLI assets |
 
-These are **validated candidate artifacts**, not public registry packages. A target is only listed as CI-validated after a real hosted runner completed its build, language-level smoke/test path and package-content checks.
+These are published **GitHub Release assets**, not public registry packages unless stated above. A target is listed as validated only after a real hosted runner completed its build, language-level smoke/test path and package-content checks.
 
 The current Node package manifest declares additional optional packages such as macOS x64, Linux arm64, musl variants and Windows arm64. Those targets remain outside the proven candidate matrix until they receive equivalent real-runner or cross-build package validation. The same rule applies to the declared `.NET` `osx-x64` RID.
 
 ## Python
 
-Python remains the most complete binary-distribution path in v0.3.1. Four `cp38-abi3` wheels are built for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
+Python remains the most complete binary-distribution path in v0.3.2. Four `cp38-abi3` wheels are built for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
 
 Its indicator surface now matches the C binding exactly (78/78). The last seven
 were the classic price-action constructions — `darvas_box`, `renko`, `kagi`,
@@ -238,11 +238,11 @@ on stderr, and falls back to the checked-in SSOT. Re-run
 
 ## Rust
 
-Use the release tag when a crates.io package is not independently verified:
+The crates.io package is published as `qx-finkit 0.3.2`:
 
 ```toml
 [dependencies]
-finkit = { package = "qx-finkit", git = "https://github.com/coeasy/finkit", tag = "v0.3.1" }
+finkit = { package = "qx-finkit", version = "0.3.2" }
 ```
 
 Or use a local checkout:
@@ -502,7 +502,7 @@ See [../wasm/README.md](../wasm/README.md).
 
 The following claims must only appear after real publication **and** a clean consumer smoke test:
 
-- `pip install qx-finkit` from PyPI;
+- `pip install qx-finkit==0.3.2` from PyPI;
 - `cargo add qx-finkit` from crates.io;
 - `npm install finkit` from npm;
 - Maven Central coordinates;

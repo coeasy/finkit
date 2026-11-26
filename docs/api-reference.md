@@ -542,12 +542,36 @@ it is the declared vocabulary (see [Category Slugs](#category-slugs) above).
 ### Installation
 
 Finkit is distributed as Python ABI3 wheels attached to the published GitHub
-`v0.3.1` Release. Download the wheel for your platform and install it locally,
-or build the current v0.3.1 workspace from source with `maturin` (see
+`v0.3.2` Release or from PyPI. Install the published package with
+`python -m pip install qx-finkit==0.3.2`, or build v0.3.2 from source with `maturin` (see
 [installation.md](installation.md)):
 
 ```bash
-python -m pip install ./finkit-0.3.1-<matching-platform>.whl
+python -m pip install qx-finkit==0.3.2
+```
+
+### Qlib feature sets
+
+`available_feature_sets()` returns `alpha158` and `alpha360`.
+`feature_set(name)` creates a reusable feature-set handle, and
+`FeatureSet.evaluate(...)` returns a time-by-feature NumPy matrix. The output
+contains 158 Alpha158 columns or 360 Alpha360 columns in Qlib order.
+
+```python
+import numpy as np
+import finkit as ta
+
+close = np.arange(1.0, 101.0, dtype=np.float64)
+open_ = close - 0.25
+high = close + 1.0
+low = close - 1.0
+vwap = close
+volume = close * 1000.0
+
+features = ta.feature_set("alpha360").evaluate(
+    open=open_, high=high, low=low, close=close, vwap=vwap, volume=volume,
+)
+assert features.shape == (len(close), 360)
 ```
 
 ### Functions
