@@ -1,6 +1,6 @@
 # Finkit Troubleshooting Guide
 
-This guide separates the **v0.5.0** release contract from multi-language source/build paths. Do not infer that a CI artifact is already available from a public package registry.
+This guide separates the **v0.6.0** release contract from multi-language source/build paths. Do not infer that a CI artifact is already available from a public package registry.
 
 If you are new to Finkit, start with [Getting started](getting-started.md), then use this guide when installation, data alignment, formulas, CLI input, native bindings, or builds behave unexpectedly.
 
@@ -24,7 +24,7 @@ Do not treat a packaging or loader failure as an indicator-algorithm failure. Na
 
 ## 2. Confirm the version and platform
 
-The authoritative binary/source distribution for v0.5.0 is the GitHub Release. It contains four Python `cp38-abi3` wheels, the Rust crate archive, a Linux x86_64 CLI binary, and `SHA256SUMS`.
+The authoritative binary/source distribution for v0.6.0 is the GitHub Release. It contains four Python `cp38-abi3` wheels, the Rust crate, CLI binaries, native installers, multi-language packages, and the `SHA256SUMS`, `SHA256SUMS.installers`, and `SHA256SUMS.multilang` manifests.
 
 Check the local runtime before selecting an asset:
 
@@ -53,7 +53,7 @@ Then make sure the same interpreter is used for installation and execution:
 
 ```bash
 python -m pip --version
-python -m pip install ./qx_finkit-0.5.0-<platform>.whl
+python -m pip install ./qx_finkit-0.6.0-<platform>.whl
 python -c "import finkit; print(finkit)"
 ```
 
@@ -266,7 +266,7 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
 ## 11. Node.js native loading problems
 
-The Node binding is a source-build/CI-verified path in v0.5.0; the documentation does not claim a public npm registry release.
+The Node binding is a source-build/CI-verified path in v0.6.0; the documentation does not claim a public npm registry release.
 
 From the repository:
 
@@ -405,7 +405,7 @@ The raw module is `target/wasm32-unknown-unknown/release/finkit_wasm.wasm`. Java
 
 ## 19. Registry commands fail
 
-The `qx-finkit` 0.5.0 crate and Python distribution are published on crates.io and PyPI. The GitHub Release also contains validated language packages and platform installers. Source-build or CI packaging paths alone do **not** imply publication to npm, Maven Central, NuGet, a public Go module, CocoaPods/SPM, or an Android registry.
+The `qx-finkit` 0.6.0 crate and Python distribution are published on crates.io and PyPI. The GitHub Release also contains validated language packages and platform installers. Source-build or CI packaging paths alone do **not** imply publication to npm, Maven Central, NuGet, a public Go module, CocoaPods/SPM, or an Android registry.
 
 Therefore a registry command failing to find Finkit is not automatically a local environment problem. Check [Installation](installation.md), [Language bindings](language-bindings.md), and the actual release assets first.
 
