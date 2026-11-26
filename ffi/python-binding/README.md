@@ -21,7 +21,7 @@ Install a matching wheel from:
 python -m pip install qx-finkit==0.4.0
 ```
 
-The package exposes the Qlib-compatible `alpha158` and `alpha360` feature sets through `finkit.feature_set(...)`. It also evaluates aligned `time × symbols` panels through built-in libraries and custom formulas. The full WorldQuant 101 formula corpus remains out of the release because redistribution rights have not been confirmed.
+The package exposes the Qlib-compatible `alpha158` and `alpha360` feature sets through `finkit.feature_set(...)`. It also evaluates aligned `time × symbols` panels through built-in libraries and caller-supplied formula libraries. The full WorldQuant 101 formula corpus remains out of the release because redistribution rights have not been confirmed.
 
 ```python
 import numpy as np
@@ -34,6 +34,12 @@ values = ta.evaluate_panel_formula(
     "MA(CS_RANK(CLOSE), 2)", timestamps, symbols, {"close": close}
 )
 assert values.shape == (3, 2)  # time × symbols
+
+custom = ta.factor_library_from_expressions(
+    "research-pack", {"momentum": "CLOSE / REF(CLOSE, 1) - 1"}
+)
+signals = custom.evaluate_panel_all(timestamps, symbols, {"close": close})
+assert signals["momentum"].shape == (3, 2)
 ```
 
 ## Source build

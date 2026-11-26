@@ -585,6 +585,31 @@ values = lib.evaluate_panel(
 )  # shape (time, symbols)
 ```
 
+To compile formulas supplied by your application, create an in-memory library
+from a name-to-expression mapping. The package does not bundle or register these
+expressions in its built-in catalogs. `evaluate_panel_all` evaluates the full
+mapping on aligned `(time, symbols)` matrices:
+
+```python
+custom = ta.factor_library_from_expressions(
+    "research-pack",
+    {
+        "momentum": "CLOSE / REF(CLOSE, 5) - 1",
+        "cross_sectional_momentum": "CS_RANK(CLOSE / REF(CLOSE, 5) - 1)",
+    },
+)
+values = custom.evaluate_panel_all(
+    dates,
+    symbols,
+    {"close": np.ascontiguousarray(close_panel, dtype=np.float64)},
+)
+values["cross_sectional_momentum"].shape  # (time, symbols)
+```
+
+The caller owns the formula source, data conventions, and any rights required
+to use it. This interface does not change the built-in WorldQuant catalog or
+imply that it contains all 101 paper formulas.
+
 For custom calculations, `ta.evaluate_panel_formula(expression, timestamps,
 symbols, fields)` uses the same matrix contract without requiring a built-in
 factor name. In a panel expression, `RANK(x)` or `CS_RANK(x)` ranks across
@@ -601,8 +626,10 @@ price ratio. If `ADV{d}` is not supplied, it is the full-window mean of
 dollar volume from `CLOSE * VOLUME`. Supply adjusted prices and volume when that
 is the intended market-data convention.
 
-`FactorLibrary` is the built-in catalog. To register your own formulas, use
-`FormulaRegistry` (`register` / `unregister` / `compile` / `names`).
+`FactorLibrary` can load either a built-in catalog or a caller-supplied mapping
+with `factor_library_from_expressions`. `FormulaRegistry` remains available for
+reusable parameterized formula components (`register` / `unregister` / `compile`
+/ `names`).
 
 ## Pandas
 

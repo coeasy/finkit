@@ -278,9 +278,12 @@ enum Commands {
         /// CSV with timestamp,symbol and numeric market fields.
         #[arg(short, long)]
         input: PathBuf,
-        /// Built-in library name used with --factor.
-        #[arg(long, default_value = "worldquant101")]
-        library: String,
+        /// Built-in library name used with --factor (defaults to worldquant101).
+        #[arg(long, conflicts_with = "manifest")]
+        library: Option<String>,
+        /// JSON object mapping caller-owned factor names to expressions.
+        #[arg(long, requires = "factor")]
+        manifest: Option<PathBuf>,
         /// One factor name from the selected library.
         #[arg(long, conflicts_with = "expression")]
         factor: Option<String>,
@@ -970,13 +973,15 @@ fn main() {
         Commands::FactorPanel {
             input,
             library,
+            manifest,
             factor,
             expression,
             output,
         } => {
             if let Err(error) = panel_command::run(
                 &input,
-                &library,
+                library.as_deref(),
+                manifest.as_deref(),
                 factor.as_deref(),
                 expression.as_deref(),
                 output.as_deref(),

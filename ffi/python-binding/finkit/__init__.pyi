@@ -1514,11 +1514,31 @@ class FactorLibrary:
         """Evaluate one factor over aligned ``(time, symbols)`` field matrices."""
         ...
 
+    def evaluate_panel_all(
+        self,
+        timestamps: List[int],
+        symbols: List[str],
+        fields: Dict[str, NDArray[np.floating]],
+    ) -> Dict[str, NDArray[np.floating]]:
+        """Evaluate every factor over an aligned panel."""
+        ...
+
 def factor_library(name: str) -> FactorLibrary:
     """Load a built-in factor library by name.
 
     ``name`` is required and must be ``alpha158`` (158 factors) or
     ``worldquant101`` (17 factors); anything else raises ``ValueError``.
+    """
+    ...
+
+def factor_library_from_expressions(
+    name: str,
+    expressions: Dict[str, str],
+) -> FactorLibrary:
+    """Compile a caller-supplied factor mapping into an in-memory library.
+
+    The expressions are not added to the built-in catalog or package. Use
+    ``evaluate_panel`` or ``evaluate_panel_all`` for custom panel inputs.
     """
     ...
 
