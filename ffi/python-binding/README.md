@@ -1,10 +1,10 @@
 # Finkit Python Binding
 
-This directory contains the Python package and PyO3 native extension for Finkit. The `0.3.2` PyPI distribution name is `qx-finkit`; the Python import name remains `finkit`.
+This directory contains the Python package and PyO3 native extension for Finkit. The `0.4.0` PyPI distribution name is `qx-finkit`; the Python import name remains `finkit`.
 
 ## Current release status
 
-The GitHub `v0.3.2` Release contains verified CPython ABI3 wheels for:
+The v0.4.0 release adds a panel-factor API and publishes verified CPython ABI3 wheels for:
 
 - Linux x86_64;
 - Windows x86_64;
@@ -15,20 +15,33 @@ The wheels use `cp38-abi3` and are validated for GIL-enabled CPython 3.8-3.14 on
 
 Install a matching wheel from:
 
-`https://github.com/coeasy/finkit/releases/tag/v0.3.2`
+`https://github.com/coeasy/finkit/releases/tag/v0.4.0`
 
 ```bash
-python -m pip install qx-finkit==0.3.2
+python -m pip install qx-finkit==0.4.0
 ```
 
-The package exposes the Qlib-compatible `alpha158` and `alpha360` feature sets through `finkit.feature_set(...)`. The full WorldQuant 101 formula corpus is not included because redistribution rights have not been confirmed.
+The package exposes the Qlib-compatible `alpha158` and `alpha360` feature sets through `finkit.feature_set(...)`. It also evaluates aligned `time × symbols` panels through built-in libraries and custom formulas. The full WorldQuant 101 formula corpus remains out of the release because redistribution rights have not been confirmed.
+
+```python
+import numpy as np
+import finkit as ta
+
+timestamps = np.arange(3, dtype=np.int64)
+symbols = ["AAA", "BBB"]
+close = np.ascontiguousarray([[1., 10.], [2., 20.], [3., 30.]])
+values = ta.evaluate_panel_formula(
+    "MA(CS_RANK(CLOSE), 2)", timestamps, symbols, {"close": close}
+)
+assert values.shape == (3, 2)  # time × symbols
+```
 
 ## Source build
 
 ```bash
 git clone https://github.com/coeasy/finkit.git
 cd finkit
-git checkout v0.3.2
+git checkout v0.4.0
 
 python3 -m venv .venv
 source .venv/bin/activate  # PowerShell: .\.venv\Scripts\Activate.ps1
