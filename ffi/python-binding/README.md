@@ -1,10 +1,10 @@
 # Finkit Python Binding
 
-This directory contains the Python package and PyO3 native extension for Finkit. The `0.4.0` PyPI distribution name is `qx-finkit`; the Python import name remains `finkit`.
+This directory contains the Python package and PyO3 native extension for Finkit. The PyPI distribution name is `qx-finkit`; the Python import name remains `finkit`.
 
 ## Current release status
 
-The v0.4.0 release adds a panel-factor API and publishes verified CPython ABI3 wheels for:
+The v0.6.0 release adds paper-style panel-expression compatibility and publishes verified CPython ABI3 wheels for:
 
 - Linux x86_64;
 - Windows x86_64;
@@ -15,13 +15,13 @@ The wheels use `cp38-abi3` and are validated for GIL-enabled CPython 3.8-3.14 on
 
 Install a matching wheel from:
 
-`https://github.com/coeasy/finkit/releases/tag/v0.4.0`
+`https://github.com/coeasy/finkit/releases/tag/v0.6.0`
 
 ```bash
-python -m pip install qx-finkit==0.4.0
+python -m pip install qx-finkit==0.6.0
 ```
 
-The package exposes the Qlib-compatible `alpha158` and `alpha360` feature sets through `finkit.feature_set(...)`. It also evaluates aligned `time × symbols` panels through built-in libraries and caller-supplied formula libraries. The full WorldQuant 101 formula corpus remains out of the release because redistribution rights have not been confirmed.
+The package exposes the Qlib-compatible `alpha158` and `alpha360` feature sets through `finkit.feature_set(...)`. It also evaluates aligned `time × symbols` panels through built-in libraries and caller-supplied formula libraries. Panel expressions support paper-style `condition ? yes : no`, `SIGNEDPOWER`, scalar-window rolling `MIN` / `MAX`, sample rolling `STDDEV`, and dotted identifiers. The full WorldQuant 101 formula corpus remains out of the release because redistribution rights have not been confirmed.
 
 ```python
 import numpy as np
@@ -47,7 +47,7 @@ assert signals["momentum"].shape == (3, 2)
 ```bash
 git clone https://github.com/coeasy/finkit.git
 cd finkit
-git checkout v0.4.0
+git checkout v0.6.0
 
 python3 -m venv .venv
 source .venv/bin/activate  # PowerShell: .\.venv\Scripts\Activate.ps1
