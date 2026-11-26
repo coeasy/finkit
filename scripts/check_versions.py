@@ -82,7 +82,7 @@ SEMVER_RE = re.compile(r"(?<![\d.])(\d+\.\d+\.\d+)(?![\d.])")
 #
 # Both versions are legal in release-facing documents. After publication is
 # independently verified, move this forward with the release-facing docs.
-PUBLISHED_VERSION = "0.5.0"
+PUBLISHED_VERSION = "0.6.0"
 
 # Versions that legitimately appear in release-facing documents but are neither
 # this workspace's version nor a published one (a dependency's version, say).
@@ -92,6 +92,7 @@ PUBLISHED_VERSION = "0.5.0"
 # rot.
 FOREIGN_VERSIONS = frozenset(
     {
+        "0.5.0",  # previous release, retained in the release checklist and changelog
         "0.3.1",  # previous release, retained in historical release/install records
         "0.3.2",  # previous release, retained in the historical release checklist
         "0.8.1",  # TA-Lib C, named in README.md's head-to-head guardrail paragraph
