@@ -104,8 +104,8 @@ parity, and do not read a missing parity gate as "unsupported".
 
 | Binding | Indicator surface (gated) | Formula surface | Research surface | Platform validation | Release state |
 | --- | --- | --- | --- | --- | --- |
-| Rust `core` | is the runtime | full; `FormulaEngine` selects/reports Tree or Plan | full | `cargo test -p qx-finkit` | v0.5.0 `.crate` + crates.io |
-| Python | 78 / 78 | exported; `formula_backend` and `formula_eval(..., backend=...)` | exported | CI `python-wheels` | v0.5.0 ABI3 wheels + PyPI |
+| Rust `core` | is the runtime | full; `FormulaEngine` selects/reports Tree or Plan | full | `cargo test -p qx-finkit` | v0.6.0 `.crate` + crates.io |
+| Python | 78 / 78 | exported; `formula_backend` and `formula_eval(..., backend=...)` | exported | CI `python-wheels` | v0.6.0 ABI3 wheels + PyPI |
 | Node | 78 / 78 | exported; `formulaBackend` and `formulaEval(..., backend?)` | exported | CI native smoke (`linux-x64`, `win32-x64-msvc`, `darwin-arm64`) | GitHub Release archive (not on npm) |
 | C | 78 / 78 (extractor self-check anchor) | exported (`*_json`) | exported | CI CMake build/test/install | GitHub Release SDK asset |
 | Go | 78 / 78 | exported | exported | CI `go test` + external-module consumer | GitHub Release archive |
@@ -150,14 +150,14 @@ python3 scripts/audit_binding_parity.py --check         # CI gate
 python3 scripts/audit_binding_parity.py --update-baseline
 ```
 
-## v0.5.0 distribution contract
+## v0.6.0 distribution contract
 
-The `v0.5.0` tag and release workflow are the authoritative version contract:
+The `v0.6.0` tag and release workflow are the authoritative version contract:
 
-| Target | v0.5.0 release path | Installation path |
+| Target | v0.6.0 release path | Installation path |
 | --- | --- | --- |
 | Python | ABI3 wheels | PyPI or GitHub Release wheel |
-| Rust | `.crate` asset and crates.io package | crates.io version 0.5.0 |
+| Rust | `.crate` asset and crates.io package | crates.io version 0.6.0 |
 | CLI | Linux x86_64 binary and native installers | GitHub Release or source build |
 | Node.js | platform archive | GitHub Release asset / source; not npm |
 | Java/JNI | versioned JAR | GitHub Release asset / source |
@@ -171,12 +171,12 @@ The `v0.5.0` tag and release workflow are the authoritative version contract:
 An artifact is not a public registry package until its target registry has been
 published to and a clean consumer install has passed.
 
-## v0.5.0 registry package names
+## v0.6.0 registry package names
 
 The release workflows publish the Rust crate and Python distribution as
 `qx-finkit`. Python imports remain `finkit`; Rust projects can preserve the
 `finkit::...` source path with `finkit = { package = "qx-finkit", version =
-"0.5.0" }`.
+"0.6.0" }`.
 
 ## Screening API across bindings
 
@@ -186,9 +186,9 @@ names without introducing language-specific indicator semantics. See
 [screening-formulas.md](screening-formulas.md) for signatures, aliases, warm-up
 rules, and A-share/HK/US/crypto usage notes.
 
-## v0.5.0 multi-language release assets
+## v0.6.0 multi-language release assets
 
-The v0.5.0 validation layer is split across `Multilang release` and `Multilang cross-platform`; both tag workflows completed successfully.
+The v0.6.0 validation layer is split across `Multilang release` and `Multilang cross-platform`; both tag workflows completed successfully.
 
 | Target | CI-validated target | Published GitHub Release asset |
 | --- | --- | --- |
@@ -208,7 +208,7 @@ The current Node package manifest declares additional optional packages such as 
 
 ## Python
 
-Python remains the most complete binary-distribution path in v0.5.0. Four `cp38-abi3` wheels are built for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
+Python remains the most complete binary-distribution path in v0.6.0. Four `cp38-abi3` wheels are built for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64.
 
 Its indicator surface now matches the C binding exactly (78/78). The last seven
 were the classic price-action constructions — `darvas_box`, `renko`, `kagi`,
@@ -238,11 +238,11 @@ on stderr, and falls back to the checked-in SSOT. Re-run
 
 ## Rust
 
-The crates.io package is published as `qx-finkit 0.5.0`:
+The crates.io package is published as `qx-finkit 0.6.0`:
 
 ```toml
 [dependencies]
-finkit = { package = "qx-finkit", version = "0.5.0" }
+finkit = { package = "qx-finkit", version = "0.6.0" }
 ```
 
 Or use a local checkout:
@@ -502,7 +502,7 @@ See [../wasm/README.md](../wasm/README.md).
 
 The following claims must only appear after real publication **and** a clean consumer smoke test:
 
-- `pip install qx-finkit==0.5.0` from PyPI;
+- `pip install qx-finkit==0.6.0` from PyPI;
 - `cargo add qx-finkit` from crates.io;
 - `npm install finkit` from npm;
 - Maven Central coordinates;
