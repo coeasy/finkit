@@ -82,7 +82,7 @@ SEMVER_RE = re.compile(r"(?<![\d.])(\d+\.\d+\.\d+)(?![\d.])")
 #
 # Both versions are legal in release-facing documents. After publication is
 # independently verified, move this forward with the release-facing docs.
-PUBLISHED_VERSION = "0.4.0"
+PUBLISHED_VERSION = "0.5.0"
 
 # Versions that legitimately appear in release-facing documents but are neither
 # this workspace's version nor a published one (a dependency's version, say).

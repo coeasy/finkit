@@ -1,6 +1,6 @@
 # Complete Usage Guide
 
-This guide is the practical entry point for using Finkit `v0.4.0`. It focuses on public, currently implemented behavior and distinguishes release artifacts from source-only bindings.
+This guide is the practical entry point for using Finkit `v0.5.0`. It focuses on public, currently implemented behavior and distinguishes release artifacts from source-only bindings.
 
 ## 1. Data conventions
 
@@ -25,7 +25,7 @@ open,high,low,close,volume
 
 ## 2. Python: basic indicators
 
-Install a matching wheel from the GitHub `v0.4.0` Release first; see [installation.md](installation.md).
+Install a matching wheel from the GitHub `v0.5.0` Release first; see [installation.md](installation.md).
 
 ```python
 import numpy as np
@@ -255,7 +255,7 @@ Until a crates.io entry is independently published, use the Git tag or a local p
 
 ```toml
 [dependencies]
-finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.4.0" }
+finkit = { git = "https://github.com/coeasy/finkit", tag = "v0.5.0" }
 ```
 
 ### Batch indicators
@@ -305,7 +305,7 @@ If minimizing a build, disable defaults only after checking transitive indicator
 [dependencies]
 finkit = {
   git = "https://github.com/coeasy/finkit",
-  tag = "v0.4.0",
+  tag = "v0.5.0",
   default-features = false,
   features = ["std", "indicators-overlap"]
 }

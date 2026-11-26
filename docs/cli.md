@@ -4,7 +4,7 @@ The CLI package is `finkit-cli`. The command-line application name exposed by Cl
 
 ## Build or install
 
-Linux x86_64 can download the published `v0.4.0` Release binary. The Release also includes native installers for Linux, macOS, and Windows. Any supported host can build from source:
+Linux x86_64 can download the published `v0.5.0` Release binary. The Release also includes native installers for Linux, macOS, and Windows. Any supported host can build from source:
 
 ```bash
 cargo build -p finkit-cli --release --locked

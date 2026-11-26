@@ -542,12 +542,12 @@ it is the declared vocabulary (see [Category Slugs](#category-slugs) above).
 ### Installation
 
 Finkit is distributed as Python ABI3 wheels attached to the published GitHub
-`v0.4.0` Release or from PyPI. Install the published package with
-`python -m pip install qx-finkit==0.4.0`, or build v0.4.0 from source with `maturin` (see
+`v0.5.0` Release or from PyPI. Install the published package with
+`python -m pip install qx-finkit==0.5.0`, or build v0.5.0 from source with `maturin` (see
 [installation.md](installation.md)):
 
 ```bash
-python -m pip install qx-finkit==0.4.0
+python -m pip install qx-finkit==0.5.0
 ```
 
 ### Qlib feature sets

@@ -12,7 +12,7 @@ Use Finkit behind research notebooks, market scanners, factor platforms, analyti
 
 [中文说明](README.zh-CN.md) · [Product overview](docs/product-overview.md) · [中文产品说明](docs/product-overview-zh.md) · [Competitive strategy](docs/competitive-positioning-zh.md) · [Documentation](docs/README.md)
 
-Current published GitHub release: **v0.4.0**. The Rust crate and Python distribution are available as `qx-finkit` from their package registries.
+Current published GitHub release: **v0.5.0**. The Rust crate and Python distribution are available as `qx-finkit` from their package registries.
 
 ## What problem does Finkit solve?
 
@@ -97,7 +97,7 @@ Install the published PyPI distribution `qx-finkit`. Its Python import name
 remains `finkit`:
 
 ```bash
-python -m pip install qx-finkit==0.4.0
+python -m pip install qx-finkit==0.5.0
 ```
 
 ```python
@@ -133,7 +133,7 @@ features = ta.feature_set("alpha360").evaluate(
 assert features.shape == (len(close), 360)
 ```
 
-The v0.4.0 release does not include the complete WorldQuant 101 formula corpus;
+The v0.5.0 release does not include the complete WorldQuant 101 formula corpus;
 redistribution rights have not been confirmed. See the
 [factor library implementation plan](docs/FACTOR_LIBRARIES_COMPLETION_PLAN_2026-11-26.md).
 
@@ -165,7 +165,7 @@ Full command reference: [docs/cli.md](docs/cli.md).
 
 ```toml
 [dependencies]
-finkit = { package = "qx-finkit", version = "0.4.0" }
+finkit = { package = "qx-finkit", version = "0.5.0" }
 ```
 
 ```rust
