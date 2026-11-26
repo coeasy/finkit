@@ -1,6 +1,6 @@
 # Development Guide
 
-This guide describes the development and validation workflow for the Finkit Rust core, formula/runtime layers, generated metadata, native bindings, release packaging, and documentation. The current published baseline is v0.5.0. Its scope includes the panel factor API; the complete WorldQuant 101 formula corpus is not included because redistribution rights have not been confirmed.
+This guide describes the development and validation workflow for the Finkit Rust core, formula/runtime layers, generated metadata, native bindings, release packaging, and documentation. The current published baseline is v0.6.0. Its scope includes the panel factor API and paper-style panel expression compatibility; the complete WorldQuant 101 formula corpus is not included because redistribution rights have not been confirmed.
 
 ## 1. Repository layout
 

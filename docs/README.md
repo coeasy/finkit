@@ -2,7 +2,7 @@
 
 This directory is the canonical documentation set for Finkit.
 
-Finkit is a Rust-powered quantitative finance engine for technical analysis, reusable formulas, factor graphs, streaming computation, feature engineering, and research workflows. The latest public GitHub Release is **v0.5.0**. See the [release page](https://github.com/coeasy/finkit/releases/tag/v0.5.0) for downloadable assets and package details.
+Finkit is a Rust-powered quantitative finance engine for technical analysis, reusable formulas, factor graphs, streaming computation, feature engineering, and research workflows. The latest public GitHub Release is **v0.6.0**. See the [release page](https://github.com/coeasy/finkit/releases/tag/v0.6.0) for downloadable assets and package details.
 
 ## Start here
 
@@ -73,25 +73,15 @@ Two properties are contracts rather than aspirations:
 
 Path agreement alone is not evidence of correctness: two paths that are wrong in the same way still agree. Numerical gates therefore pair agreement with **absolute-property assertions** (exact finite-value counts, identities, non-degeneracy) and **duplicate-implementation cross-checks**. Details in [formula-runtime-contract.md](formula-runtime-contract.md) §3.1–§3.2.
 
-## Published v0.5.0 contract
+## Published v0.6.0 contract
 
-The GitHub `v0.5.0` Release is the authoritative distribution contract for the current published version. It adds caller-owned factor expression libraries in Rust, Python, and the CLI, including Python batch panel evaluation and CLI JSON manifests. It also includes the Qlib-compatible Alpha158 matrix API, Alpha360 feature set, and FactorPanel API shipped earlier. The full WorldQuant 101 formula corpus is not included because redistribution rights have not been confirmed.
-
-Its release assets include:
-
-- four Python `cp38-abi3` wheels for Linux x86_64, Windows x86_64, macOS x86_64, and macOS arm64;
-- `qx-finkit-0.5.0.crate`;
-- `finkit-cli-linux-x86_64` and `finkit-factor-study-linux-x86_64`;
-- Android, iOS, Java, .NET, Go, C/C++, and WASM artifacts;
-- Linux, macOS, and Windows installers;
-- `SHA256SUMS`, `SHA256SUMS.installers`, and `SHA256SUMS.multilang`.
-
-The `qx-finkit` 0.5.0 package is published on PyPI and crates.io. Do not infer that npm, Maven Central, NuGet, a public Go module, Android Maven coordinates, or Swift package coordinates are available without checking that exact package/version.
-
-The v0.5.0 release publishes the Rust crate and Python distribution as
-`qx-finkit`. Install it with `python -m pip install qx-finkit==0.5.0`; Rust projects
-can declare `finkit = { package = "qx-finkit", version = "0.5.0" }` to retain
-the `finkit::...` import path.
+The `v0.6.0` GitHub Release is the latest public distribution. It adds
+paper-style conditional expressions, `SIGNEDPOWER`, scalar-window `MIN` /
+`MAX`, sample rolling `STDDEV`, and dotted identifiers to the caller-owned
+panel expression path. It retains the caller-owned factor libraries and
+Qlib-compatible Alpha158 / Alpha360 APIs shipped earlier. The full WorldQuant
+101 formula corpus is not included because redistribution rights have not been
+confirmed.
 
 ## Ongoing architecture work
 
@@ -105,7 +95,7 @@ The active next-release work expands the reusable runtime and factor-research st
 - retained materializations for caller-owned range/into updates;
 - reuse-first Factor Research integration built on canonical returns/statistics/regression/rank/risk/calendar infrastructure.
 
-These capabilities remain in development and are not claimed as published v0.5.0 assets.
+These capabilities remain in development and are not claimed as published v0.6.0 assets.
 
 ## Multi-language validation model
 
@@ -298,4 +288,4 @@ cargo fmt --all -- --check
 cargo test --workspace --doc --locked
 ```
 
-_Last product/documentation review: 2026-11-27. Workspace and latest published distribution: v0.5.0._
+_Last product/documentation review: 2026-11-27. Workspace and latest published distribution: v0.6.0._
