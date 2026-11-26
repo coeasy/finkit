@@ -250,7 +250,7 @@ fn resolve<'a>(inputs: &'a FactorInputs<'_>, name: &str) -> FactorResult<&'a [f6
 
 /// A named collection of [`CompiledFactor`]s.
 pub struct FactorLibrary {
-    name: &'static str,
+    name: String,
     factors: BTreeMap<String, Arc<CompiledFactor>>,
 }
 
@@ -267,6 +267,34 @@ impl FactorLibrary {
         name: &'static str,
         expressions: &[(&str, &str, FactorDirection)],
     ) -> FactorResult<Self> {
+        Self::from_named_expressions(name, expressions)
+    }
+
+    /// Build a caller-owned library from `(name, expression, direction)` triples.
+    ///
+    /// This constructor does not register or ship the supplied expressions; it
+    /// compiles only the definitions provided by the caller. Names are owned so
+    /// applications can load a private or separately licensed factor manifest.
+    ///
+    /// # Errors
+    ///
+    /// [`FactorError::DuplicateFactor`] for a repeated factor name, or
+    /// [`FactorError::Compute`] if any expression fails to compile.
+    pub fn from_named_expressions(
+        name: impl Into<String>,
+        expressions: &[(&str, &str, FactorDirection)],
+    ) -> FactorResult<Self> {
+        let name = name.into();
+        if name.trim().is_empty() {
+            return Err(FactorError::InvalidParameter(
+                "factor library name must not be empty".to_string(),
+            ));
+        }
+        if expressions.is_empty() {
+            return Err(FactorError::InvalidParameter(
+                "factor library must contain at least one expression".to_string(),
+            ));
+        }
         let mut factors = BTreeMap::new();
         for (factor_name, expression, direction) in expressions {
             let compiled = CompiledFactor::compile(*factor_name, *expression, *direction)
@@ -281,8 +309,8 @@ impl FactorLibrary {
 
     /// Library name.
     #[must_use]
-    pub const fn name(&self) -> &'static str {
-        self.name
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Number of factors.

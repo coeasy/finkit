@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.5.0] - 2026-11-26
+
+### Added
+
+- Added caller-owned factor libraries from expression mappings in Rust and
+  Python, including single-factor and batch evaluation over aligned panels.
+- Added CLI JSON manifest loading for evaluating caller-supplied panel factors.
+
+### Changed
+
+- Factor library names are now owned values so runtime-loaded libraries can
+  retain their caller-provided name.
+
+### Scope
+
+- This release does not add WorldQuant formula text. Users must provide
+  expressions they are authorized to use; the built-in WorldQuant catalog
+  remains partial until redistribution rights are confirmed.
+
 ## [0.4.0] - 2026-11-26
 
 ### Added

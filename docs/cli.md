@@ -121,13 +121,34 @@ category IDs.
 ```bash
 ./target/release/finkit-cli factor-panel --input panel.csv --factor Alpha6
 ./target/release/finkit-cli factor-panel --input panel.csv --expr "MA(CS_RANK(CLOSE), 5)" --output result.csv
+./target/release/finkit-cli factor-panel --input panel.csv --manifest factors.json --factor momentum
 ```
 
 The CSV must include `timestamp`, `symbol`, and the fields used by the selected
 factor or expression. `--factor` selects from `--library` (default:
-`worldquant101`); `--expr` evaluates an expression directly. Supply exactly one
-of these options. Output is long-form `timestamp,symbol,value` CSV in sorted
-timestamp and symbol order.
+`worldquant101`), or from `--manifest` when a manifest is supplied; `--expr`
+evaluates one expression directly. Supply exactly one of `--factor` and
+`--expr`. Output is long-form `timestamp,symbol,value` CSV in sorted timestamp
+and symbol order.
+
+To load caller-owned factors, pass `--manifest` with `--factor`. The JSON file
+is an object whose keys are factor names and whose values are expressions; all
+entries are compiled in memory and are not added to Finkit's built-in catalog.
+For example:
+
+```json
+{
+  "momentum": "CLOSE / REF(CLOSE, 5) - 1",
+  "cross_sectional_momentum": "CS_RANK(CLOSE / REF(CLOSE, 5) - 1)"
+}
+```
+
+```bash
+./target/release/finkit-cli factor-panel --input panel.csv --manifest factors.json --factor cross_sectional_momentum
+```
+
+Each CLI invocation evaluates one manifest entry. Caller-supplied expressions
+are evaluated under the caller's data convention and licensing responsibility.
 
 `RETURNS` is derived from close when omitted. `ADV{d}` uses `dollar_volume` or
 `amount` when supplied; otherwise it derives dollar volume from `close * volume`

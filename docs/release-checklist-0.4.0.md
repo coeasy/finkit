@@ -19,13 +19,21 @@ no WorldQuant formula text; the built-in WorldQuant catalog remains partial.
 - [x] Panel Rust, CLI, FFI JSON, and Python tests passed.
 - [x] Selected Rust crate suites passed: 242 passed, 6 ignored, 0 failed.
 - [x] `scripts/check_versions.py` passed for workspace version 0.4.0.
-- [ ] Run release CI and same-commit readiness checks before creating the tag.
-- [ ] Verify the published crate, Python package, GitHub assets, and checksums.
+- [x] Same-commit pre-release workflows passed for CI, docs, Python wheels,
+      TA-Lib wheel gate, multilang builds, and competitive benchmarks.
+- [x] Tag-driven asset workflows completed successfully; installer publishing
+      required one rerun and then succeeded.
+- [x] `scripts/check_docs_links.py` and the version contract passed after the
+      release-current docs update.
 
 ## Publication status
 
 - Workspace version: `0.4.0`.
 - Previous published version: `0.3.2`.
-- GitHub tag, crates.io, PyPI, and release assets: pending.
-- Update this checklist and `PUBLISHED_VERSION` only after independently
-  verifying publication.
+- GitHub tag and Release: published at `v0.4.0`; release commit:
+  `dde6b19d839623529b1acf7be76d04fa24f2d7b6`.
+- crates.io and PyPI: `qx-finkit 0.4.0` verified; four ABI3 wheels are present
+  on PyPI.
+- GitHub Release assets: 28 verified artifacts, including wheels, crate, CLI,
+  language packages, installers, and checksums.
+- `PUBLISHED_VERSION` and current-version docs point to `0.4.0`.

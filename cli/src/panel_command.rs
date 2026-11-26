@@ -18,13 +18,17 @@ struct CsvRow {
 
 pub(super) fn run(
     input: &Path,
-    library_name: &str,
+    library_name: Option<&str>,
+    manifest_path: Option<&Path>,
     factor_name: Option<&str>,
     expression: Option<&str>,
     output: Option<&str>,
 ) -> Result<(), String> {
     if factor_name.is_some() == expression.is_some() {
         return Err("provide exactly one of --factor or --expr".to_string());
+    }
+    if manifest_path.is_some() && expression.is_some() {
+        return Err("--manifest must be used with --factor, not --expr".to_string());
     }
     let data = read_panel_csv(input)?;
     let timestamp_axis = data.timestamps.as_slice();
@@ -39,9 +43,39 @@ pub(super) fn run(
 
     let result = if let Some(expression) = expression {
         panel.evaluate(expression)
+    } else if let Some(manifest_path) = manifest_path {
+        let source = std::fs::read_to_string(manifest_path).map_err(|error| {
+            format!(
+                "could not read factor manifest {}: {error}",
+                manifest_path.display()
+            )
+        })?;
+        let definitions: BTreeMap<String, String> = serde_json::from_str(&source)
+            .map_err(|error| format!("invalid factor manifest JSON: {error}"))?;
+        let owned: Vec<(String, String)> = definitions.into_iter().collect();
+        let entries: Vec<(&str, &str, finkit::factors::FactorDirection)> = owned
+            .iter()
+            .map(|(name, expression)| {
+                (
+                    name.as_str(),
+                    expression.as_str(),
+                    finkit::factors::FactorDirection::Neutral,
+                )
+            })
+            .collect();
+        let library = finkit::factors::builtin::FactorLibrary::from_named_expressions(
+            manifest_path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or("user-manifest"),
+            &entries,
+        )
+        .map_err(|error| error.to_string())?;
+        library.evaluate_panel(factor_name.expect("validated factor name"), &panel)
     } else {
-        let library = finkit::factors::builtin::factor_library(library_name)
-            .map_err(|error| error.to_string())?;
+        let library =
+            finkit::factors::builtin::factor_library(library_name.unwrap_or("worldquant101"))
+                .map_err(|error| error.to_string())?;
         library.evaluate_panel(factor_name.expect("validated factor name"), &panel)
     }
     .map_err(|error| error.to_string())?;
