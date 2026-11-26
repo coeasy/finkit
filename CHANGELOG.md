@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.4.0] - 2026-11-26
+
+### Added
+
+- Added a validated row-major `FactorPanel` for aligned `time × symbols`
+  fields, with temporal and cross-sectional operations in one expression.
+- Added panel evaluation for built-in factor libraries in Rust and NumPy-based
+  Python APIs, plus `factor-panel` CSV execution in the CLI.
+- Added the versioned `factor.panel.v1` language-neutral JSON contract.
+- Added derivation of `RETURNS` and `ADV{d}` when the corresponding inputs are
+  absent and the required price/volume fields are present.
+
+### Changed
+
+- Corrected the WorldQuant coverage description: the checked-in transcription
+  has 71 entries and 30 gaps; the gaps are not claimed to be reserved by the
+  paper.
+
+### Scope
+
+- This release adds no WorldQuant formula text. The built-in WorldQuant catalog
+  remains partial; the complete paper corpus is not included because
+  redistribution rights have not been confirmed.
+
 ## [0.3.2] - 2026-11-26
 
 ### Added

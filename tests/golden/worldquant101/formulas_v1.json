@@ -3,8 +3,8 @@
   "reference": {
     "producer": "Kakushadze, '101 Formulaic Alphas' (2015), transcribed by microsoft/qlib",
     "transcribed_from": ".research_tmp/qlib/alpha101_defs.py (formula comments above each class)",
-    "note": "The paper numbers its alphas 1..101 but defines only 71 of them; the other 30 numbers are reserved and carry no formula. The transcription is a cross-sectional (panel) implementation -- it ranks across assets via stats.rankdata -- so it is used here only as the source of the formulas, not as a reference output.",
-    "reserved_numbers": [
+    "note": "This checked-in transcription contains 71 numbered formulas; 30 numbers in 1..101 are absent from this corpus and are catalog gaps, not asserted to be undefined by the paper. The transcription is a cross-sectional (panel) implementation -- it ranks across assets via stats.rankdata -- so it is used here only as the source of the formulas, not as a reference output.",
+    "untranscribed_numbers": [
       10,
       25,
       28,

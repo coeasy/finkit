@@ -16,9 +16,9 @@
 //! 3. Every computed alpha compiles into a plan and evaluates to at least one
 //!    finite value on the shared market.
 //!
-//! The reserved-number check is what makes the corpus size auditable: the paper
-//! defines 71 formulas and reserves 30 numbers, so `71 + 30 == 101` is asserted
-//! rather than assumed.
+//! The coverage check distinguishes the checked-in 71-entry transcription from
+//! the full `1..=101` numbering. The 30 absent numbers are catalog gaps, not
+//! evidence that the paper left them undefined.
 
 use finkit::factors::builtin::{factor_library, worldquant101};
 use finkit::formula::FormulaContext;
@@ -43,7 +43,7 @@ struct FormulaContract {
 
 #[derive(Deserialize)]
 struct Reference {
-    reserved_numbers: Vec<usize>,
+    untranscribed_numbers: Vec<usize>,
 }
 
 fn formulas() -> FormulaContract {
@@ -150,7 +150,7 @@ fn market() -> FormulaContext {
 }
 
 #[test]
-fn the_corpus_is_71_formulas_and_30_reserved_numbers() {
+fn the_checked_in_corpus_has_explicit_gaps_in_the_paper_numbering() {
     let contract = formulas();
     assert_eq!(
         contract.formulas.len(),
@@ -159,17 +159,17 @@ fn the_corpus_is_71_formulas_and_30_reserved_numbers() {
     );
     assert_eq!(contract.count, worldquant101::FORMULA_COUNT);
     assert_eq!(
-        contract.reference.reserved_numbers.len(),
-        worldquant101::RESERVED_NUMBERS.len(),
-        "the reserved-number lists disagree"
+        contract.reference.untranscribed_numbers.len(),
+        worldquant101::CATALOG_GAP_NUMBERS.len(),
+        "the catalog-gap lists disagree"
     );
     assert_eq!(
-        contract.count + contract.reference.reserved_numbers.len(),
+        contract.count + contract.reference.untranscribed_numbers.len(),
         101,
-        "the paper numbers 1..101, so the defined and reserved sets must add to 101"
+        "the transcription and its gaps must cover the paper numbering"
     );
 
-    // Every number 1..=101 is either defined or reserved, exactly once.
+    // Every number is either in this transcription or absent from it.
     let defined: BTreeSet<usize> = contract
         .formulas
         .keys()
@@ -179,20 +179,20 @@ fn the_corpus_is_71_formulas_and_30_reserved_numbers() {
                 .unwrap_or_else(|_| panic!("unparseable alpha name {name}"))
         })
         .collect();
-    let reserved: BTreeSet<usize> = contract
+    let gaps: BTreeSet<usize> = contract
         .reference
-        .reserved_numbers
+        .untranscribed_numbers
         .iter()
         .copied()
         .collect();
     assert!(
-        defined.is_disjoint(&reserved),
-        "a number is both defined and reserved"
+        defined.is_disjoint(&gaps),
+        "a number is both transcribed and marked as a catalog gap"
     );
     assert_eq!(
-        defined.union(&reserved).count(),
+        defined.union(&gaps).count(),
         101,
-        "some number in 1..=101 is neither defined nor reserved"
+        "some number in 1..=101 is neither transcribed nor marked as a gap"
     );
 }
 

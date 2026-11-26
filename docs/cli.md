@@ -110,6 +110,30 @@ starts with 59 NaN rows) in CSV output or `null` in JSON output. A missing
 required column is an input error; the CLI does not silently synthesize a
 substitute.
 
+## Panel factors
+
+`factor-panel` reads one row per timestamp and symbol. Timestamps are integer
+Unix values (or another strictly sortable integer key); absent symbol/date rows
+are retained on the full grid as `NaN`. Numeric group codes are accepted, and
+text values in `sector`, `industry`, or `subindustry` are encoded as stable
+category IDs.
+
+```bash
+./target/release/finkit-cli factor-panel --input panel.csv --factor Alpha6
+./target/release/finkit-cli factor-panel --input panel.csv --expr "MA(CS_RANK(CLOSE), 5)" --output result.csv
+```
+
+The CSV must include `timestamp`, `symbol`, and the fields used by the selected
+factor or expression. `--factor` selects from `--library` (default:
+`worldquant101`); `--expr` evaluates an expression directly. Supply exactly one
+of these options. Output is long-form `timestamp,symbol,value` CSV in sorted
+timestamp and symbol order.
+
+`RETURNS` is derived from close when omitted. `ADV{d}` uses `dollar_volume` or
+`amount` when supplied; otherwise it derives dollar volume from `close * volume`
+and takes a full `d`-row mean. Use adjusted input series when that matches the
+intended data convention.
+
 ## Parameter sweep
 
 `sweep` runs one indicator across a range of periods and reduces each run to a

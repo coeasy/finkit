@@ -13,30 +13,29 @@
 //! that target rests on two premises the source does not support, and both are
 //! recorded rather than quietly worked around:
 //!
-//! 1. **The paper defines 71 formulas, not 101.** Kakushadze's *101 Formulaic
-//!    Alphas* numbers its alphas `1..101` but leaves 30 numbers reserved with no
-//!    formula at all. [`RESERVED_NUMBERS`] lists them. The corpus is therefore
-//!    71 formulas, and 80 of them cannot exist.
+//! 1. **The checked-in transcription contains 71 formulas, not 101.** The paper's
+//!    numbering is `1..101`, but 30 numbers are absent from this transcription.
+//!    Those are catalog gaps, not evidence that the paper left them undefined.
 //!
-//! 2. **The corpus is cross-sectional; finkit's engine is single-instrument.**
+//! 2. **The partial built-in catalog is mostly cross-sectional.**
 //!    `rank(x)` here means *rank `x` across the universe on that date*, not a
 //!    rank over time, and `scale`/`indneutralize` are likewise universe-level.
 //!    `rank` alone appears 129 times across the 71 formulas and is the sole
-//!    blocker for 50 of them. Those alphas are not missing a kernel — they are
-//!    missing a *data axis*: finkit's kernels take `&[f64]`, one instrument at a
-//!    time, so no amount of operator work makes them computable.
+//!    panel requirement for 50 of them. The panel API now provides both axes,
+//!    but these 54 expressions are not yet exposed as built-in factors.
 //!
 //! There is a trap worth naming: finkit *does* have `RANK_PCT`, but it is a
 //! **rolling** rank. Substituting it for `rank` would compile, run, and produce
-//! a different factor. That is why this module refuses the 54 and says so,
-//! instead of shipping something that merely looks like an alpha.
+//! a different factor. This module still does not claim complete paper coverage:
+//! the 30 absent numbers require verified source transcription and the user's
+//! requested redistribution clearance before they can enter a public release.
 //!
 //! # The split
 //!
-//! * [`EXPRESSIONS`] — the [`COMPUTABLE_COUNT`] alphas that need only
-//!   price/volume over time, translated to finkit.
-//! * [`UNAVAILABLE`] — the rest, each annotated with the cross-sectional
-//!   operators that block it. The annotation is *derived* from the formula text
+//! * [`EXPRESSIONS`] — the [`COMPUTABLE_COUNT`] alphas translated into the
+//!   single-series library.
+//! * [`UNAVAILABLE`] — the remaining formulas in the checked-in transcription,
+//!   annotated with the cross-sectional operations they require. The annotation is *derived* from the formula text
 //!   by `scripts/gen_worldquant101.py`, and
 //!   `tests/worldquant101_library.rs` asserts that every recorded blocker really
 //!   does occur in the formula it is attached to, so an annotation cannot be
@@ -84,17 +83,22 @@
 use crate::factors::builtin::FactorLibrary;
 use crate::factors::{FactorDirection, FactorError};
 
-/// Number of formulas the source actually defines.
+/// Number of formulas present in the checked-in partial transcription.
 pub const FORMULA_COUNT: usize = 71;
 
-/// Numbers the paper reserves without publishing a formula, which is why
-/// [`FORMULA_COUNT`] is 71 and not 101.
-pub const RESERVED_NUMBERS: &[usize] = &[
+/// Numbered entries absent from the checked-in transcription. These are not
+/// asserted to be reserved or undefined by the paper.
+pub const CATALOG_GAP_NUMBERS: &[usize] = &[
     10, 25, 28, 33, 34, 48, 58, 59, 63, 67, 69, 70, 71, 73, 76, 77, 79, 80, 82, 84, 87, 88, 89, 90,
     91, 92, 93, 96, 97, 100,
 ];
 
-/// Alphas reachable from price/volume over time.
+/// Legacy name retained for source compatibility. The values are catalog gaps,
+/// not paper-reserved alpha numbers.
+#[deprecated(note = "use CATALOG_GAP_NUMBERS; these numbers are not paper-reserved")]
+pub const RESERVED_NUMBERS: &[usize] = CATALOG_GAP_NUMBERS;
+
+/// Alphas translated into the single-series library.
 pub const COMPUTABLE_COUNT: usize = 17;
 
 /// The computable factors, as `(name, finkit expression)` pairs.
@@ -123,13 +127,15 @@ pub const EXPRESSIONS: &[(&str, &str)] = &[
     // --- END GENERATED: expressions
 ];
 
-/// Alphas that need a cross-section of instruments, as `(name, blockers)`.
+/// Alphas not exposed in the built-in single-series library, as
+/// `(name, required panel operations)`.
 ///
 /// Each blocker is an operator that appears in that alpha's formula and that
-/// finkit cannot evaluate, because it needs the universe on one date rather than
-/// a series over time. See [`RESERVED_NUMBERS`] for the other reason an alpha
-/// can be missing, and the module docs for why `RANK_PCT` is not a substitute
-/// for `rank`.
+/// for correct semantics, because it needs the universe on one date rather than
+/// a series over time. The panel API supplies those axes, but this partial
+/// catalog has not registered these expressions. See [`CATALOG_GAP_NUMBERS`]
+/// for entries absent from the transcription, and the module docs for why
+/// `RANK_PCT` is not a substitute for `rank`.
 pub const UNAVAILABLE: &[(&str, &[&str])] = &[
     // --- BEGIN GENERATED: unavailable
     ("Alpha1", &["rank"]),
@@ -211,25 +217,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_source_is_71_formulas_plus_30_reserved_numbers() {
+    fn the_checked_in_corpus_and_catalog_gaps_partition_the_numbering() {
         assert_eq!(
-            FORMULA_COUNT + RESERVED_NUMBERS.len(),
+            FORMULA_COUNT + CATALOG_GAP_NUMBERS.len(),
             101,
-            "the paper's numbering is 1..101; the two halves must add up"
+            "the checked-in corpus and gaps must cover the paper numbering"
         );
-        let mut sorted = RESERVED_NUMBERS.to_vec();
+        let mut sorted = CATALOG_GAP_NUMBERS.to_vec();
         sorted.sort_unstable();
         sorted.dedup();
         assert_eq!(
             sorted.len(),
-            RESERVED_NUMBERS.len(),
-            "reserved numbers repeat"
+            CATALOG_GAP_NUMBERS.len(),
+            "catalog gap numbers repeat"
         );
         assert!(
-            RESERVED_NUMBERS
+            CATALOG_GAP_NUMBERS
                 .iter()
                 .all(|number| (1..=101).contains(number)),
-            "reserved numbers must lie in 1..=101"
+            "catalog gap numbers must lie in 1..=101"
         );
     }
 
