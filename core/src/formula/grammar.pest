@@ -70,7 +70,8 @@ point_style = { "POINTDOT" | "CIRCLEDOT" | "CROSSDOT" | "STICK" | "VOLSTICK" | "
 output_modifier = { line_style | draw_modifier | point_style }
 
 // 表达式 - 所有规则都非silent，便于解析
-expression = { logical_or }
+expression = { conditional }
+conditional = { logical_or ~ ("?" ~ expression ~ ":" ~ expression)? }
 
 logical_or = { logical_xor ~ (("OR" | "or" | "||") ~ logical_xor)* }
 logical_xor = { logical_and ~ (("XOR" | "xor") ~ logical_and)* }
@@ -98,9 +99,9 @@ function_call = { identifier ~ "(" ~ (expression ~ ("," ~ expression)*)? ~ ")" }
 // 变量: 标识符（CLOSE, C, MA5等）
 variable = { identifier }
 
-// 标识符 - 排除关键字和颜色名。XID_* 允许中文等 Unicode 标识符，
-// 同时保留 ASCII 公式的字母、数字和下划线规则。
-identifier = @{ !builtin_keyword ~ (ASCII_ALPHA | XID_START) ~ (ASCII_ALPHANUMERIC | "_" | XID_CONTINUE)* }
+// 标识符支持点分字段名（如 IndClass.subindustry），同时保留中文、
+// ASCII 字母、数字和下划线规则。
+identifier = @{ !builtin_keyword ~ (ASCII_ALPHA | XID_START) ~ (ASCII_ALPHANUMERIC | "_" | XID_CONTINUE)* ~ ("." ~ (ASCII_ALPHA | XID_START) ~ (ASCII_ALPHANUMERIC | "_" | XID_CONTINUE)*)* }
 
 // 内置关键字 - 不能用作标识符（IF 允许作为函数名）
 // 必须后跟非标识符字符，避免前缀匹配（如 DO 匹配 DOWN）
@@ -115,7 +116,7 @@ builtin_keyword = @{
     "POINTDOT" | "CIRCLEDOT" | "CROSSDOT" | "STICK" | "VOLSTICK" | "LINESTICK" | "COLORSTICK" |
     "COLORRED" | "COLORGREEN" | "COLORBLUE" | "COLORYELLOW" |
     "COLORWHITE" | "COLORBLACK" | "COLORCYAN" | "COLORMAGENTA" | "COLORGRAY" |
-    "COLOR" | "COLORHEX") ~ !(ASCII_ALPHANUMERIC | "_")
+    "COLOR" | "COLORHEX") ~ !(ASCII_ALPHANUMERIC | "_" | ".")
 }
 
 // 数字 - 不包含负号，负号通过unary规则处理。

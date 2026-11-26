@@ -631,7 +631,21 @@ fn parse_color_spec(pair: Pair<Rule>) -> Result<ColorSpec, String> {
 
 fn parse_expression(pair: Pair<Rule>) -> Result<AstNode, String> {
     let inner = pair.into_inner().next().ok_or("Empty expression")?;
-    parse_logical_or(inner)
+    if inner.as_rule() != Rule::conditional {
+        return parse_logical_or(inner);
+    }
+
+    let mut parts = inner.into_inner();
+    let condition = parse_logical_or(parts.next().ok_or("Missing conditional condition")?)?;
+    let Some(then_branch) = parts.next() else {
+        return Ok(condition);
+    };
+    let else_branch = parts.next().ok_or("Missing conditional else branch")?;
+    Ok(AstNode::IfThenElse {
+        cond: Box::new(condition),
+        then_branch: Box::new(parse_expression(then_branch)?),
+        else_branch: Box::new(parse_expression(else_branch)?),
+    })
 }
 
 fn parse_logical_or(pair: Pair<Rule>) -> Result<AstNode, String> {

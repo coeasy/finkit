@@ -243,7 +243,10 @@ fn read_panel_csv(path: &Path) -> Result<PanelCsv, String> {
 }
 
 fn is_group_field(name: &str) -> bool {
-    matches!(name, "SECTOR" | "INDUSTRY" | "SUBINDUSTRY")
+    matches!(
+        name.rsplit('.').next().unwrap_or(name),
+        "SECTOR" | "INDUSTRY" | "SUBINDUSTRY"
+    )
 }
 
 #[cfg(test)]

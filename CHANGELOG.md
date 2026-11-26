@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.6.0] - Unreleased
+
+### Added
+
+- Added panel compatibility for paper-style `SIGNEDPOWER`, scalar-window
+  `MIN` / `MAX`, and sample rolling `STDDEV` expressions.
+- Added dotted panel identifiers such as `IndClass.subindustry` and CLI
+  categorical encoding for dotted sector, industry, and subindustry columns.
+- Added the paper's `condition ? yes : no` expression syntax to the formula
+  parser and panel evaluator.
+
+### Scope
+
+- This release does not add or expand the WorldQuant formula catalog. It adds
+  generic execution support so callers can load expressions they are authorized
+  to use through the existing runtime manifest API.
+
 ## [0.5.0] - 2026-11-26
 
 ### Added

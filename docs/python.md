@@ -620,6 +620,18 @@ each group on each date. The shipped WorldQuant library remains a partial
 catalog until its missing source entries and redistribution status are
 resolved; panel support does not imply full library coverage.
 
+The panel evaluator also accepts the paper's conditional expression syntax
+(`condition ? yes : no`), generic operator spellings (`SIGNEDPOWER`, `MIN`,
+`MAX`, `STDDEV`), and dotted classification fields such as
+`IndClass.subindustry`. In this panel context, `MIN(x, d)` and `MAX(x, d)` are
+rolling time-series reducers when `d` is a scalar window; `MIN(x, y)` and
+`MAX(x, y)` keep their element-wise behavior when the second argument is a
+panel-valued series. `STDDEV(x, d)` uses the sample rolling deviation used by
+the existing formula transcription. Non-integer rolling windows are floored.
+For dotted fields, supply a panel column with the same dotted name; category
+columns are encoded by the CLI when their final name component is `sector`,
+`industry`, or `subindustry`.
+
 If `RETURNS` is not supplied, it is derived from each symbol's close-to-close
 price ratio. If `ADV{d}` is not supplied, it is the full-window mean of
 `DOLLAR_VOLUME` (or `AMOUNT`); when neither is present, the engine derives

@@ -404,6 +404,25 @@ fn evaluate_call(
         }
         return PanelValues::new(rows, cols, output);
     }
+    if matches!(canonical.as_str(), "SIGNEDPOWER" | "SIGNED_POWER") && args.len() == 2 {
+        // Paper spelling retained as a panel alias. The function registry's
+        // CS_SIGNED_POWER kernel is element-wise; applying it per symbol keeps
+        // that kernel's NaN and exponent semantics consistent with 1D formulas.
+        let function = functions.get("CS_SIGNED_POWER").ok_or_else(|| {
+            FactorError::Compute("unsupported panel formula function: SIGNEDPOWER".to_string())
+        })?;
+        let mut output_columns = Vec::with_capacity(cols);
+        for symbol_index in 0..cols {
+            let input = args[0].column(symbol_index);
+            let exponent = args[1].column(symbol_index);
+            output_columns.push(
+                function(&context_for_symbol(panel, symbol_index), &[input, exponent]).map_err(
+                    |error| FactorError::Compute(format!("panel function {name}: {error}")),
+                )?,
+            );
+        }
+        return PanelValues::from_columns(rows, cols, output_columns);
+    }
     if canonical == "DELTA" && args.len() == 2 {
         let period = positive_period(args[1].data[0], "DELTA")?;
         let mut output = Vec::with_capacity(rows * cols);
@@ -468,7 +487,19 @@ fn evaluate_call(
         return PanelValues::from_columns(rows, cols, output);
     }
 
+    let constant_window = |arg: &PanelValues| {
+        let first = *arg.data.first()?;
+        (first.is_finite() && arg.data.iter().all(|value| *value == first)).then_some(first)
+    };
     let function_name = match canonical.as_str() {
+        // The paper defines min(x, d) and max(x, d) as rolling time-series
+        // reducers. Keep the general formula engine's element-wise behavior
+        // when the second panel argument is data rather than a scalar window.
+        "MIN" if args.len() == 2 && constant_window(&args[1]).is_some() => "LLV",
+        "MAX" if args.len() == 2 && constant_window(&args[1]).is_some() => "HHV",
+        // Match the sample rolling deviation used by the existing formula
+        // transcription; the paper leaves the estimator convention unstated.
+        "STDDEV" => "STDDEV_SAMPLE",
         "TS_RANK" => "RANK_PCT",
         "TS_MEAN" => "MA",
         "TS_MIN" => "LLV",
