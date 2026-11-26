@@ -1,14 +1,14 @@
 # Installation Guide
 
-This guide covers the published v0.3.2 registry packages and GitHub Release assets.
+This guide covers the published v0.4.0 registry packages and GitHub Release assets.
 
 ## 1. Choose an installation path
 
-| Target | Recommended path today | Published v0.3.2 status | Notes |
+| Target | Recommended path today | Published v0.4.0 status | Notes |
 | --- | --- | --- | --- |
 | Python | Install from PyPI or a GitHub Release wheel | Four verified ABI3 wheels; PyPI package published | CPython 3.8–3.14 |
 | Rust library | Install from crates.io or unpack the `.crate` asset | Crate published and packaged | Import path remains `finkit::...` |
-| CLI | Download a v0.3.2 binary/installer or build from source | Linux CLI and native installers published | See CLI section below |
+| CLI | Download a v0.4.0 binary/installer or build from source | Linux CLI and native installers published | See CLI section below |
 | Node.js | Build from `ffi/node-binding` | Release artifact available | No npm registry claim |
 | Java/JNI | Use the GitHub JAR asset or build from source | Release artifact available | No Maven Central claim |
 | C/C++ | Use the GitHub SDK asset or build from source | Release artifact available | No registry claim |
@@ -21,21 +21,21 @@ This guide covers the published v0.3.2 registry packages and GitHub Release asse
 The current Rust and Python registry package name is `qx-finkit`:
 
 ```bash
-python -m pip install qx-finkit==0.3.2
+python -m pip install qx-finkit==0.4.0
 ```
 
 ```toml
 [dependencies]
-finkit = { package = "qx-finkit", version = "0.3.2" }
+finkit = { package = "qx-finkit", version = "0.4.0" }
 ```
 
 This Cargo dependency alias keeps existing Rust source imports as `finkit::...`.
 
-The published `v0.3.2` GitHub Release is:
+The published `v0.4.0` GitHub Release is:
 
-`https://github.com/coeasy/finkit/releases/tag/v0.3.2`
+`https://github.com/coeasy/finkit/releases/tag/v0.4.0`
 
-Its assets include the Python ABI3 wheels, `qx-finkit-0.3.2.crate`, CLI binaries, multi-language packages, native installers, and their checksum files.
+Its assets include the Python ABI3 wheels, `qx-finkit-0.4.0.crate`, CLI binaries, multi-language packages, native installers, and their checksum files.
 
 The full WorldQuant 101 formula corpus is not included because redistribution rights have not been confirmed.
 
@@ -55,10 +55,10 @@ git clone https://github.com/coeasy/finkit.git
 cd finkit
 ```
 
-To reproduce the published v0.3.2 source contract:
+To reproduce the published v0.4.0 source contract:
 
 ```bash
-git checkout v0.3.2
+git checkout v0.4.0
 ```
 
 For next-release multi-language work, use the current development branch/main once the changes are merged.
@@ -72,24 +72,24 @@ cargo test -p qx-finkit --locked
 
 ## 3. Python
 
-### Supported v0.3.2 wheel matrix
+### Supported v0.4.0 wheel matrix
 
-The `v0.3.2` Release uses CPython stable ABI (`cp38-abi3`). One wheel per platform is reused by supported GIL-enabled CPython versions.
+The `v0.4.0` Release uses CPython stable ABI (`cp38-abi3`). One wheel per platform is reused by supported GIL-enabled CPython versions.
 
 | Platform | Release wheel family | CI compatibility |
 | --- | --- | --- |
-| Linux x86_64 | `qx_finkit-0.3.2-cp38-abi3-manylinux_2_17_x86_64...whl` | CPython 3.8-3.14 |
-| Windows x86_64 | `qx_finkit-0.3.2-cp38-abi3-win_amd64.whl` | build/install smoke verified |
-| macOS x86_64 | `qx_finkit-0.3.2-cp38-abi3-macosx_*_x86_64.whl` | build/install smoke verified |
-| macOS arm64 | `qx_finkit-0.3.2-cp38-abi3-macosx_*_arm64.whl` | build/install smoke verified |
+| Linux x86_64 | `qx_finkit-0.4.0-cp38-abi3-manylinux_2_17_x86_64...whl` | CPython 3.8-3.14 |
+| Windows x86_64 | `qx_finkit-0.4.0-cp38-abi3-win_amd64.whl` | build/install smoke verified |
+| macOS x86_64 | `qx_finkit-0.4.0-cp38-abi3-macosx_*_x86_64.whl` | build/install smoke verified |
+| macOS arm64 | `qx_finkit-0.4.0-cp38-abi3-macosx_*_arm64.whl` | build/install smoke verified |
 
-Not part of the v0.3.2 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
+Not part of the v0.4.0 wheel matrix: Linux arm64, musllinux, 32-bit Windows, PyPy, and free-threaded CPython.
 
 ### Install a Release wheel
 
 ```bash
 python -m pip install --upgrade pip
-python -m pip install qx-finkit==0.3.2
+python -m pip install qx-finkit==0.4.0
 ```
 
 Verify:
@@ -139,13 +139,13 @@ See [python.md](python.md) for `CompiledFormula`, NumPy contracts, pandas integr
 
 ## 4. Rust library
 
-The published Cargo package is named `qx-finkit`; examples alias it as `finkit` to preserve the Rust import path. Version 0.3.2 is available from crates.io and as a `.crate` GitHub Release asset.
+The published Cargo package is named `qx-finkit`; examples alias it as `finkit` to preserve the Rust import path. Version 0.4.0 is available from crates.io and as a `.crate` GitHub Release asset.
 
 Git tag dependency:
 
 ```toml
 [dependencies]
-finkit = { package = "qx-finkit", version = "0.3.2" }
+finkit = { package = "qx-finkit", version = "0.4.0" }
 ```
 
 Local path dependency:
@@ -196,11 +196,11 @@ python scripts/check_feature_matrix.py --list   # labels only
 
 ## 5. CLI
 
-Download the v0.3.2 Linux x86_64 binary:
+Download the v0.4.0 Linux x86_64 binary:
 
 ```bash
 curl -L -o finkit-cli \
-  https://github.com/coeasy/finkit/releases/download/v0.3.2/finkit-cli-linux-x86_64
+  https://github.com/coeasy/finkit/releases/download/v0.4.0/finkit-cli-linux-x86_64
 chmod +x finkit-cli
 ./finkit-cli --help
 ```
@@ -245,7 +245,7 @@ mvn -B -f ffi/java-binding/pom.xml -DskipTests package
 
 The Java loader supports an explicit `finkit.native.path`, packaged `/natives/<os>-<arch>/...` resources, and `System.loadLibrary("finkit_java")` fallback.
 
-Do not assume `com.finkit:finkit:0.3.2` is downloadable from Maven Central until publication is independently verified.
+Do not assume `com.finkit:finkit:0.4.0` is downloadable from Maven Central until publication is independently verified.
 
 ## 8. C/C++ SDK
 
